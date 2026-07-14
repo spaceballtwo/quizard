@@ -265,6 +265,7 @@
         <button class="mbtn" onclick="navTo('study')"><span data-ico="book" data-sz="16"></span>Study</button>
         <button class="mbtn" onclick="navTo('verbal')"><span data-ico="alpha" data-sz="16"></span>Verbal</button>
         <button class="mbtn" onclick="navTo('review')"><span data-ico="refresh" data-sz="16"></span>Review</button>
+        <button class="mbtn" onclick="coachOpenGeneral()"><span data-ico="chat" data-sz="16"></span>Coach</button>
       </div>
       <div class="mlabel">Test yourself</div>
       <div class="mrow">
@@ -2887,7 +2888,7 @@ function resetToHome(){
 }
 function navTo(mode){
   resetToHome();
-  const map = { learn:openLearn, daily:openDaily, practice:start, fulltest:openFullTest, study:openStudy, verbal:openVerbal, review:openReview,
+  const map = { learn:openLearn, daily:openDaily, practice:start, fulltest:openFullTest, study:openStudy, verbal:openVerbal, review:openReview, coach:coachOpenGeneral,
                 clock:openClock, survival:openSurvival, versus:openVersus, online:openOnline,
                 compete:openCompete, achievements:openAchievements, vote:openVote };
   if (mode !== 'home' && map[mode]) map[mode]();
@@ -2911,6 +2912,7 @@ function renderSidebar(){
     ${item('study','book','Study')}
     ${item('verbal','alpha','Verbal')}
     ${item('review','refresh','Review Misses')}
+    ${item('coach','chat','Coach')}
     <div class="sdiv"></div>
     ${item('clock','hourglass','Beat the Clock')}
     ${item('survival','sword','Survival')}
@@ -2927,6 +2929,24 @@ function renderSidebar(){
 let coachCtx=null, coachMsgs=[], coachBusy=false;
 function tutorUrl(){ return serverUrl().replace(/^ws/,'http') + '/tutor'; }
 function coachBtnHTML(){ return `<div style="margin-top:8px"><button class="seg" style="flex:none" onclick="coachOpen()">${ico('chat',13)} Ask the Coach</button></div>`; }
+function coachProgressCtx(){
+  const t = TOPICS.map(x=>{
+    const i = topicIdxById(x.id);
+    return x.title+' '+Math.min(topicScore(x.id),TOPIC_MASTERY)+'/'+TOPIC_MASTERY+(topicUnlocked(i)?'':' (locked)');
+  }).join('; ');
+  const missCounts = {};
+  (account.misses||[]).forEach(mm=>{ if(mm.ti!=null && TOPICS[mm.ti]) missCounts[TOPICS[mm.ti].title]=(missCounts[TOPICS[mm.ti].title]||0)+1; });
+  const courses = COURSES.map(c=>c.title+': '+c.topics.map(id=>TOPICS[topicIdxById(id)].title).join(', ')).join(' | ');
+  return { general:true, progress:
+    'Skill '+((account.skill||2).toFixed(1))+'/10; streak '+(account.streak||0)+' days; best full-test estimate '+(account.stats.bestScaled||'none yet')+
+    '. Courses: '+courses+'. Mastery: '+t+'. Recent miss topics: '+(Object.entries(missCounts).map(([k,v])=>k+' x'+v).join(', ')||'none')+'.' };
+}
+function coachOpenGeneral(){
+  if (!account){ showToast('Log into an account first'); return; }
+  coachCtx = coachProgressCtx(); coachMsgs = [];
+  if (!account.coachConsent){ renderCoachConsent(); return; }
+  renderCoach();
+}
 function coachOpen(){
   if (!account){ showToast('Log into an account first'); return; }
   if (!coachCtx){ showToast('Miss a question first — the Coach helps with the problem on screen'); return; }
@@ -2955,11 +2975,12 @@ function coachConsent(){
 function renderCoach(){
   const p=document.getElementById('coachPanel');
   p.classList.remove('hidden');
-  const msgs = coachMsgs.map(m=>`<div class="cmsg ${m.role==='user'?'you':'coach'}">${esc(m.content)}</div>`).join('');
+  const fmt = s => esc(s).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>');
+  const msgs = coachMsgs.map(m=>`<div class="cmsg ${m.role==='user'?'you':'coach'}">${fmt(m.content)}</div>`).join('');
   p.innerHTML=`
     <div class="coach-head"><span>${ico('chat',15)} Coach</span><button onclick="coachClose()">close</button></div>
     <div class="coach-msgs" id="coachMsgs">
-      <div class="cmsg coach">I saw that one! Want a hint, or should I walk you through it? You can also just ask me anything about this problem.</div>
+      <div class="cmsg coach">${coachCtx && coachCtx.general ? "Hi! I can teach you any topic, quiz you, or look at your progress and tell you exactly what to work on next. What do you want to do?" : "I saw that one! Want a hint, or should I walk you through it? You can also just ask me anything about this problem."}</div>
       ${msgs}
       ${coachBusy?'<div class="cmsg coach">thinking&hellip;</div>':''}
     </div>
