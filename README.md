@@ -12,12 +12,17 @@
 
 Progress saves on your device and backs up to the cloud automatically when you play online.
 
-## ⬇️ Mac app
+## ⬇️ Desktop apps
 
-**[Download Quizard for Mac (latest)](https://github.com/spaceballtwo/quizard/releases/latest/download/Quizard-beta.zip)** — 1.4 MB
+**[Download Quizard for Mac](https://github.com/spaceballtwo/quizard/releases/latest/download/Quizard-beta.zip)** — 1.4 MB
 
 1. Unzip and drag **Quizard** into **Applications**
 2. Open it once; then **System Settings → Privacy & Security → "Open Anyway"** (first launch only)
+
+**[Download Quizard for Windows](https://github.com/spaceballtwo/quizard/releases/latest/download/Quizard-Windows.zip)** — ~106 MB
+
+1. Unzip anywhere and run **Quizard.exe**
+2. If Windows warns about an unknown publisher: **More info → Run anyway** (we're unsigned during beta)
 
 ## What is it?
 
