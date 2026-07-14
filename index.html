@@ -297,6 +297,7 @@
         <button class="mbtn" onclick="navTo('study')"><span data-ico="book" data-sz="16"></span>Study</button>
         <button class="mbtn" onclick="navTo('verbal')"><span data-ico="alpha" data-sz="16"></span>Verbal</button>
         <button class="mbtn" onclick="navTo('review')"><span data-ico="refresh" data-sz="16"></span>Review</button>
+        <button class="mbtn" onclick="navTo('gaps')"><span data-ico="flag" data-sz="16"></span>Knowledge Map</button>
         <button class="mbtn" onclick="navTo('coach')"><span data-ico="chat" data-sz="16"></span>Coach</button>
       </div>
       <div class="mlabel">Test yourself</div>
@@ -354,6 +355,7 @@
   <div id="learn" class="hidden"></div>
   <div id="coachpage" class="hidden"></div>
   <div id="parentreport" class="hidden"></div>
+  <div id="gaps" class="hidden"></div>
 
   <div id="fulltest" class="hidden"></div>
 
@@ -1300,6 +1302,15 @@ function recordMiss(q, passage){
   account.misses.push({ q:q.q, choices:q.choices, answer:q.answer, why:q.why, draw:q.draw||null, passage:passage||'', ti: ti==null?null:ti });
   if (account.misses.length > 30) account.misses.shift();
 }
+/* Every answered math question feeds the knowledge map, whatever mode it came from. */
+function noteTopicResult(q, ok){
+  if (!account || !q) return;
+  const ti = (q._ti != null) ? q._ti : ((q._gen != null) ? GEN_TOPIC.get(q._gen) : null);
+  if (ti == null) return;
+  if (!account.tstats) account.tstats = {};
+  const s = account.tstats[ti] || (account.tstats[ti] = [0, 0]);
+  s[0]++; if (ok) s[1]++;
+}
 function jumpToLesson(i){
   resetToHome();
   document.getElementById('intro').classList.add('hidden');
@@ -1479,7 +1490,9 @@ function renderHomeCourses(){
 function renderNextUp(){
   const el=document.getElementById('nextUp'); if(!el || !account) return;
   let mode, title, sub;
-  if (account.misses.length){
+  if (!account.diagAt){
+    mode='gaps'; title='Find your gaps'; sub='26-question diagnostic maps what you know';
+  } else if (account.misses.length){
     mode='review'; title='Review your misses'; sub=account.misses.length+' question'+(account.misses.length===1?'':'s')+' waiting for revenge';
   } else if (account.lastDaily !== dateStr(new Date())){
     mode='daily'; title="Daily Challenge"; sub="today's 5 questions · bonus XP";
@@ -1616,6 +1629,8 @@ function ensureFields(a){
   if(!Array.isArray(a.misses)) a.misses=[];   // missed questions waiting for revenge
   if(!a.verbalSkill || typeof a.verbalSkill!=='object') a.verbalSkill={analogies:2, reading:2, synonyms:2};
   if(!a.lessonsDone || typeof a.lessonsDone!=='object') a.lessonsDone={};
+  if(!a.tstats || typeof a.tstats!=='object') a.tstats={};        // per-topic [answered, correct] across every mode
+  if(typeof a.diagAt!=='string') a.diagAt='';
 }
 function dateStr(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function markActivity(){
@@ -1751,7 +1766,7 @@ function answerClock(i){
   const right=clockCurrent.q.answer, ok=(i===right);
   const lab=document.getElementById('cc-'+i); if(lab) lab.classList.add(ok?'correct':'wrong');
   if(!ok){ const r=document.getElementById('cc-'+right); if(r) r.classList.add('correct'); }
-  recordAnswer(ok); rpForAnswer(ok); updateSkill(ok, clockCurrent.tier);
+  recordAnswer(ok); rpForAnswer(ok); updateSkill(ok, clockCurrent.tier); noteTopicResult(clockCurrent.q, ok);
   if(!ok) recordMiss(clockCurrent.q, clockCurrent.passage);
   if(ok) playCorrect(); else playWrong();
   answerFX(ok, lab);
@@ -2001,7 +2016,7 @@ function survAnswer(i){
   const right=survCurrent.q.answer, ok=(i===right);
   const lab=document.getElementById('sv-'+i); if(lab) lab.classList.add(ok?'correct':'wrong');
   if(!ok){ const r=document.getElementById('sv-'+right); if(r) r.classList.add('correct'); }
-  recordAnswer(ok); rpForAnswer(ok); updateSkill(ok, survCurrent.tier);
+  recordAnswer(ok); rpForAnswer(ok); updateSkill(ok, survCurrent.tier); noteTopicResult(survCurrent.q, ok);
   if(!ok) recordMiss(survCurrent.q, survCurrent.passage);
   answerFX(ok, lab);
   if(ok){ survScore++; playCorrect(); addXP(10); } else { survLives--; playWrong(); }
@@ -2066,7 +2081,7 @@ function dailyAnswer(i){
   const item=dailyQs[dailyIdx], right=item.q.answer, ok=(i===right);
   const lab=document.getElementById('dl-'+i); if(lab) lab.classList.add(ok?'correct':'wrong');
   if(!ok){ const r=document.getElementById('dl-'+right); if(r) r.classList.add('correct'); }
-  recordAnswer(ok); rpForAnswer(ok);
+  recordAnswer(ok); rpForAnswer(ok); noteTopicResult(item.q, ok);
   if(!ok) recordMiss(item.q, item.passage);
   answerFX(ok, lab);
   if(ok){ dailyCorrect++; playCorrect(); addXP(10); } else playWrong();
@@ -2289,6 +2304,7 @@ function answerStudy(i){
   if (ok){ studyCorrect++; leveled = addXP(10); }
   if (ok && studyMode==='topic' && account){ account.topics[topicId] = topicScore(topicId) + 1; }
   if (studyMode==='verbal' && studyCurrent.vkind) updateVerbalSkill(studyCurrent.vkind, ok);
+  noteTopicResult(q, ok);
   if (!ok && studyMode!=='review') recordMiss(q, studyCurrent.passage);
   if (studyMode==='review' && account && account.misses.length){ const mm=account.misses.shift(); if(!ok) account.misses.push(mm); }
   recordAnswer(ok); rpForAnswer(ok); updateSkill(ok, studyCurrent.tier); markActivity(); checkAchievements(); saveStore();
@@ -2375,6 +2391,7 @@ function grade(force){
       if (i === right) lab.classList.add('correct');
       else if (chosen >= 0 && i === chosen) lab.classList.add('wrong');
     });
+    if (chosen !== -1) noteTopicResult(QUIZ[si].questions[qi], chosen === right);
     if (chosen === right){ correct++; perSection[si].got++; }
     else if (chosen === -1){ blanks++; }
     else {
@@ -2719,7 +2736,7 @@ function showLeaderboard(){ oconnect(()=>osend({t:'leaderboard'})); }
 let syncTimer=null;
 function syncPayload(){ const a=account; return { xp:a.xp, rp:a.rp, streak:a.streak, bestStreak:a.bestStreak,
   lastPlayed:a.lastPlayed, achievements:a.achievements, stats:a.stats, bestRun:a.bestRun,
-  lastDaily:a.lastDaily, weekPoints:a.weekPoints, weekId:a.weekId, diff:a.diff, vote:a.vote, skill:a.skill, topics:a.topics, misses:a.misses, verbalSkill:a.verbalSkill, lessonsDone:a.lessonsDone }; }
+  lastDaily:a.lastDaily, weekPoints:a.weekPoints, weekId:a.weekId, diff:a.diff, vote:a.vote, skill:a.skill, topics:a.topics, misses:a.misses, verbalSkill:a.verbalSkill, lessonsDone:a.lessonsDone, tstats:a.tstats, diagAt:a.diagAt }; }
 function syncUp(){ if(!oMe || !account) return; osend({t:'sync_up', data:syncPayload(), updatedAt:account.updatedAt||Date.now()}); }
 function scheduleSync(){ if(!oMe || !account || !ows || ows.readyState!==1) return; clearTimeout(syncTimer); syncTimer=setTimeout(syncUp, 3000); }
 function applySync(data){ if(!account || !data) return; Object.assign(account, data); ensureFields(account); syncXPFromAccount(); saveStore(); }
@@ -2945,6 +2962,7 @@ function lessonAnswer(i){
   answerFX(ok, document.getElementById('lc-'+i), '+5 XP');
   if (ok) playCorrect(); else playWrong();
   if (account){
+    noteTopicResult(q, ok);
     if (ok){ account.topics[TOPICS[lsTopic].id] = topicScore(TOPICS[lsTopic].id) + 1; addXP(5); }
     else recordMiss(q, '');
     saveStore();
@@ -3020,7 +3038,7 @@ function closeLearn(){
 }
 
 /* ================= Sidebar navigation ================= */
-const MODE_DIVS = ['quiz','results','study','clock','versus','survival','daily','compete','achievements','reports','online','learn','vote','fulltest','coachpage','parentreport'];
+const MODE_DIVS = ['quiz','results','study','clock','versus','survival','daily','compete','achievements','reports','online','learn','vote','fulltest','coachpage','parentreport','gaps'];
 function resetToHome(){
   clearInterval(clockTimer); clearTimeout(clockTimer);
   clearInterval(testTimerId); fullTest=false;
@@ -3037,7 +3055,7 @@ function resetToHome(){
 function navTo(mode){
   playSwoosh();
   resetToHome();
-  const map = { learn:openLearn, daily:openDaily, practice:start, fulltest:openFullTest, study:openStudy, verbal:openVerbal, review:openReview, coach:openCoachPage, report:openReport,
+  const map = { learn:openLearn, daily:openDaily, practice:start, fulltest:openFullTest, study:openStudy, verbal:openVerbal, review:openReview, coach:openCoachPage, report:openReport, gaps:openGaps,
                 clock:openClock, survival:openSurvival, versus:openVersus, online:openOnline,
                 compete:openCompete, achievements:openAchievements, vote:openVote };
   if (mode !== 'home' && map[mode]) map[mode]();
@@ -3061,6 +3079,7 @@ function renderSidebar(){
     ${item('study','book','Study')}
     ${item('verbal','alpha','Verbal')}
     ${item('review','refresh','Review Misses')}
+    ${item('gaps','flag','Knowledge Map')}
     ${item('coach','chat','Coach')}
     <div class="sdiv"></div>
     ${item('clock','hourglass','Beat the Clock')}
@@ -3210,6 +3229,109 @@ function coachChip(text){
   if(inp){ inp.value=text; coachSend(); }
 }
 
+/* ===== Knowledge Map + Diagnostic: what you know, where the gaps are ===== */
+function topicVerdict(i){
+  const t=TOPICS[i], s=(account.tstats||{})[i], m=Math.min(topicScore(t.id),TOPIC_MASTERY);
+  const missCount=(account.misses||[]).filter(mm=>mm.ti===i).length;
+  const acc = (s && s[0]>=3) ? s[1]/s[0] : null;
+  let cat;
+  if ((acc!=null && acc<0.6) || missCount>=2) cat='gap';
+  else if (acc==null && m===0) cat='unknown';
+  else if (m>=TOPIC_MASTERY || (acc!=null && acc>=0.8)) cat='strong';
+  else cat='mid';
+  return { cat, acc, m, missCount, answered: s?s[0]:0 };
+}
+function gapRowHTML(i, v){
+  const t=TOPICS[i];
+  const bits=[];
+  if (v.acc!=null) bits.push(Math.round(v.acc*100)+'% right');
+  if (v.m>0) bits.push('mastery '+v.m+'/'+TOPIC_MASTERY);
+  if (v.missCount) bits.push(v.missCount+' recent miss'+(v.missCount===1?'':'es'));
+  if (!bits.length) bits.push('no data yet');
+  const colors={gap:'var(--red)', mid:'var(--gold)', strong:'var(--green)', unknown:'var(--gray)'};
+  const btn = v.cat==='strong'
+    ? `<button class="seg" style="flex:none" onclick="jumpToLesson(${i})">Review</button>`
+    : `<button class="seg" style="flex:none" onclick="jumpToLesson(${i})">${ico('bulb',13)} Work on it</button>`;
+  return `<div class="tier-row" style="border-left:4px solid ${colors[v.cat]}">
+    <span><b>${t.title}</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">${bits.join(' · ')}</span></span>${btn}</div>`;
+}
+function openGaps(){
+  if (!account){ showToast('Log into an account first'); return; }
+  document.getElementById('intro').classList.add('hidden');
+  const el=document.getElementById('gaps');
+  el.classList.remove('hidden');
+  const groups={gap:[], mid:[], strong:[], unknown:[]};
+  TOPICS.forEach((t,i)=>{ const v=topicVerdict(i); groups[v.cat].push(gapRowHTML(i,v)); });
+  const section=(title,color,rows,note)=> rows.length
+    ? `<div class="mlabel" style="color:${color}">${title}</div>${rows.join('')}` 
+    : (note?`<div class="mlabel" style="color:${color}">${title}</div><p class="section-instr">${note}</p>`:'');
+  const vs=account.verbalSkill;
+  const vRow=(kind,label)=>{ const sk=vs[kind]||2;
+    const col = sk<3.5?'var(--red)':sk<6?'var(--gold)':'var(--green)';
+    return `<div class="tier-row" style="border-left:4px solid ${col}">
+      <span><b>${label}</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">skill ${sk.toFixed(1)} / 10</span></span>
+      <button class="seg" style="flex:none" onclick="navTo('verbal');startVerbal('${kind}')">Practice</button></div>`; };
+  el.innerHTML=`
+    <div class="card">
+      <div class="section-title">${ico('flag',17)} Knowledge Map</div>
+      <p class="section-instr">${account.diagAt
+        ? 'Built from your diagnostic ('+account.diagAt+') and everything you answer, in every mode. It updates as you play.'
+        : 'Take the diagnostic — 26 questions, two from each topic — and Quizard maps what you know and what to work on.'}</p>
+      ${account.diagAt
+        ? `<button class="btn secondary" onclick="startDiag()">Retake the diagnostic</button>`
+        : `<button class="btn" onclick="startDiag()">Start the diagnostic (26 questions)</button>`}
+      ${section('Gaps to close','var(--red)',groups.gap)}
+      ${section('Getting there','var(--gold)',groups.mid)}
+      ${section('Strong','var(--green)',groups.strong)}
+      ${section('Not measured yet','var(--gray)',groups.unknown, groups.gap.length||groups.mid.length||groups.strong.length?'Answer a few questions in these topics and they join the map.':'')}
+      <div class="mlabel">Verbal</div>
+      ${vRow('analogies','Analogies')}${vRow('reading','Reading')}${vRow('synonyms','Synonyms')}
+    </div>`;
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+/* Diagnostic: 2 questions from every topic, shuffled, no XP — pure measurement. */
+let diagQs=[], diagIdx=0, diagAnswered=false;
+function startDiag(){
+  if (!account){ showToast('Log into an account first'); return; }
+  diagQs=[];
+  TOPICS.forEach((t,i)=>{ for(let k=0;k<2;k++){ const g=drawBag(t.gens,'dg_'+t.id); const q=g(); q._gen=g; q._ti=i; diagQs.push(q); } });
+  shuffle(diagQs); diagIdx=0; diagAnswered=false;
+  renderDiagQ();
+}
+function renderDiagQ(){
+  const el=document.getElementById('gaps');
+  const q=diagQs[diagIdx];
+  const pct=Math.round(diagIdx/diagQs.length*100);
+  el.innerHTML=`
+    <div class="card">
+      <div class="study-head"><span>Diagnostic</span><span class="study-score">${diagIdx+1} of ${diagQs.length}</span></div>
+      <div class="xp-track" style="margin-bottom:14px"><div style="height:100%;border-radius:999px;background:var(--gold);width:${pct}%"></div></div>
+      <div class="q-stem">${q.q}</div>${figHTML(q)}
+      ${q.choices.map((c,i)=>`<label class="choice" id="dg-${i}" onclick="diagAnswer(${i})"><span>${String.fromCharCode(65+i)}. ${c}</span></label>`).join('')}
+      <p class="section-instr" style="margin-top:10px">No points, no pressure — this just finds what to work on.</p>
+    </div>`;
+  drawFigs();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function diagAnswer(i){
+  if (diagAnswered) return;
+  diagAnswered=true;
+  const q=diagQs[diagIdx], ok=(i===q.answer);
+  q.choices.forEach((c,idx)=>{ const l=document.getElementById('dg-'+idx); if(l){ l.classList.add('locked'); l.onclick=null; if(idx===q.answer) l.classList.add('correct'); else if(idx===i) l.classList.add('wrong'); } });
+  noteTopicResult(q, ok);
+  if (ok) playCorrect(); else playWrong();
+  answerFX(ok, document.getElementById('dg-'+i));
+  markActivity(); saveStore();
+  setTimeout(()=>{
+    diagAnswered=false; diagIdx++;
+    if (diagIdx>=diagQs.length){
+      account.diagAt=dateStr(new Date()); saveStore();
+      celebrate(); showToast('Diagnostic complete — here is your map');
+      openGaps(); renderNextUp();
+    } else renderDiagQ();
+  }, ok?650:1400);
+}
+
 /* ===== Parent Report — app computes the numbers, AI only writes the prose ===== */
 function reportUrl(){ return serverUrl().replace(/^ws/,'http') + '/report'; }
 function reportFacts(){
@@ -3220,7 +3342,11 @@ function reportFacts(){
   const missCounts={};
   (a.misses||[]).forEach(m=>{ if(m.ti!=null && TOPICS[m.ti]) missCounts[TOPICS[m.ti].title]=(missCounts[TOPICS[m.ti].title]||0)+1; });
   const focus=Object.entries(missCounts).sort((x,y)=>y[1]-x[1]).slice(0,3).map(([k,v])=>k+' ('+v+' recent misses)');
+  const verdicts = TOPICS.map((t,i)=>({t, v:topicVerdict(i)}));
   return {
+    knowledgeGaps: verdicts.filter(x=>x.v.cat==='gap').map(x=>x.t.title),
+    strongTopics: verdicts.filter(x=>x.v.cat==='strong').map(x=>x.t.title),
+    tookDiagnostic: account.diagAt||null,
     questionsAnswered:s.answered||0, correctAnswers:s.correct||0,
     accuracyPct: s.answered ? Math.round(s.correct/s.answered*100) : 0,
     currentStreakDays:a.streak||0, bestStreakDays:a.bestStreak||0,
@@ -3240,6 +3366,8 @@ function reportFactsRows(f){
     + row('Verbal skill', 'analogies '+f.verbalSkillOutOf10.analogies+' &middot; reading '+f.verbalSkillOutOf10.reading+' &middot; synonyms '+f.verbalSkillOutOf10.synonyms)
     + row('Topics mastered', f.topicsMastered.length+' of '+TOPICS.length+(f.topicsMastered.length?': '+esc(f.topicsMastered.join(', ')):''))
     + (f.topicsInProgress.length ? row('In progress', esc(f.topicsInProgress.join(', '))) : '')
+    + (f.knowledgeGaps.length ? row('Knowledge gaps', esc(f.knowledgeGaps.join(', '))) : '')
+    + (f.strongTopics.length ? row('Strengths', esc(f.strongTopics.join(', '))) : '')
     + (f.recentTroubleSpots.length ? row('Trouble spots', esc(f.recentTroubleSpots.join(', '))) : '')
     + (f.bestFullTestEstimate ? row('Best full-test estimate', f.bestFullTestEstimate) : '')
     + (f.perfectPracticeSets ? row('Perfect practice sets', f.perfectPracticeSets) : '');
