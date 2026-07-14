@@ -385,7 +385,7 @@
 </div>
 
 <script>
-const APP_VERSION = '0.15.0';
+const APP_VERSION = '0.16.0';
 /* ===== Local accounts: each person has their own on-device SSAT account ===== */
 let store = { accounts: [], currentId: null };
 function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
@@ -2358,6 +2358,7 @@ let fullTest=false, testTimerId=null, testSecs=0, testStartAt=0;
 const FT_N=25, FT_SECS=30*60;
 
 function openFullTest(){
+  if (premiumGate('The Full Test')) return;
   document.getElementById('intro').classList.add('hidden');
   const best = account ? account.stats.bestScaled : 0;
   document.getElementById('fulltest').innerHTML = `
@@ -2886,6 +2887,7 @@ let ows=null, oState='idle', oMe=null, oOpp=null, oRound=0, oRaceQ=null, oAnswer
 function serverUrl(){ return store.serverUrl || 'wss://quizard-server.quizard.workers.dev'; }
 
 function openOnline(){
+  if (premiumGate('Online racing')) return;
   document.getElementById('intro').classList.add('hidden');
   document.getElementById('online').classList.remove('hidden');
   renderOnlineHome();
@@ -2982,7 +2984,7 @@ function showLeaderboard(){ oconnect(()=>osend({t:'leaderboard'})); }
 let syncTimer=null;
 function syncPayload(){ const a=account; return { xp:a.xp, rp:a.rp, streak:a.streak, bestStreak:a.bestStreak,
   lastPlayed:a.lastPlayed, achievements:a.achievements, stats:a.stats, bestRun:a.bestRun,
-  lastDaily:a.lastDaily, weekPoints:a.weekPoints, weekId:a.weekId, diff:a.diff, vote:a.vote, skill:a.skill, topics:a.topics, misses:a.misses, verbalSkill:a.verbalSkill, lessonsDone:a.lessonsDone, tstats:a.tstats, diagAt:a.diagAt, hist:a.hist, tourDone:a.tourDone, premium:a.premium, premiumPlan:a.premiumPlan }; }
+  lastDaily:a.lastDaily, weekPoints:a.weekPoints, weekId:a.weekId, diff:a.diff, vote:a.vote, skill:a.skill, topics:a.topics, misses:a.misses, verbalSkill:a.verbalSkill, lessonsDone:a.lessonsDone, tstats:a.tstats, diagAt:a.diagAt, hist:a.hist, tourDone:a.tourDone, premium:a.premium, premiumPlan:a.premiumPlan, familyCode:a.familyCode||'' }; }
 function syncUp(){ if(!oMe || !account) return; osend({t:'sync_up', data:syncPayload(), updatedAt:account.updatedAt||Date.now()}); }
 function scheduleSync(){ if(!oMe || !account || !ows || ows.readyState!==1) return; clearTimeout(syncTimer); syncTimer=setTimeout(syncUp, 3000); }
 function applySync(data){ if(!account || !data) return; Object.assign(account, data); ensureFields(account); syncXPFromAccount(); saveStore(); }
@@ -3090,6 +3092,17 @@ function onlineMsg(m){
         ${rows||'<div class="acct-empty">No players yet.</div>'}
         <button class="btn secondary" onclick="renderOnlineHome()">Back</button>
       </div>`;
+  }
+  else if (m.t==='family_code'){
+    if (account){ account.familyCode=m.code; saveStore(); }
+    const el=document.getElementById('famCode'); if(el) el.textContent=m.code;
+  }
+  else if (m.t==='family_join'){
+    if (m.ok){
+      account.premium=true; account.premiumPlan='family-member'; saveStore();
+      celebrate(); showToast('Welcome to the family plan!');
+      openPremium(); renderHome(); document.getElementById('intro').classList.add('hidden');
+    } else showToast(m.msg||'That code did not work');
   }
   else if (m.t==='vote_counts'){
     VOTE_OPTIONS.forEach(o=>{
@@ -3249,6 +3262,7 @@ function practiceTopic(i){
   document.getElementById('study').classList.remove('hidden');
 }
 function openReview(){
+  if (premiumGate('Review Misses')) return;
   if (!account || !account.misses.length){
     document.getElementById('intro').classList.add('hidden');
     document.getElementById('study').innerHTML = `
@@ -3353,6 +3367,7 @@ function coachHost(){
 }
 function openCoachPage(){
   if (!account){ showToast('Log into an account first'); return; }
+  if (premiumGate('Sage')) return;
   document.getElementById('intro').classList.add('hidden');
   const el=document.getElementById('coachpage');
   el.classList.remove('hidden');
@@ -3379,6 +3394,7 @@ function coachProgressCtx(){
 }
 function coachOpenGeneral(){
   if (!account){ showToast('Log into an account first'); return; }
+  if (premiumGate('Sage')) return;
   if (!account.onlineToken || !ows || ows.readyState!==1) ensureOnlineIdentity();   // coach needs your online identity; connect quietly
   coachCtx = coachProgressCtx(); coachMsgs = [];
   if (!account.coachConsent){ renderCoachConsent(); return; }
@@ -3386,11 +3402,13 @@ function coachOpenGeneral(){
 }
 function coachOpenSmart(){
   if (!account){ showToast('Log into an account first'); return; }
+  if (premiumGate('Sage')) return;
   if (coachCtx && !coachCtx.general){ coachOpen(); return; }   // a freshly-missed question is loaded
   coachOpenGeneral();
 }
 function coachOpen(){
   if (!account){ showToast('Log into an account first'); return; }
+  if (premiumGate('Sage')) return;
   if (!coachCtx){ showToast('Miss a question first — the Coach helps with the problem on screen'); return; }
   if (!account.onlineToken || !ows || ows.readyState!==1) ensureOnlineIdentity();
   if (!account.coachConsent){ renderCoachConsent(); return; }
@@ -3549,6 +3567,7 @@ function gapRowHTML(i, v){
 }
 function openGaps(){
   if (!account){ showToast('Log into an account first'); return; }
+  if (premiumGate('The Knowledge Map')) return;
   document.getElementById('intro').classList.add('hidden');
   const el=document.getElementById('gaps');
   el.classList.remove('hidden');
@@ -3630,6 +3649,7 @@ function diagAnswer(i){
 
 /* ===== About: version, platform, what's new ===== */
 const CHANGELOG = [
+  ['0.16.0','Premium features actually lock now; family plans share with a code on any device; family price covers its costs'],
   ['0.15.0','Progress graph on the Knowledge Map and Parent Report; 16 new question types, 75 new synonyms, and no more repeat questions'],
   ['0.14.2','Family plan priced right: $199, every kid keeps their own 30 Sage chats a day'],
   ['0.14.0','Unlimited Sage plan, About page, family plan covers each member'],
@@ -3667,6 +3687,14 @@ function openAbout(){
   window.scrollTo({top:0,behavior:'smooth'});
 }
 
+/* ===== The gate: premium features send free accounts to the storefront ===== */
+function premiumGate(name){
+  if (isPremium()) return false;
+  showToast(name + ' is a Premium feature');
+  navTo('premium');
+  return true;
+}
+
 /* ===== Premium: the season pass. Beta preview — the button unlocks instantly, Stripe comes later. ===== */
 function openPremium(){
   document.getElementById('intro').classList.add('hidden');
@@ -3679,7 +3707,11 @@ function openPremium(){
     <div class="card">
       <div class="section-title">${ico('crown',17)} Quizard Premium</div>
       ${isP ? `
-        <div class="explain ok" style="margin-top:4px"><b>You're Premium.</b> Everything is unlocked for your family — thanks for backing a small team.</div>`
+        <div class="explain ok" style="margin-top:4px"><b>You're Premium.</b> Everything is unlocked — thanks for backing a small team.</div>
+        ${account.premiumPlan==='family' ? `
+          <div class="mlabel">Share with your family</div>
+          <p class="section-instr">Your plan covers up to 6 accounts on any device. Family members open Premium on their device and enter this code:</p>
+          <div style="text-align:center;margin:8px 0 12px"><span id="famCode" style="font-size:26px;font-weight:800;letter-spacing:5px;color:var(--navy)">${account.familyCode||'……'}</span></div>` : ``}`
       : `
         <p class="section-instr">Everything included on both plans — pick the size that fits.</p>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0 6px">
@@ -3698,12 +3730,17 @@ function openPremium(){
           <div style="border:1.5px solid var(--gold);border-radius:12px;padding:14px 10px;text-align:center;position:relative">
             <div style="position:absolute;top:-9px;left:50%;transform:translateX(-50%);background:var(--gold);color:#1a2136;font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;white-space:nowrap">BEST VALUE</div>
             <div style="font-weight:700;color:var(--navy)">Family</div>
-            <div style="margin:6px 0"><span style="font-size:26px;font-weight:800;color:var(--navy)">$199</span><span style="color:var(--gray);font-size:12px"> / 3 mo</span></div>
+            <div style="margin:6px 0"><span style="font-size:26px;font-weight:800;color:var(--navy)">$299</span><span style="color:var(--gray);font-size:12px"> / 3 mo</span></div>
             <div style="color:var(--gray);font-size:12px;margin-bottom:10px">up to 6 accounts, each kid their own<br>Sage: 30 chats a day each</div>
             <button class="btn" style="margin:0" onclick="buyPremium('family')">Get Family</button>
           </div>
         </div>
-        <p class="section-instr" style="text-align:center;margin-top:6px">Beta preview: no card needed yet — tapping unlocks instantly while we're in beta.</p>`}
+        <p class="section-instr" style="text-align:center;margin-top:6px">Beta preview: no card needed yet — tapping unlocks instantly while we're in beta.</p>
+        <div class="mlabel">Have a family code?</div>
+        <div style="display:flex;gap:6px">
+          <input id="famJoinCode" maxlength="8" placeholder="ABC123" style="flex:1;padding:9px 12px;border:1.5px solid var(--line);border-radius:8px;font-size:15px;letter-spacing:2px;text-transform:uppercase" />
+          <button class="btn" style="width:auto;padding:9px 16px;margin:0" onclick="joinFamily()">Join</button>
+        </div>`}
       <div class="mlabel">Always free</div>
       ${rowF('Study mode')}${rowF('Daily Challenge')}${rowF('Verbal practice')}
       <div class="mlabel">Premium</div>
@@ -3717,10 +3754,22 @@ function openPremium(){
     </div>`;
   window.scrollTo({top:0,behavior:'smooth'});
 }
+function joinFamily(){
+  if (!account){ showToast('Log into an account first'); return; }
+  const inp=document.getElementById('famJoinCode');
+  const code=(inp&&inp.value||'').trim().toUpperCase();
+  if (!code){ showToast('Enter your family code'); return; }
+  if (!account.onlineToken || !ows || ows.readyState!==1){ ensureOnlineIdentity(); showToast('Connecting — press Join again in a second'); return; }
+  osend({t:'family_join', code});
+}
 function buyPremium(plan){
   if (!account){ showToast('Log into an account first'); return; }
   account.premium = true; account.premiumPlan = plan||'solo';
-  if (plan==='family'){ store.familyPremium = true; }   // every account on this device gets their own premium
+  if (plan==='family'){
+    store.familyPremium = true;                          // every account on this device
+    if (!account.onlineToken || !ows || ows.readyState!==1) ensureOnlineIdentity();
+    setTimeout(()=>osend({t:'family_create'}), 800);     // mint the shareable code once we're connected
+  }
   saveStore();
   celebrate();
   showToast('Welcome to Premium!');
@@ -3775,7 +3824,7 @@ function endTour(goDiag){
   const v=document.getElementById('tourVeil'); if(v) v.remove();
   const c=document.getElementById('tourCard'); if(c) c.remove();
   if(account && !account.tourDone){ account.tourDone=true; saveStore(); }
-  if(goDiag){ navTo('gaps'); startDiag(); }
+  if(goDiag){ navTo('gaps'); if (isPremium() && !account.diagAt) startDiag(); }
 }
 
 /* ===== Windows install gate: web visitors on a PC get the download-the-app page ===== */
@@ -3898,6 +3947,7 @@ function reportFactsRows(f){
 }
 function openReport(){
   if (!account){ showToast('Log into an account first'); return; }
+  if (premiumGate('Parent Report')) return;
   if (!account.onlineToken || !ows || ows.readyState!==1) ensureOnlineIdentity();
   document.getElementById('intro').classList.add('hidden');
   const el=document.getElementById('parentreport');
