@@ -1370,7 +1370,7 @@ function showToast(msg){
 /* ================= Juice: sound effects + confetti ================= */
 let audioCtx=null, soundOn=true;
 function actx(){ if(!audioCtx){ try{ audioCtx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } return audioCtx; }
-function beep(freqs, dur, type){
+function beep(freqs, dur, type, vol){
   if(!soundOn) return; const ctx=actx(); if(!ctx) return;
   if(ctx.state==='suspended'){ try{ ctx.resume(); }catch(e){} }
   freqs.forEach((f,i)=>{
@@ -1378,14 +1378,21 @@ function beep(freqs, dur, type){
     o.type=type||'sine'; o.frequency.value=f; o.connect(g); g.connect(ctx.destination);
     const s=ctx.currentTime+i*dur, e=s+dur;
     g.gain.setValueAtTime(0.0001,s);
-    g.gain.exponentialRampToValueAtTime(0.22,s+0.012);
+    g.gain.exponentialRampToValueAtTime(vol||0.22,s+0.012);
     g.gain.exponentialRampToValueAtTime(0.0001,e);
     o.start(s); o.stop(e+0.02);
   });
 }
-function playCorrect(){ beep([660,990],0.09,'sine'); }
-function playWrong(){ beep([200,140],0.13,'sawtooth'); }
+let combo=0;
+function playCorrect(){ combo=Math.min(combo+1,9); const m=Math.pow(1.059,combo-1); beep([660*m,990*m],0.09,'sine'); }
+function playWrong(){ combo=0; beep([200,140],0.13,'sawtooth'); }
 function playFanfare(){ beep([523,659,784,1047],0.12,'triangle'); }
+function playTap(){ beep([700],0.035,'sine',0.06); }
+function playSwoosh(){ beep([460,360],0.05,'sine',0.08); }
+function playCoachChime(){ beep([784,988],0.09,'sine',0.12); }
+function playTick(){ beep([1050],0.045,'square',0.07); }
+function playRoundWin(){ beep([587,880],0.09,'triangle'); }
+function playRoundLose(){ beep([311,233],0.12,'sawtooth',0.15); }
 function toggleSound(){
   soundOn=!soundOn; store.sound=soundOn; saveStore();
   const b=document.getElementById('soundBtn'); if(b) b.innerHTML = soundOn?ico('volume',15)+' Sound: On':ico('mute',15)+' Sound: Off';
@@ -1715,6 +1722,7 @@ function beginClock(){
   clockTimer=setInterval(()=>{
     clockTimeLeft--;
     const t=document.getElementById('clockTime'); if(t) t.textContent=clockTimeLeft+'s';
+    if(clockTimeLeft>0 && clockTimeLeft<=5) playTick();
     if(clockTimeLeft<=0) endClock();
   },1000);
   nextClockQuestion();
@@ -2129,6 +2137,8 @@ function startFullTest(){
     testSecs--;
     const t=document.getElementById('ftTime');
     if(t){ t.textContent=fmtTime(testSecs); if(testSecs<=60) t.style.background='var(--red)'; }
+    if(testSecs===60) beep([880,660],0.14,'triangle',0.14);
+    if(testSecs>0 && testSecs<=5) playTick();
     if(testSecs<=0){ clearInterval(testTimerId); showToast('Time! Scoring your test…'); grade(true); }
   },1000);
 }
@@ -2790,6 +2800,7 @@ function onlineMsg(m){
     if(bar) bar.innerHTML = m.winner
       ? (m.youWon ? '<b style="color:var(--green)">You took the point!</b>' : `<b style="color:var(--red)">${esc(m.winner)} got it first</b>`)
       : '<b>Nobody got it — next question…</b>';
+    if (m.winner) (m.youWon ? playRoundWin() : playRoundLose());
     if (!oAnswered) lockRaceChoices();
     oAnswered=true;
   }
@@ -2798,7 +2809,7 @@ function onlineMsg(m){
     if(m.score) oScore=m.score;
     if(oMe){ oMe.rating=m.rating; if(m.won) oMe.wins++; else oMe.losses++; }
     if(account){ account.onlineRating=m.rating; saveStore(); renderRankChip(); }
-    if(m.won) celebrate();
+    if(m.won) celebrate(); else playRoundLose();
     document.getElementById('online').innerHTML=`
       <div class="card" style="text-align:center">
         <div style="color:${m.won?'var(--gold)':'var(--gray)'}">${ico(m.won?'trophy':'swords',44)}</div>
@@ -3024,6 +3035,7 @@ function resetToHome(){
   document.getElementById('intro').classList.remove('hidden');
 }
 function navTo(mode){
+  playSwoosh();
   resetToHome();
   const map = { learn:openLearn, daily:openDaily, practice:start, fulltest:openFullTest, study:openStudy, verbal:openVerbal, review:openReview, coach:openCoachPage, report:openReport,
                 clock:openClock, survival:openSurvival, versus:openVersus, online:openOnline,
@@ -3178,7 +3190,7 @@ function coachSend(){
   }).then(r=>r.json().then(d=>({s:r.status, d})))
     .then(({s,d})=>{
       coachBusy=false;
-      if (d.reply) coachMsgs.push({role:'assistant', content:d.reply});
+      if (d.reply){ coachMsgs.push({role:'assistant', content:d.reply}); playCoachChime(); }
       else if (d.error==='inactive') coachMsgs.push({role:'assistant', content:'The Coach is not switched on yet — soon!'});
       else if (d.error==='limit') coachMsgs.push({role:'assistant', content:"That's all my energy for today — I reset tomorrow. Try the Teach me lesson meanwhile!"});
       else if (d.error==='consent'){ account.coachConsent=false; saveStore(); renderCoachConsent(); return; }
@@ -3299,6 +3311,7 @@ if ('serviceWorker' in navigator && location.protocol === 'https:'){
 
 /* ---------- Init ---------- */
 document.querySelectorAll('[data-ico]').forEach(el => { el.innerHTML = ico(el.dataset.ico, +(el.dataset.sz||24)); });
+document.addEventListener('click', e => { if (e.target.closest('button, .choice, .chip, .tile, .mbtn, .snav, .tier-row')) playTap(); }, true);
 renderSidebar();
 loadStore();
 renderHome();
