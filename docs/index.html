@@ -188,7 +188,7 @@
   .snav:hover { background:rgba(255,255,255,.07); color:#f6eed3; }
   .snav.on { background:rgba(202,152,39,.18); color:var(--gold-soft); }
   .sdiv { height:1px; background:rgba(255,255,255,.09); margin:9px 6px; }
-  #coachPanel { position:fixed; right:16px; bottom:84px; z-index:45; width:min(360px, calc(100vw - 32px));
+  #coachPanel { position:fixed; left:16px; bottom:84px; z-index:45; width:min(360px, calc(100vw - 32px));
                 background:var(--card); border:1.5px solid var(--gold); border-radius:14px;
                 box-shadow:0 10px 30px rgba(0,0,0,.25); display:flex; flex-direction:column; max-height:70vh; }
   .coach-head { display:flex; justify-content:space-between; align-items:center; padding:10px 14px;
@@ -200,11 +200,12 @@
   .cmsg.coach { align-self:flex-start; background:#f4ebd0; color:#2e2815; border-bottom-left-radius:4px; }
   .coach-in { display:flex; gap:6px; padding:10px; border-top:1px solid var(--line); }
   .coach-in input { flex:1; padding:9px 12px; border:1.5px solid var(--line); border-radius:8px; font-size:14px; }
-  .coach-fab { position:fixed; right:16px; bottom:16px; z-index:44; width:58px; height:58px; border-radius:50%;
+  .coach-fab { position:fixed; left:16px; bottom:16px; z-index:44; width:58px; height:58px; border-radius:50%;
                background:linear-gradient(160deg,#e0c169,#ca9827); color:#1a2136; border:2px solid #a87f1e;
                cursor:pointer; display:flex; align-items:center; justify-content:center;
                box-shadow:0 4px 16px rgba(0,0,0,.3); transition:transform .1s; }
   .coach-fab:hover { transform:scale(1.06); }
+  @media (min-width:980px){ .coach-fab { left:196px; } #coachPanel { left:196px; } }
   .coach-fab:active { transform:scale(0.94); }
   .chiprow { display:flex; gap:6px; flex-wrap:wrap; padding:0 10px 10px; }
   .chip { background:#f4ebd0; border:1px solid var(--line); border-radius:999px; padding:6px 12px;
@@ -212,7 +213,7 @@
   .chip:hover { border-color:var(--gold); }
   .coach-ava { width:30px; height:30px; border-radius:50%; background:linear-gradient(160deg,#e0c169,#ca9827);
                display:flex; align-items:center; justify-content:center; color:#1a2136; flex-shrink:0; }
-  .scratch-fab { position:fixed; right:16px; bottom:84px; z-index:40; width:52px; height:52px; border-radius:50%;
+  .scratch-fab { position:fixed; right:16px; bottom:16px; z-index:40; width:52px; height:52px; border-radius:50%;
                  background:var(--navy); color:var(--gold-soft); border:none; cursor:pointer;
                  display:flex; align-items:center; justify-content:center;
                  box-shadow:0 4px 14px rgba(0,0,0,.25); transition:transform .08s; }
