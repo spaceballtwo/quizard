@@ -1,0 +1,2928 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#1a2136" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="apple-touch-icon" href="apple-touch-icon.png" />
+<title>Quizard</title>
+<style>
+  :root {
+    --navy: #263048; --navy-dark: #1a2136; --bg: #f8f2e0; --card: #fdf5dc;
+    --green: #2f9150; --amber: #ab7b18; --red: #c04528; --gray: #7a7057; --line: #e7dabd;
+    --gold: #ca9827; --gold-soft: #eacd7f;
+    --serif: 'Iowan Old Style', Palatino, Georgia, 'Times New Roman', serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+         background:var(--bg); color:#2e2815; line-height:1.55; }
+  .wrap { max-width:720px; margin:0 auto; padding:24px 18px 80px; }
+  header.hero { text-align:center; padding:34px 18px 24px;
+                background:var(--navy-dark); color:#f6eed3; border-bottom:3px solid var(--gold); }
+  header.hero h1 { margin:0 0 4px; font-family:var(--serif); font-size:30px; font-weight:600;
+                   letter-spacing:7px; text-transform:uppercase; text-indent:7px; }
+  header.hero p { margin:0; opacity:0.8; font-size:15px; font-family:var(--serif); font-style:italic; }
+  .badge { display:inline-block; background:transparent; border:1px solid rgba(202,152,39,.55);
+           color:var(--gold-soft); padding:4px 14px; border-radius:999px; font-size:10.5px;
+           margin-bottom:14px; letter-spacing:2px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px;
+          padding:22px; margin:18px 0; }
+  .section-title { color:var(--navy); font-family:var(--serif); font-size:19px; font-weight:700; margin:4px 0 6px; }
+  .section-instr { color:var(--gray); font-size:14px; margin:0 0 14px; font-style:italic; }
+  .passage { background:#f6efd7; border-left:3px solid var(--gold); padding:12px 14px;
+             border-radius:6px; font-size:14.5px; color:#3a3524; margin-bottom:16px; }
+  .q { margin:18px 0; }
+  .q-stem { font-weight:600; margin-bottom:10px; }
+  .q-num { color:var(--navy); font-weight:700; }
+  label.choice { display:flex; align-items:center; gap:10px; border:1.5px solid var(--line);
+                 border-radius:8px; padding:10px 14px; margin:7px 0; cursor:pointer;
+                 transition:border-color .12s,background .12s; font-size:15px; }
+  label.choice:hover { border-color:#cfbe8c; background:#fbf1d3; }
+  label.choice input { accent-color:var(--navy); width:17px; height:17px; }
+  label.choice.correct { border-color:var(--green); background:#eaf6e9; }
+  label.choice.wrong { border-color:var(--red); background:#fcece5; }
+  label.choice.locked { cursor:default; }
+  .btn { display:inline-block; background:var(--navy); color:#f6eed3; border:none; border-radius:8px;
+         padding:13px 26px; font-size:15.5px; font-weight:600; cursor:pointer; width:100%; transition:background .12s; }
+  .btn:hover { background:var(--navy-dark); }
+  .btn.secondary { background:transparent; color:var(--navy); border:1.5px solid var(--navy); margin-top:10px; }
+  .btn.secondary:hover { background:rgba(38,48,72,.07); }
+  .btn.danger { background:var(--red); }
+  .btn.danger:hover { background:#a93226; }
+  .hidden { display:none; }
+  .score-ring { text-align:center; margin:8px 0 18px; }
+  .score-big { font-size:46px; font-weight:800; color:var(--navy); line-height:1; }
+  .score-sub { color:var(--gray); font-size:14px; }
+  .verdict { text-align:center; font-size:16px; font-weight:600; margin:4px 0 18px; padding:10px; border-radius:10px; }
+  .v-strong { background:#eaf6e9; color:var(--green); }
+  .v-mid { background:#fdf3dc; color:var(--amber); }
+  .v-low { background:#fcece5; color:var(--red); }
+  .bar-row { display:flex; align-items:center; gap:10px; margin:10px 0; font-size:14px; }
+  .bar-label { width:150px; flex-shrink:0; }
+  .bar-track { flex:1; background:#eee4cb; border-radius:999px; height:12px; overflow:hidden; }
+  .bar-fill { height:100%; background:var(--navy); border-radius:999px; }
+  .explain { font-size:13.5px; color:#3a3424; margin-top:10px; background:#fdf3dc;
+             border-left:3px solid var(--amber); padding:10px 12px; border-radius:6px; }
+  .explain b { color:var(--amber); }
+  .explain-ans { margin-top:6px; color:var(--green); font-weight:600; }
+  .explain.ok { background:#eaf6e9; border-left-color:var(--green); }
+  .explain.ok b { color:var(--green); }
+  .seg-bar { display:flex; gap:6px; flex-wrap:wrap; margin-top:4px; }
+  .seg { flex:1; min-width:70px; background:var(--card); border:1.5px solid var(--line); color:var(--navy);
+         border-radius:8px; padding:8px 6px; font-size:13px; font-weight:600; cursor:pointer; }
+  .seg:hover { border-color:#cfbe8c; }
+  .seg-on { background:var(--navy); color:#fff; border-color:var(--navy); }
+  .study-head { display:flex; justify-content:space-between; align-items:center; color:var(--navy);
+                font-weight:700; font-size:13px; margin-bottom:12px; text-transform:uppercase; letter-spacing:.5px; }
+  .study-score { color:var(--gray); font-weight:600; font-size:13px; text-transform:none; letter-spacing:0; }
+  .level-panel { margin-bottom:16px; }
+  .lvl-row { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
+  .lvl-badge { background:var(--navy-dark); color:var(--gold-soft); border:1px solid var(--gold); font-weight:700;
+               padding:5px 12px; border-radius:999px; font-size:13.5px; }
+  .lvl-xp { color:var(--gray); font-size:13px; font-weight:600; }
+  .xp-track { background:#eee4cb; border-radius:999px; height:10px; overflow:hidden; }
+  .xp-fill { height:100%; background:linear-gradient(90deg,#bd8f2c,#e0c169); border-radius:999px; transition:width .4s; }
+  .toast { position:fixed; top:18px; left:50%; transform:translateX(-50%); z-index:50;
+           background:var(--navy-dark); color:#f6eed3; border:1px solid var(--gold); padding:12px 22px; border-radius:999px;
+           font-weight:700; box-shadow:0 6px 20px rgba(0,0,0,.25); transition:opacity .3s; }
+  .toast.hidden { opacity:0; pointer-events:none; }
+  .account-bar { margin-bottom:14px; }
+  .acct-row { display:flex; justify-content:space-between; align-items:center; gap:10px;
+              background:#f4ebd0; border:1px solid var(--line); border-radius:8px; padding:8px 12px; font-size:13.5px; }
+  .acct-box { background:#f8f1da; border:1px solid var(--line); border-radius:10px; padding:14px; }
+  .acct-title { font-weight:700; color:var(--navy); font-size:13.5px; margin-bottom:10px; }
+  .acct-box input { width:100%; padding:10px 12px; border:1.5px solid var(--line); border-radius:8px;
+                    margin-bottom:8px; font-size:14px; }
+  .acct-btns { display:flex; gap:8px; }
+  .acct-btns .btn { flex:1; width:auto; margin-top:2px; }
+  .acct-list { display:flex; flex-direction:column; gap:8px; margin-bottom:10px; }
+  .acct-item { display:flex; justify-content:space-between; align-items:center; width:100%;
+               background:#fcf3d8; border:1.5px solid var(--line); border-radius:10px; padding:12px 14px;
+               font-size:15px; font-weight:600; color:var(--navy); cursor:pointer; }
+  .acct-item:hover { border-color:#cfbe8c; background:#fbf1d3; }
+  .acct-lvl { color:var(--amber); font-size:13px; }
+  .acct-empty { color:var(--gray); font-size:14px; margin-bottom:10px; }
+  .streak-line { text-align:center; margin-bottom:14px; }
+  .streak-chip { background:#f7edd0; color:#8a5a1c; border:1px solid #e5d29a; font-weight:700; padding:5px 14px; border-radius:999px; font-size:13.5px; }
+  .badge-card { display:flex; gap:12px; align-items:center; padding:10px 12px; border:1px solid var(--line); border-radius:10px; margin:8px 0; }
+  .badge-card.locked { opacity:0.5; }
+  .badge-icon { font-size:17px; width:38px; height:38px; display:flex; align-items:center; justify-content:center;
+                background:#f4ebd0; border:1px solid var(--line); border-radius:50%; flex-shrink:0; }
+  .badge-title { font-weight:700; color:var(--navy); font-size:15px; }
+  .badge-desc { color:var(--gray); font-size:13px; }
+  .clock-bar { display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; }
+  .clock-time { background:var(--navy); color:#fff; padding:6px 16px; border-radius:999px; font-size:17px; font-weight:800; }
+  .clock-score { color:var(--navy); font-size:16px; font-weight:700; }
+  .vs-board { display:flex; justify-content:space-between; align-items:center; background:#fcf3d8; border:1px solid var(--line); border-radius:12px; padding:12px 16px; margin-bottom:14px; }
+  .vs-side { text-align:center; flex:1; padding:6px; border-radius:10px; }
+  .vs-side.active { background:#f4ebcd; }
+  .vs-name { font-weight:700; color:var(--gray); font-size:14px; }
+  .vs-side.active .vs-name { color:var(--navy); }
+  .vs-score { font-size:30px; font-weight:800; color:var(--navy); }
+  .vs-vs { color:var(--gray); font-weight:700; padding:0 8px; }
+  .vs-turn { text-align:center; font-weight:700; color:var(--navy); margin-bottom:10px; font-size:16px; }
+  @keyframes pop { 0%{transform:scale(1)} 40%{transform:scale(1.06)} 100%{transform:scale(1)} }
+  @keyframes shake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-6px)} 60%{transform:translateX(6px)} }
+  @keyframes glowGreen { 0%{box-shadow:0 0 0 0 rgba(47,145,80,.65)} 60%{box-shadow:0 0 18px 6px rgba(47,145,80,.35)} 100%{box-shadow:0 0 26px 10px rgba(47,145,80,0)} }
+  @keyframes glowRed { 0%{box-shadow:0 0 0 0 rgba(192,69,40,.6)} 60%{box-shadow:0 0 14px 5px rgba(192,69,40,.3)} 100%{box-shadow:0 0 20px 8px rgba(192,69,40,0)} }
+  label.choice.correct { animation: pop .28s ease, glowGreen .8s ease-out; }
+  label.choice.wrong { animation: shake .3s ease, glowRed .6s ease-out; }
+  #flash { position:fixed; inset:0; pointer-events:none; z-index:55; opacity:0; }
+  #flash.green { background:radial-gradient(ellipse at center, rgba(47,145,80,0) 55%, rgba(47,145,80,.4) 100%); animation:flashFade .55s ease-out; }
+  #flash.red { background:radial-gradient(ellipse at center, rgba(192,69,40,0) 55%, rgba(192,69,40,.4) 100%); animation:flashFade .55s ease-out; }
+  @keyframes flashFade { 0%{opacity:1} 100%{opacity:0} }
+  .xp-float { position:fixed; transform:translate(-50%,0); z-index:56; pointer-events:none; font-weight:800;
+              font-size:18px; color:var(--green); text-shadow:0 1px 2px rgba(255,255,255,.85);
+              animation:xpRise .9s ease-out forwards; }
+  @keyframes xpRise { 0%{opacity:0; transform:translate(-50%,6px) scale(.8)} 15%{opacity:1} 100%{opacity:0; transform:translate(-50%,-44px) scale(1.15)} }
+  .hearts { font-size:18px; }
+  .rank-chip { background:#f4ebd0; color:var(--navy); border:1px solid var(--line); font-weight:700; padding:5px 14px; border-radius:999px; font-size:13.5px; }
+  .tier-row { display:flex; justify-content:space-between; align-items:center; padding:9px 12px; border:1px solid var(--line); border-radius:10px; margin:6px 0; font-weight:600; color:var(--navy); }
+  .tier-on { background:#f8f0d3; border-color:var(--gold); }
+  .tier-rp { color:var(--gray); font-weight:600; font-size:13px; }
+  .tile-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px; }
+  .mlabel { font-size:10px; letter-spacing:1.4px; color:var(--gray); font-weight:700; margin:12px 0 6px; text-transform:uppercase; }
+  .mrow { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+  .mbtn { display:flex; align-items:center; gap:8px; background:var(--card); border:1.5px solid var(--line);
+          border-radius:8px; padding:9px 10px; cursor:pointer; font-weight:600; color:var(--navy);
+          font-size:13px; text-align:left; transition:border-color .12s, background .12s; }
+  .mbtn:hover { border-color:var(--gold); background:#fbf1d3; }
+  .tile { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
+          background:var(--card); border:1.5px solid var(--line); border-radius:10px; padding:17px 10px;
+          cursor:pointer; transition:border-color .12s, transform .08s, background .12s; }
+  .tile:hover { border-color:var(--gold); background:#fbf1d3; }
+  .tile:active { transform:scale(0.97); }
+  .tile-ico { height:26px; display:flex; align-items:center; color:var(--navy); }
+  .tile-primary .tile-ico { color:#3a2f10; }
+  .ico { vertical-align:-3.5px; }
+  .tile-label { font-weight:700; color:var(--navy); font-size:14.5px; text-align:center; }
+  .tile-sub { font-size:10px; color:var(--gray); text-transform:uppercase; letter-spacing:1.2px; }
+  .tile-primary { background:linear-gradient(160deg,#e0c169,#ca9827); border-color:#ca9827; }
+  .tile-primary:hover { background:linear-gradient(160deg,#e6c975,#d0a02c); border-color:#a87f1e; }
+  .tile-primary .tile-label { color:#3a2f10; }
+  .tile-primary .tile-sub { color:rgba(58,47,16,.78); }
+  .stats { display:flex; gap:14px; justify-content:center; margin:14px 0 4px; }
+  .stat { background:#f4ebd0; border-radius:8px; padding:10px 16px; text-align:center; min-width:96px; }
+  .stat b { display:block; font-size:22px; color:var(--navy); }
+  .stat span { font-size:12px; color:var(--gray); }
+  .fineprint { color:var(--gray); font-size:12px; text-align:center; margin-top:26px; }
+  .err { background:#fcece5; color:var(--red); padding:10px; border-radius:8px; font-size:14px; text-align:center; margin-top:10px; }
+  .rpt-line { margin-top:10px; text-align:right; font-size:12.5px; min-height:18px; }
+  .rpt-btn { background:none; border:none; color:var(--gray); font-size:12.5px; cursor:pointer; padding:2px 4px; }
+  .rpt-btn:hover { color:var(--red); }
+  .rpt-done { color:var(--green); font-weight:600; font-size:12.5px; }
+  .rpt-chips { display:inline-flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  .rpt-chips .seg { flex:none; min-width:0; padding:4px 10px; font-size:12px; }
+  .rpt-card { border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin:10px 0; font-size:13.5px; }
+  .rpt-meta { color:var(--gray); font-size:12px; margin-bottom:6px; }
+  .fineprint a { color:var(--gray); text-decoration:underline; cursor:pointer; }
+  #sidebar { position:fixed; left:0; top:0; bottom:0; width:180px; background:var(--navy-dark);
+             z-index:30; padding:14px 10px; overflow-y:auto; display:none; border-right:3px solid var(--gold); }
+  @media (min-width:980px){ #sidebar { display:block; } body { padding-left:183px; } }
+  .sbrand { font-family:var(--serif); color:#f6eed3; font-size:17px; letter-spacing:3px; text-indent:3px;
+            text-transform:uppercase; text-align:center; margin:8px 0 14px; font-weight:600; }
+  .snav { display:flex; align-items:center; gap:9px; width:100%; background:none; border:none;
+          color:#cfc8b2; font-size:13.5px; font-weight:600; padding:8px 10px; border-radius:8px;
+          cursor:pointer; text-align:left; }
+  .snav:hover { background:rgba(255,255,255,.07); color:#f6eed3; }
+  .snav.on { background:rgba(202,152,39,.18); color:var(--gold-soft); }
+  .sdiv { height:1px; background:rgba(255,255,255,.09); margin:9px 6px; }
+  .scratch-fab { position:fixed; right:16px; bottom:16px; z-index:40; width:52px; height:52px; border-radius:50%;
+                 background:var(--navy); color:var(--gold-soft); border:none; cursor:pointer;
+                 display:flex; align-items:center; justify-content:center;
+                 box-shadow:0 4px 14px rgba(0,0,0,.25); transition:transform .08s; }
+  .scratch-fab:hover { background:var(--navy-dark); }
+  .scratch-fab:active { transform:scale(0.93); }
+  .scratch-pad { position:fixed; right:16px; bottom:78px; z-index:40; width:min(340px, calc(100vw - 32px));
+                 background:#fffbe8; border:1px solid #e4d9a8; border-radius:14px;
+                 box-shadow:0 10px 30px rgba(0,0,0,.22); padding:12px; }
+  .scratch-pad textarea { width:100%; height:220px; border:none; background:transparent; resize:vertical;
+                          font:14px/1.5 ui-monospace,Menlo,Consolas,monospace; outline:none; color:#3a3320; }
+  .scratch-head { display:flex; justify-content:space-between; align-items:center; font-weight:700;
+                  color:#8a7a33; font-size:13px; margin-bottom:4px; }
+  .scratch-head button { background:none; border:none; color:#8a7a33; cursor:pointer; font-size:12.5px; text-decoration:underline; padding:2px 4px; }
+</style>
+</head>
+<body>
+<nav id="sidebar"></nav>
+<div id="toast" class="toast hidden"></div>
+<canvas id="confetti" style="position:fixed; inset:0; width:100%; height:100%; pointer-events:none; z-index:60"></canvas>
+<div id="flash"></div>
+
+<button class="scratch-fab" onclick="toggleScratch()" title="Scratch paper"><span data-ico="quill" data-sz="24" style="display:flex"></span></button>
+<div id="scratchPad" class="scratch-pad hidden">
+  <div class="scratch-head"><span><span data-ico="quill" data-sz="13"></span> Scratch paper</span>
+    <span><button onclick="clearScratch()">clear</button><button onclick="toggleScratch()">close</button></span></div>
+  <textarea id="scratchText" placeholder="Work it out here — like real scratch paper, it gets tossed when you close the app."></textarea>
+</div>
+
+<header class="hero">
+  <svg width="60" height="60" viewBox="0 0 84 84" style="margin-bottom:4px" aria-label="Quizard">
+    <defs><linearGradient id="qg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#e0c169"/><stop offset="1" stop-color="#a87f1e"/></linearGradient></defs>
+    <polygon points="42,11 73,60 11,60" fill="url(#qg)"/>
+    <ellipse cx="42" cy="61" rx="30" ry="8" fill="url(#qg)"/>
+    <path d="M40 30 l2 4 4 2 -4 2 -2 4 -2 -4 -4 -2 4 -2 Z" fill="#fff"/>
+    <path d="M50 46 l1.5 3 3 1.5 -3 1.5 -1.5 3 -1.5 -3 -3 -1.5 3 -1.5 Z" fill="#fff"/>
+    <path d="M34 48 l1.2 2.4 2.4 1.2 -2.4 1.2 -1.2 2.4 -1.2 -2.4 -2.4 -1.2 2.4 -1.2 Z" fill="#fff"/>
+    <path d="M42 6 l1.4 2.8 2.8 1.4 -2.8 1.4 -1.4 2.8 -1.4 -2.8 -2.8 -1.4 2.8 -1.4 Z" fill="#f1e0a6"/>
+  </svg>
+  <h1 style="letter-spacing:1px">Quizard</h1>
+  <div class="badge" style="margin:8px 0 0">SSAT MATH · UPPER LEVEL · APPLYING TO GRADES 9–12</div>
+  <p style="margin-top:8px">Master the math, ace the test</p>
+  <div class="badge" style="margin:12px 0 0">FOUNDERS SCORED TOP 2% IN AMERICA · MATH OLYMPIAD</div>
+</header>
+
+<div class="wrap">
+
+  <div id="intro" class="card">
+    <div id="accountBar" class="account-bar"></div>
+    <div id="homeMain" class="hidden">
+      <div id="levelPanel" class="level-panel"></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+        <span id="rankLine"></span><span id="streakLine"></span>
+      </div>
+      <div id="nextUp"></div>
+      <div class="mlabel">Learn</div>
+      <div class="mrow">
+        <button class="mbtn" onclick="navTo('learn')"><span data-ico="bulb" data-sz="16"></span>Courses</button>
+        <button class="mbtn" onclick="navTo('daily')"><span data-ico="calendar" data-sz="16"></span>Daily</button>
+        <button class="mbtn" onclick="navTo('study')"><span data-ico="book" data-sz="16"></span>Study</button>
+        <button class="mbtn" onclick="navTo('verbal')"><span data-ico="alpha" data-sz="16"></span>Verbal</button>
+        <button class="mbtn" onclick="navTo('review')"><span data-ico="refresh" data-sz="16"></span>Review</button>
+      </div>
+      <div class="mlabel">Test yourself</div>
+      <div class="mrow">
+        <button class="mbtn" onclick="navTo('fulltest')"><span data-ico="hourglass" data-sz="16"></span>Full Test</button>
+        <button class="mbtn" onclick="navTo('practice')"><span data-ico="paper" data-sz="16"></span>Practice</button>
+      </div>
+      <div class="mlabel">Play</div>
+      <div class="mrow">
+        <button class="mbtn" onclick="navTo('clock')"><span data-ico="hourglass" data-sz="16"></span>Beat the Clock</button>
+        <button class="mbtn" onclick="navTo('survival')"><span data-ico="sword" data-sz="16"></span>Survival</button>
+        <button class="mbtn" onclick="navTo('versus')"><span data-ico="swords" data-sz="16"></span>Versus</button>
+        <button class="mbtn" onclick="navTo('online')"><span data-ico="globe" data-sz="16"></span>Online</button>
+      </div>
+      <div class="mlabel">Progress</div>
+      <div class="mrow">
+        <button class="mbtn" onclick="navTo('compete')"><span data-ico="trophy" data-sz="16"></span>Rank</button>
+        <button class="mbtn" onclick="navTo('achievements')"><span data-ico="medal" data-sz="16"></span>Badges</button>
+        <button class="mbtn" onclick="navTo('vote')"><span data-ico="ballot" data-sz="16"></span>Vote</button>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:16px">
+        <div id="diffSel" class="seg-bar" style="flex:0 1 220px;margin:0"></div>
+        <button id="soundBtn" class="seg" style="flex:0 0 auto;min-width:110px" onclick="toggleSound()">Sound: On</button>
+      </div>
+    </div>
+  </div>
+
+  <form id="quiz" class="hidden"></form>
+  <button id="submitBtn" class="btn hidden" onclick="grade()">Score this set</button>
+  <button id="backBtn" class="btn secondary hidden" onclick="goHome()">← Back to menu</button>
+  <div id="formError" class="err hidden">Please answer every question before scoring.</div>
+
+  <div id="results" class="hidden"></div>
+
+  <div id="study" class="hidden"></div>
+
+  <div id="clock" class="hidden"></div>
+
+  <div id="versus" class="hidden"></div>
+
+  <div id="survival" class="hidden"></div>
+
+  <div id="daily" class="hidden"></div>
+
+  <div id="compete" class="hidden"></div>
+
+  <div id="achievements" class="hidden"></div>
+
+  <div id="vote" class="hidden"></div>
+
+  <div id="online" class="hidden"></div>
+
+  <div id="learn" class="hidden"></div>
+
+  <div id="fulltest" class="hidden"></div>
+
+
+  <div id="reports" class="hidden"></div>
+
+  <p class="fineprint">Founded and run by middle schoolers working toward college — no ads, no investors — practice data stays on your device. Original questions. Not affiliated with or endorsed by SSATB. <span id="rptFoot"></span></p>
+</div>
+
+<script>
+/* ===== Local accounts: each person has their own on-device SSAT account ===== */
+let store = { accounts: [], currentId: null };
+let account = null;   // the currently logged-in account
+
+/* ================= Small helpers ================= */
+function rnd(min,max){ return Math.floor(Math.random()*(max-min+1))+min; }
+function choice(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+function pick(arr,n){ return shuffle(arr.slice()).slice(0,n); }
+
+/* ===== Icon set: hand-drawn line glyphs (stroke = currentColor, so they inherit text color) ===== */
+const ICONS = {
+  calendar:'<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/>',
+  paper:'<rect x="5" y="3.5" width="14" height="17" rx="2"/><path d="M8.5 8.5h7M8.5 12h7M8.5 15.5h4.5"/>',
+  book:'<path d="M4 5.5C6.5 4.8 9.5 5 12 6.8c2.5-1.8 5.5-2 8-1.3v12.7c-2.5-.7-5.5-.5-8 1.3-2.5-1.8-5.5-2-8-1.3Z"/><path d="M12 6.8v12.7"/>',
+  hourglass:'<path d="M7 4h10M7 20h10M8.5 4v2.3c0 2.6 3.5 3.6 3.5 5.7s-3.5 3.1-3.5 5.7V20M15.5 4v2.3c0 2.6-3.5 3.6-3.5 5.7s3.5 3.1 3.5 5.7V20"/>',
+  sword:'<path d="M19.5 4.5l-10 10M6.8 11.8l5.4 5.4M9.8 17.6l-4 4M4.4 16.2l3.4 3.4"/>',
+  swords:'<path d="M4.5 4.5l15 15M19.5 4.5l-15 15M8.3 13.7l2 2M15.7 13.7l-2 2"/>',
+  trophy:'<path d="M8 5h8v4.5a4 4 0 0 1-8 0Z"/><path d="M8 6.5H5.2A2.8 2.8 0 0 0 8 9.4M16 6.5h2.8A2.8 2.8 0 0 1 16 9.4M12 13.5v3M9 16.5h6M9.5 20h5"/>',
+  medal:'<circle cx="12" cy="9" r="4.5"/><path d="M9.7 12.8L8 20l4-2.2L16 20l-1.7-7.2"/>',
+  flame:'<path d="M12 4c2.5 3 5 5.5 5 9a5 5 0 0 1-10 0c0-3.5 2.5-6 5-9Z"/><path d="M12 12.5c1.1 1.1 1.8 1.9 1.8 3A1.8 1.8 0 0 1 12 17.2"/>',
+  star:'<path d="M12 3.8l2.4 4.9 5.4.8-3.9 3.8.9 5.4L12 16.1l-4.8 2.6.9-5.4-3.9-3.8 5.4-.8Z"/>',
+  flag:'<path d="M6 21V4.5"/><path d="M6 5.2c4-2 8 1.8 12 0v8.6c-4 1.8-8-2-12 0"/>',
+  quill:'<path d="M19.5 4.5c-6.5.3-10.8 4.2-12.3 10.2L6.2 19.8l1.8-.6.6-2.4c5 .3 9-3.6 10.9-12.3Z"/><path d="M7 17C10 11.5 13.5 8 17 6.3"/>',
+  volume:'<path d="M4.5 9.5v5H8l4.5 4v-13L8 9.5Z"/><path d="M15.5 9.7a3.6 3.6 0 0 1 0 4.6M18 8a7 7 0 0 1 0 8"/>',
+  mute:'<path d="M4.5 9.5v5H8l4.5 4v-13L8 9.5Z"/><path d="M16 10l4 4M20 10l-4 4"/>',
+  person:'<circle cx="12" cy="8" r="3.5"/><path d="M5.5 19.5a6.5 5.8 0 0 1 13 0"/>',
+  shield:'<path d="M12 3.5l7 2.4v5.6c0 4.4-2.9 7.4-7 9-4.1-1.6-7-4.6-7-9V5.9Z"/>',
+  crown:'<path d="M5.5 17h13M5.5 17L4 9l4.5 3L12 6.5 15.5 12 20 9l-1.5 8"/>',
+  lock:'<rect x="6" y="10.5" width="12" height="9" rx="2"/><path d="M9 10.5V8a3 3 0 0 1 6 0v2.5"/>',
+  bulb:'<path d="M9.5 17.5h5M10.2 20.5h3.6M12 3.5a5.8 5.8 0 0 0-3.3 10.5c.7.5 1 1.3 1 2.1v.4h4.6v-.4c0-.8.3-1.6 1-2.1A5.8 5.8 0 0 0 12 3.5Z"/>',
+  home:'<path d="M4 11.5 12 4.5l8 7"/><path d="M6.5 10.2V19.5h11v-9.3"/>',
+  refresh:'<path d="M20 12a8 8 0 1 1-2.4-5.7M20 3.5V8h-4.5"/>',
+  heart:'<path d="M12 19.8s-6.8-4.4-8.8-8.6C2 8.5 3.8 5.5 7 5.5c2 0 3.2 1.1 4 2.4.8-1.3 2-2.4 4-2.4 3.2 0 5 3 3.8 5.7-2 4.2-6.8 8.6-6.8 8.6Z"/>',
+  globe:'<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c3.2 2.7 3.2 14.3 0 17-3.2-2.7-3.2-14.3 0-17Z"/>',
+  alpha:'<path d="M5.5 19L11.5 5h1L18.5 19M8 14.5h8"/>',
+  ballot:'<rect x="4.5" y="4.5" width="15" height="15" rx="2"/><path d="M8.5 12.2l2.4 2.4 4.8-5.2"/>'
+};
+function ico(name, size, filled){
+  const s = size || 18;
+  return `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24" fill="${filled?'currentColor':'none'}" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]||''}</svg>`;
+}
+function heartsHTML(lives){
+  return Array.from({length:3},(_,i)=> i<lives
+    ? `<span style="color:var(--red)">${ico('heart',19,true)}</span>`
+    : `<span style="color:#cbc2a8">${ico('heart',19)}</span>`).join('');
+}
+
+/* ===== Figures: canvas-drawn diagrams attached to questions via q.draw ===== */
+function figHTML(q){
+  return (q && q.draw) ? `<div style="text-align:center;margin:8px 0"><canvas class="fig" width="280" height="170" data-fig='${JSON.stringify(q.draw)}'></canvas></div>` : '';
+}
+function drawFigs(){
+  document.querySelectorAll('canvas.fig:not([data-drawn])').forEach(c=>{
+    c.setAttribute('data-drawn','1');
+    let s; try{ s=JSON.parse(c.getAttribute('data-fig')); }catch(e){ return; }
+    const ctx=c.getContext('2d'); if(!ctx) return;
+    ctx.clearRect(0,0,c.width,c.height);
+    ctx.strokeStyle='#263048'; ctx.fillStyle='#263048'; ctx.lineWidth=2;
+    ctx.font='13px Georgia, serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    if (FIGS[s.t]) FIGS[s.t](ctx, s, c.width, c.height);
+  });
+}
+const FIGS = {
+  rt(ctx,s,W,H){
+    const x=80, y=H-30, legW=W-170, legH=H-58;
+    ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+legW,y); ctx.lineTo(x,y-legH); ctx.closePath(); ctx.stroke();
+    ctx.strokeRect(x, y-13, 13, 13);
+    ctx.fillText(s.b, x+legW/2, y+14);
+    ctx.fillText(s.a, x-16, y-legH/2);
+    ctx.fillText('?', x+legW/2+16, y-legH/2-12);
+  },
+  tri(ctx,s,W,H){
+    const x=55, y=H-32, w=W-130, apX=x+w*0.42, apY=26;
+    ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+w,y); ctx.lineTo(apX,apY); ctx.closePath(); ctx.stroke();
+    ctx.setLineDash([4,4]); ctx.beginPath(); ctx.moveTo(apX,apY); ctx.lineTo(apX,y); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillText('base = '+s.b, x+w/2, y+15);
+    ctx.fillText('h = '+s.h, apX+30, (apY+y)/2);
+  },
+  rect(ctx,s,W,H){
+    const x=70, y=26, w=W-150, h=H-66;
+    ctx.strokeRect(x,y,w,h);
+    ctx.fillText(s.w, x+w/2, y+h+15);
+    ctx.fillText(s.h, x-18, y+h/2);
+  },
+  pie(ctx,s,W,H){
+    const cx=W/2, cy=H/2, r=Math.min(W,H)/2-12;
+    for(let i=0;i<s.n;i++){
+      const a0=-Math.PI/2 + i*2*Math.PI/s.n, a1=a0 + 2*Math.PI/s.n;
+      ctx.beginPath(); ctx.moveTo(cx,cy); ctx.arc(cx,cy,r,a0,a1); ctx.closePath();
+      if(i<s.k){ ctx.fillStyle='rgba(202,152,39,.55)'; ctx.fill(); ctx.fillStyle='#263048'; }
+      ctx.stroke();
+    }
+  },
+  spin(ctx,s,W,H){
+    FIGS.pie(ctx,s,W,H);
+    const cx=W/2, cy=H/2;
+    ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx+Math.min(W,H)/2-26, cy-10); ctx.stroke(); ctx.lineWidth=2;
+    ctx.beginPath(); ctx.arc(cx,cy,4,0,7); ctx.fill();
+  },
+  bars(ctx,s,W,H){
+    const n=s.v.length, max=Math.max(...s.v), gap=(W-90)/n, bw=gap*0.55;
+    ctx.strokeStyle='#7a7057'; ctx.beginPath(); ctx.moveTo(42,H-26); ctx.lineTo(W-24,H-26); ctx.stroke(); ctx.strokeStyle='#263048';
+    s.v.forEach((v,i)=>{
+      const bh=(H-62)*v/max, x=54+i*gap, y=H-26-bh;
+      ctx.fillStyle='rgba(38,48,72,.75)'; ctx.fillRect(x,y,bw,bh);
+      ctx.fillStyle='#263048';
+      ctx.fillText(v, x+bw/2, y-9);
+      ctx.fillText(s.l[i], x+bw/2, H-13);
+    });
+  }
+};
+
+/* Build a 4-option multiple choice from a correct value + suggested distractors. */
+function makeMC(correct, distractors, fmt){
+  fmt = fmt || (v => String(v));
+  const seen = new Set([correct]);
+  const opts = [correct];
+  for (const d of distractors){
+    if (opts.length >= 5) break;                 // real SSAT = 5 choices (A–E)
+    if (d > 0 && !seen.has(d)){ seen.add(d); opts.push(d); }
+  }
+  let off = 1;
+  while (opts.length < 5 && off <= 80){
+    for (const cand of [correct+off, correct-off]){
+      if (opts.length >= 5) break;
+      if (cand > 0 && !seen.has(cand)){ seen.add(cand); opts.push(cand); }
+    }
+    off++;
+  }
+  shuffle(opts);
+  return { choices: opts.map(fmt), answer: opts.indexOf(correct) };
+}
+function Q(q, correct, distractors, why, fmt){
+  const mc = makeMC(correct, distractors, fmt);
+  return { q, choices: mc.choices, answer: mc.answer, why };
+}
+const money = v => `$${v}`;
+const mph   = v => `${v} mph`;
+const pct   = v => `${v}%`;
+function gcd(a,b){ return b ? gcd(b, a % b) : a; }
+/* Like Q(), but for string answers (fractions etc.) — pass extra distractor candidates.
+   Dedupes by numeric VALUE, so "3/6" and "1/2" can never both appear as choices. */
+function fval(s){ const m=String(s).match(/^(\d+)\/(\d+)$/); return m ? (+m[1]/+m[2]) : parseFloat(s); }
+function QS(q, correct, distractors, why){
+  const seenV = [fval(correct)];
+  const opts = [correct];
+  for (const d of distractors){
+    if (opts.length >= 5) break;
+    const s = String(d), v = fval(s);
+    if (!s || isNaN(v) || seenV.some(x => Math.abs(x-v) < 1e-9)) continue;
+    seenV.push(v); opts.push(s);
+  }
+  shuffle(opts);
+  return { q, choices: opts, answer: opts.indexOf(correct), why };
+}
+const frac = (n,d)=>{ const g=gcd(n,d); return (d/g)===1 ? String(n/g) : `${n/g}/${d/g}`; };
+
+/* ================= Quantitative GENERATORS — SSAT Upper-Level difficulty ================= */
+function genTwoSideLinear(){
+  const a=rnd(4,9), c=rnd(2,a-1), x=rnd(2,9), b=rnd(1,9), d=(a-c)*x+b;
+  return Q(`If ${a}x + ${b} = ${c}x + ${d}, what is the value of x?`, x,
+    [x+1, x-1, d-b, d+b],
+    `Subtract ${c}x from both sides: ${a-c}x + ${b} = ${d}; ${a-c}x = ${d-b}; x = ${x}.`);
+}
+function genSolveExpression(){
+  const a=rnd(2,6), x=rnd(2,9), b=rnd(1,10), c=a*x+b, m=rnd(2,5), k=rnd(1,9), ans=m*x+k;
+  return Q(`If ${a}x + ${b} = ${c}, what is the value of ${m}x + ${k}?`, ans,
+    [x, m*x, ans+m, ans-1],
+    `First solve: ${a}x = ${c-b}, so x = ${x}. Then ${m}x + ${k} = ${m*x} + ${k} = ${ans}.`);
+}
+function genRatio(){
+  const [p,q] = choice([[2,3],[3,5],[3,4],[2,5],[4,5],[5,6],[3,7],[2,7],[4,7]]);
+  const pair = choice([["boys","girls"],["cats","dogs"],["apples","oranges"],["red marbles","blue marbles"],["pencils","pens"],["tulips","roses"],["home fans","away fans"],["fiction books","nonfiction books"]]);
+  const k = rnd(3,9), known = p*k, ans = q*k;
+  const stem = choice([
+    `The ratio of ${pair[0]} to ${pair[1]} is ${p}:${q}. If there are ${known} ${pair[0]}, how many ${pair[1]} are there?`,
+    `In a room, for every ${p} ${pair[0]} there are ${q} ${pair[1]}. If there are ${known} ${pair[0]}, how many ${pair[1]} are there?`,
+    `A club has ${pair[0]} and ${pair[1]} in the ratio ${p}:${q}. There are ${known} ${pair[0]}. How many ${pair[1]} are in the club?`
+  ]);
+  return Q(stem, ans,
+    [known, (p+q)*k, ans+q, ans-q],
+    `Each unit = ${known} ÷ ${p} = ${k}; ${pair[1]} = ${q} × ${k} = ${ans}.`);
+}
+function genProportion(){
+  const item=choice(['notebooks','pens','stickers','trading cards','granola bars','erasers','key chains']);
+  const n1=rnd(2,5), per=rnd(2,9), cost1=n1*per, n2=rnd(6,12);
+  const stem = choice([
+    `If ${n1} ${item} cost $${cost1}, how much do ${n2} ${item} cost at the same rate?`,
+    `A store sells ${n1} ${item} for $${cost1}. At that price, what would ${n2} ${item} cost?`,
+    `${n1} ${item} cost $${cost1} altogether. What is the cost of ${n2} ${item}?`
+  ]);
+  return Q(stem, n2*per,
+    [n2*per+per, n2*per-per, cost1+n2, per],
+    `Each one costs $${cost1} ÷ ${n1} = $${per}; ${n2} × $${per} = $${n2*per}.`, money);
+}
+function genPercentIncrease(){
+  const a=20*rnd(1,6), p=choice([10,20,25,50]), b=a*(100+p)/100;
+  return Q(`A price increases from $${a} to $${b}. What is the percent increase?`, p,
+    [p+5, p-5, p*2, b-a],
+    `Increase = $${b} − $${a} = $${b-a}; percent = ${b-a} ÷ ${a} × 100 = ${p}%.`, pct);
+}
+function genReversePercent(){
+  const ans=20*rnd(2,8), p=choice([10,20,25,50]), part=ans*p/100;
+  return Q(`${p}% of a number is ${part}. What is the number?`, ans,
+    [part, part*2, ans+10, ans-10],
+    `The number = ${part} ÷ ${p}% = ${part} ÷ ${p/100} = ${ans}.`);
+}
+function genPythagoras(){
+  const t = choice([[3,4,5],[6,8,10],[5,12,13],[8,15,17],[9,12,15],[7,24,25],[20,21,29]]);
+  return Q(`A right triangle has legs of length ${t[0]} and ${t[1]}. What is the length of the hypotenuse?`, t[2],
+    [t[0]+t[1], t[2]+1, t[2]-1, t[2]+2],
+    `${t[0]}² + ${t[1]}² = ${t[0]*t[0]} + ${t[1]*t[1]} = ${t[2]*t[2]}, so the hypotenuse = ${t[2]}.`);
+}
+function genExponentSolve(){
+  const b=choice([2,3,5]), e=rnd(2,4), val=Math.pow(b,e);
+  return Q(`If ${b}^x = ${val}, what is the value of x?`, e,
+    [e+1, e-1, val/b, b],
+    `${b}^${e} = ${val}, so x = ${e}.`);
+}
+function genExponentEval(){
+  const [b1,e1,b2,e2] = choice([[2,4,3,2],[3,3,2,3],[2,5,4,2],[3,2,2,2],[4,2,2,3],[5,2,3,2],[2,4,2,2],[3,3,3,2]]);
+  const v1=Math.pow(b1,e1), v2=Math.pow(b2,e2), ans=v1-v2;
+  return Q(`What is ${b1}^${e1} − ${b2}^${e2}?`, ans,
+    [v1+v2, ans+5, ans-5, ans+10],
+    `${b1}^${e1} = ${v1} and ${b2}^${e2} = ${v2}; ${v1} − ${v2} = ${ans}.`);
+}
+function genPercentRed(){
+  const [holder,thing]=choice([['jar','marbles'],['bag','candies'],['box','beads'],['bin','buttons']]);
+  const total=choice([10,20,25,50]), r=rnd(1,total-1), ans=r*100/total;
+  return Q(`A ${holder} holds ${r} red ${thing} and ${total-r} blue ${thing}. What percent of the ${thing} are red?`, ans,
+    [(total-r)*100/total, ans+10, ans-10, r],
+    `${r} of ${total} ${thing} are red; ${r} ÷ ${total} × 100 = ${ans}%.`, pct);
+}
+function genAverageMissing(){
+  let m,a,b,c,x;
+  do { m=rnd(8,20); a=rnd(2,25); b=rnd(2,25); c=rnd(2,25); x=4*m-(a+b+c); }
+  while (x<1 || x>60);
+  return Q(`The average of four numbers is ${m}. Three of them are ${a}, ${b}, and ${c}. What is the fourth number?`, x,
+    [x+1, x-1, m, x+2],
+    `The four numbers total 4 × ${m} = ${4*m}; ${a} + ${b} + ${c} = ${a+b+c}, so the fourth = ${x}.`);
+}
+function genConsecutive(){
+  const mid=rnd(4,30), s=3*mid;
+  return Q(`The sum of three consecutive integers is ${s}. What is the largest of the three?`, mid+1,
+    [mid, mid-1, mid+2, s],
+    `The middle integer is ${s} ÷ 3 = ${mid}; the integers are ${mid-1}, ${mid}, ${mid+1}, so the largest is ${mid+1}.`);
+}
+function genTriangleArea(){
+  let b,h;
+  do { b=rnd(3,16); h=rnd(3,16); } while ((b*h)%2!==0);
+  const ans=b*h/2;
+  return Q(`A triangle has a base of ${b} and a height of ${h}. What is its area?`, ans,
+    [b*h, ans+b, ans+h, b+h],
+    `Area = ½ × base × height = ½ × ${b} × ${h} = ${ans}.`);
+}
+function genBoxVolume(){
+  const l=rnd(2,8), w=rnd(2,8), h=rnd(2,6), ans=l*w*h;
+  return Q(`A rectangular box measures ${l} by ${w} by ${h}. What is its volume?`, ans,
+    [l+w+h, l*w, 2*(l*w+w*h+l*h), ans+10],
+    `Volume = length × width × height = ${l} × ${w} × ${h} = ${ans}.`);
+}
+function genPercentOfPercent(){
+  const p1=choice([5,10,20,25,50]), p2=choice([20,40,60,80]), n=100*rnd(1,4);
+  const step=p2/100*n, ans=p1/100*step;
+  return Q(`What is ${p1}% of ${p2}% of ${n}?`, ans,
+    [p1/100*n, step, ans+5, ans*2],
+    `${p2}% of ${n} = ${step}; then ${p1}% of ${step} = ${ans}.`);
+}
+function genRemainder(){
+  const dvsr=rnd(3,9), quot=rnd(3,12), rem=rnd(1,dvsr-1), num=dvsr*quot+rem;
+  return Q(`What is the remainder when ${num} is divided by ${dvsr}?`, rem,
+    [rem+1, rem-1, quot, dvsr-rem],
+    `${num} = ${dvsr} × ${quot} + ${rem}, so the remainder is ${rem}.`);
+}
+/* ---- additional standard SSAT topics ---- */
+function genMedian(){
+  const arr=[]; while(arr.length<5){ const v=rnd(2,30); if(!arr.includes(v)) arr.push(v); }
+  const sorted=arr.slice().sort((a,b)=>a-b), med=sorted[2];
+  return Q(`What is the median of ${arr.join(', ')}?`, med,
+    [Math.round(arr.reduce((s,x)=>s+x,0)/5), sorted[1], sorted[3], sorted[0]],
+    `In order: ${sorted.join(', ')}. The middle value (median) is ${med}.`);
+}
+function genSequence(){
+  const a=rnd(1,9), d=rnd(2,6), next=a+4*d;
+  const stem = choice([
+    `What number comes next: ${a}, ${a+d}, ${a+2*d}, ${a+3*d}, ___?`,
+    `A pattern goes ${a}, ${a+d}, ${a+2*d}, ${a+3*d}, … What is the next term?`,
+    `The sequence ${a}, ${a+d}, ${a+2*d}, ${a+3*d} continues the same way. What is the fifth number?`
+  ]);
+  return Q(stem, next,
+    [next+d, next-d, next+1, a+5*d],
+    `Each term increases by ${d}, so ${a+3*d} + ${d} = ${next}.`);
+}
+function genCoordDistance(){
+  const t=choice([[3,4,5],[6,8,10],[5,12,13],[8,15,17],[9,12,15]]);
+  return Q(`On a coordinate grid, what is the distance from (0, 0) to (${t[0]}, ${t[1]})?`, t[2],
+    [t[0]+t[1], t[2]+1, t[2]-1, t[2]+2],
+    `Distance = √(${t[0]}² + ${t[1]}²) = √${t[0]*t[0]+t[1]*t[1]} = ${t[2]}.`);
+}
+function genMultiStepWord(){
+  const name=choice(['Maya','Leo','Aria','Noah','Zoe','Priya','Marcus','Elena','Jaden','Sofia']);
+  const it=choice([['notebooks','a pen'],['markers','an eraser'],['apples','a drink'],['comic books','a poster'],['packs of cards','a binder'],['snacks','a water bottle']]);
+  const n=rnd(2,5), price=rnd(2,6), extra=rnd(2,5), total=n*price+extra;
+  return Q(`${name} buys ${n} ${it[0]} at $${price} each and ${it[1]} for $${extra}. How much is spent in total?`, total,
+    [n*price, total+extra, n*(price+extra), total-extra],
+    `${n} × $${price} = $${n*price}; plus $${extra} = $${total}.`, money);
+}
+function genRatioShare(){
+  const [p,q]=choice([[2,3],[3,5],[1,4],[3,4],[2,5]]); const unit=rnd(4,12);
+  const total=(p+q)*unit, larger=Math.max(p,q)*unit;
+  return Q(`$${total} is shared in the ratio ${p}:${q}. What is the larger share?`, larger,
+    [Math.min(p,q)*unit, larger+unit, larger-unit, total],
+    `Total parts = ${p+q}; each part = $${total} ÷ ${p+q} = $${unit}; larger share = ${Math.max(p,q)} × $${unit} = $${larger}.`, money);
+}
+
+/* ---- more topics: fractions, geometry, probability, data, number theory ---- */
+function genFractionOf(){
+  const den=choice([3,4,5,6,8]), num=rnd(1,den-1), k=rnd(2,6), whole=den*k, ans=num*k;
+  return Q(`What is ${num}/${den} of ${whole}?`, ans,
+    [k, num*den, ans+k, whole-ans],
+    `${whole} ÷ ${den} = ${k}; ${num} × ${k} = ${ans}.`);
+}
+function genPerimeterRect(){
+  const l=rnd(4,15), w=rnd(2,l-1), ans=2*(l+w);
+  return Q(`A rectangle is ${l} units long and ${w} units wide. What is its perimeter?`, ans,
+    [l*w, l+w, 2*l+w, ans+2],
+    `Perimeter = 2 × (${l} + ${w}) = ${ans}.`);
+}
+function genOrderOps(){
+  const a=rnd(2,9), b=rnd(2,9), c=rnd(2,9), prod=b*c, d=rnd(1,Math.min(9,a+prod-1)), ans=a+prod-d;
+  return Q(`What is ${a} + ${b} × ${c} − ${d}?`, ans,
+    [(a+b)*c-d, a+b*(c-d), ans+d, ans-1],
+    `Multiply first: ${b} × ${c} = ${prod}; then ${a} + ${prod} − ${d} = ${ans}.`);
+}
+function genNegatives(){
+  const a=rnd(3,12), rise=rnd(a+2,a+15), ans=rise-a;
+  return Q(`The temperature was −${a}°F at dawn and rose ${rise}°F by noon. What was the temperature at noon?`, ans,
+    [rise+a, ans+2, ans-2, a],
+    `−${a} + ${rise} = ${ans}°F.`);
+}
+function genTimeConvert(){
+  const halves=choice([3,4,5,6,7]), h=halves/2, ans=halves*30;
+  const label = h%1 ? (Math.floor(h)+'½') : String(h);
+  return Q(`How many minutes are in ${label} hours?`, ans,
+    [Math.round(h*100), ans+30, ans-30, ans+15],
+    `${label} hours × 60 minutes = ${ans} minutes.`);
+}
+function genFractionAdd(){
+  const [d1,d2]=choice([[2,3],[3,4],[2,5],[3,5],[4,5],[2,7],[3,8]]);
+  const n1=rnd(1,d1-1), n2=rnd(1,d2-1);
+  const den=d1*d2/gcd(d1,d2), num=n1*(den/d1)+n2*(den/d2);
+  const g=gcd(num,den), cn=num/g, cd=den/g;
+  const correct = frac(num,den);
+  return QS(`What is ${n1}/${d1} + ${n2}/${d2}?`, correct,
+    [`${n1+n2}/${d1+d2}`, frac(cn+1,cd), `${cn}/${cd+1}`, frac(Math.max(1,cn-1),cd), frac(n1*n2,d1*d2), `${cn}/${cd*2}`, `${cn+2}/${cd}`],
+    `Common denominator ${den}: ${n1*(den/d1)}/${den} + ${n2*(den/d2)}/${den} = ${num}/${den}${g>1?` = ${correct}`:''}.`);
+}
+function genMode(){
+  const m=rnd(2,15); let a,b,c;
+  do{ a=rnd(2,20); }while(a===m);
+  do{ b=rnd(2,20); }while(b===m||b===a);
+  do{ c=rnd(2,20); }while(c===m||c===a||c===b);
+  const arr=shuffle([m,m,m,a,b,c]), sorted=arr.slice().sort((x,y)=>x-y);
+  return Q(`What is the mode of ${arr.join(', ')}?`, m,
+    [Math.round(arr.reduce((s,x)=>s+x,0)/6), Math.round((sorted[2]+sorted[3])/2), sorted[5], sorted[0]],
+    `The mode is the value that appears most often — ${m} appears three times.`);
+}
+function genAngleTriangle(){
+  const a=rnd(25,80), b=rnd(25,Math.min(80,150-a)), ans=180-a-b;
+  return Q(`Two angles of a triangle measure ${a}° and ${b}°. What is the measure of the third angle?`, ans,
+    [180-a, 180-b, a+b, ans+10],
+    `The angles of a triangle sum to 180°: 180 − ${a} − ${b} = ${ans}°.`);
+}
+function genDiscount(){
+  const item=choice(['jacket','backpack','skateboard','pair of sneakers','video game','hoodie','baseball glove']);
+  const price=10*rnd(3,12), p=choice([10,20,30,40,50]), off=price*p/100, ans=price-off;
+  const stem = choice([
+    `A ${item} costs $${price}. It goes on sale for ${p}% off. What is the sale price?`,
+    `A ${item} normally sells for $${price}. This week it is marked down ${p}%. What does it cost now?`,
+    `A store cuts the price of a $${price} ${item} by ${p}%. What is the new price?`
+  ]);
+  return Q(stem, ans,
+    [off, price-p, ans-10, price],
+    `Discount = ${p}% of $${price} = $${off}; sale price = $${price} − $${off} = $${ans}.`, money);
+}
+function genSimpleProb(){
+  const r=rnd(2,6), b=rnd(2,6), g=rnd(1,4), total=r+b+g;
+  return QS(`A bag holds ${r} red, ${b} blue, and ${g} green marbles. If one marble is drawn at random, what is the probability it is red?`,
+    frac(r,total),
+    [frac(b,total), frac(r,b+g), `${r}/${total+1}`, `1/${r}`, frac(g,total), frac(total-r,total), `${r}/${total+2}`, `${r}/${total*2}`],
+    `${r} red out of ${total} total marbles = ${r}/${total}${gcd(r,total)>1?` = ${frac(r,total)}`:''}.`);
+}
+function genSlope(){
+  const x1=rnd(0,5), y1=rnd(0,5), m=rnd(1,4), dx=rnd(1,4), x2=x1+dx, y2=y1+m*dx;
+  return Q(`What is the slope of the line through (${x1}, ${y1}) and (${x2}, ${y2})?`, m,
+    [dx, y2-y1, m+1, m-1],
+    `Slope = rise ÷ run = (${y2} − ${y1}) ÷ (${x2} − ${x1}) = ${y2-y1} ÷ ${dx} = ${m}.`);
+}
+function genSquareRootEq(){
+  const x=rnd(5,15), v=x*x;
+  return Q(`If x² = ${v} and x > 0, what is x?`, x,
+    [Math.floor(v/2), x+1, x-1, 2*x],
+    `√${v} = ${x} because ${x} × ${x} = ${v}.`);
+}
+function genCustomOp(){
+  const sym=choice(['◆','★','▲']), c1=rnd(2,4), c2=rnd(2,4), x=rnd(2,9), y=rnd(2,9), ans=c1*x+c2*y;
+  return Q(`If a ${sym} b = ${c1}a + ${c2}b, what is ${x} ${sym} ${y}?`, ans,
+    [c2*x+c1*y, x+y, ans+1, ans-2],
+    `Substitute a = ${x}, b = ${y}: ${c1}(${x}) + ${c2}(${y}) = ${c1*x} + ${c2*y} = ${ans}.`);
+}
+function genLcm(){
+  const [a,b]=choice([[4,6],[6,8],[4,10],[6,9],[8,12],[5,7],[6,10],[3,8]]);
+  const l=a*b/gcd(a,b);
+  return Q(`What is the least common multiple of ${a} and ${b}?`, l,
+    [a*b, gcd(a,b), a+b, l*2],
+    `List multiples: ${a}, ${2*a}, …, and ${b}, ${2*b}, …; the smallest number in both lists is ${l}.`);
+}
+function genAgeProblem(){
+  const [who,rel]=choice([['Jake','his sister'],['Mia','her brother'],['Eli','his cousin'],['Nora','her cousin'],['Ben','his cousin'],['Ava','her brother'],['Theo','his sister']]);
+  const mult=choice([2,3,4]), young=rnd(3,12), sum=young*(mult+1), ans=young*mult;
+  const stem = choice([
+    `${who} is ${mult} times as old as ${rel}. Together their ages add up to ${sum}. How old is ${who}?`,
+    `The ages of ${who} and ${rel} total ${sum}, and ${who} is ${mult} times older. What is ${who}'s age?`
+  ]);
+  return Q(stem, ans,
+    [young, sum, ans+mult, ans-1],
+    `Their ages are ${mult} parts + 1 part = ${mult+1} parts; each part = ${sum} ÷ ${mult+1} = ${young}. ${who} = ${mult} × ${young} = ${ans}.`);
+}
+function genInequalityInt(){
+  const a=rnd(2,5), b=rnd(1,9), x0=rnd(3,9), r=rnd(1,a-1), c=b+a*x0+r;
+  const bound=((c-b)/a).toFixed(2).replace(/\.?0+$/,'');
+  return Q(`What is the largest integer value of x for which ${a}x + ${b} < ${c}?`, x0,
+    [x0+1, x0-1, c-b, x0+2],
+    `${a}x < ${c} − ${b} = ${c-b}; x < ${c-b} ÷ ${a} = ${bound}, so the largest integer is ${x0}.`);
+}
+function genPolygonAngles(){
+  const [n,name]=choice([[5,'pentagon'],[6,'hexagon'],[8,'octagon'],[10,'decagon']]);
+  const ans=(n-2)*180;
+  return Q(`What is the sum of the interior angles of a ${name} (${n} sides)?`, ans,
+    [n*180, ans-180, ans+180, 360],
+    `Sum of interior angles = (n − 2) × 180° = (${n} − 2) × 180° = ${ans}°.`);
+}
+function genAvgSpeed(){
+  const t1=rnd(1,3), t2=rnd(1,3), avg=choice([30,40,45,50,60]), k=choice([5,10])*(Math.random()<0.5?-1:1);
+  let d1=avg*t1+k, d2=avg*t2-k;
+  if(d1<=0||d2<=0){ d1=avg*t1; d2=avg*t2; }
+  return Q(`A car travels ${d1} miles in ${t1} hour${t1>1?'s':''}, then ${d2} more miles in ${t2} hour${t2>1?'s':''}. What is its average speed for the whole trip?`, avg,
+    [avg+5, avg-5, Math.round(d1/t1), Math.round(d2/t2)],
+    `Average speed = total distance ÷ total time = ${d1+d2} ÷ ${t1+t2} = ${avg} mph.`, mph);
+}
+function genExpRules(){
+  const b=choice([2,3,5,10]), e1=rnd(2,4), e2=rnd(2,4), ans=e1+e2;
+  return Q(`If ${b}^${e1} × ${b}^${e2} = ${b}^x, what is the value of x?`, ans,
+    [e1*e2, ans+1, ans-1, Math.max(1,Math.abs(e1-e2))],
+    `When multiplying powers with the same base, add the exponents: x = ${e1} + ${e2} = ${ans}.`);
+}
+
+/* ---- harder topics: systems, quadratics, functions, compound probability ---- */
+function genSystemEq(){
+  const x=rnd(5,15), y=rnd(2,x-1), S=x+y, D=x-y;
+  return Q(`If x + y = ${S} and x − y = ${D}, what is the value of x?`, x,
+    [y, S-D, x+1, x-1],
+    `Add the two equations: 2x = ${S} + ${D} = ${S+D}, so x = ${x}.`);
+}
+function genFactoredQuad(){
+  const a=rnd(2,7), b=rnd(2,7);
+  return Q(`If (x − ${a})(x + ${b}) = 0, what is the positive value of x?`, a,
+    [b, a+b, Math.abs(a-b)||a+1, a+1],
+    `A product is zero when either factor is zero: x = ${a} or x = −${b}. The positive one is ${a}.`);
+}
+function genFunctionEval(){
+  const a=rnd(2,4), b=rnd(1,9), n=rnd(2,5), ans=a*n*n+b;
+  return Q(`If f(x) = ${a}x² + ${b}, what is f(${n})?`, ans,
+    [(a*n)*(a*n)+b, a*n+b, a*n*n-b, ans+a],
+    `Square first, then multiply: f(${n}) = ${a} × ${n*n} + ${b} = ${ans}.`);
+}
+function genTwoEvents(){
+  const sc = choice([
+    {q:'A fair coin is flipped twice. What is the probability of getting heads both times?', n:1, d:4,
+     why:'Each flip is 1/2, and independent events multiply: 1/2 × 1/2 = 1/4.'},
+    {q:'A fair coin is flipped three times. What is the probability of getting heads all three times?', n:1, d:8,
+     why:'1/2 × 1/2 × 1/2 = 1/8.'},
+    {q:'A fair six-sided die is rolled twice. What is the probability of rolling a 6 both times?', n:1, d:36,
+     why:'Each roll is 1/6, and independent events multiply: 1/6 × 1/6 = 1/36.'},
+    {q:'A fair coin is flipped and a fair six-sided die is rolled. What is the probability of heads AND a 6?', n:1, d:12,
+     why:'1/2 × 1/6 = 1/12.'},
+    {q:'A fair six-sided die is rolled twice. What is the probability both rolls are even?', n:1, d:4,
+     why:'Even is 3 of 6 = 1/2 each roll; 1/2 × 1/2 = 1/4.'}
+  ]);
+  return QS(sc.q, frac(sc.n, sc.d),
+    [`1/${sc.d/2}`, `1/${sc.d*2}`, `2/${sc.d}`, `1/${sc.d-1}`, `1/${sc.d+2}`], sc.why);
+}
+function genThreeRatio(){
+  const parts=choice([[1,2,3],[2,3,5],[1,3,4],[2,3,4],[1,2,5]]);
+  const unit=rnd(3,10), sum=parts[0]+parts[1]+parts[2], total=sum*unit, ans=Math.max(...parts)*unit;
+  return Q(`$${total} is split among three people in the ratio ${parts.join(':')}. What is the largest share?`, ans,
+    [Math.min(...parts)*unit, parts[1]*unit, total, ans+unit],
+    `Total parts = ${sum}; each part = $${total} ÷ ${sum} = $${unit}; largest = ${Math.max(...parts)} × $${unit} = $${ans}.`, money);
+}
+/* ---- more medium topics ---- */
+function genWorkBackwards(){
+  const n=rnd(3,12), a=rnd(2,5), b=rnd(1,a*n-1), c=a*n-b;
+  const stem = choice([
+    `I multiply a number by ${a}, then subtract ${b}, and get ${c}. What is the number?`,
+    `A number is multiplied by ${a}; after subtracting ${b} the result is ${c}. Find the number.`,
+    `When ${b} is subtracted from ${a} times a number, the result is ${c}. What is the number?`
+  ]);
+  return Q(stem, n,
+    [c+b, n+1, n-1, a*n],
+    `Work backwards: add ${b} back (${c} + ${b} = ${c+b}), then divide by ${a}: ${n}.`);
+}
+function genCountingPrinciple(){
+  const s=rnd(2,5), p=rnd(2,4), sh=rnd(2,3), ans=s*p*sh;
+  return Q(`A closet has ${s} shirts, ${p} pairs of pants, and ${sh} pairs of shoes. How many different outfits (one of each) are possible?`, ans,
+    [s+p+sh, s*p, ans+s, ans-s],
+    `Multiply the choices: ${s} × ${p} × ${sh} = ${ans}.`);
+}
+function genMixedPowers(){
+  const a=rnd(2,9), b=rnd(2,5), c=rnd(1,b*b), ans=1+b*b-c;
+  return Q(`What is ${a}⁰ + ${b}² − ${c}?`, ans,
+    [a+b*b-c, b*b-c, ans+1, ans-1],
+    `Anything to the power 0 equals 1: 1 + ${b*b} − ${c} = ${ans}.`);
+}
+function genConsecutiveEven(){
+  const mid=2*rnd(3,15), s=3*mid;
+  return Q(`The sum of three consecutive even integers is ${s}. What is the largest of the three?`, mid+2,
+    [mid, mid-2, mid+4, Math.round(s/3)+1],
+    `The middle one is ${s} ÷ 3 = ${mid}; the integers are ${mid-2}, ${mid}, ${mid+2} — the largest is ${mid+2}.`);
+}
+
+/* ---- figure questions: the real SSAT shows diagrams ---- */
+function genFigRightTri(){
+  const t = choice([[3,4,5],[6,8,10],[5,12,13],[9,12,15],[8,15,17]]);
+  const q = Q(`In the right triangle shown, what is the length of the side marked "?"`, t[2],
+    [t[0]+t[1], t[2]+1, t[2]-1, t[2]+2],
+    `a² + b² = c²: ${t[0]*t[0]} + ${t[1]*t[1]} = ${t[2]*t[2]}, so the missing side is ${t[2]}.`);
+  q.draw = {t:'rt', a:t[0], b:t[1]}; return q;
+}
+function genFigTriArea(){
+  let b,h; do{ b=rnd(4,14); h=rnd(4,12); }while((b*h)%2!==0);
+  const q = Q(`What is the area of the triangle shown?`, b*h/2,
+    [b*h, b*h/2+b, b+h, b*h/2+2],
+    `Area = ½ × base × height = ½ × ${b} × ${h} = ${b*h/2}.`);
+  q.draw = {t:'tri', b, h}; return q;
+}
+function genFigRect(){
+  const w=rnd(4,14), h=rnd(3,10);
+  const q = Math.random()<0.5
+    ? Q(`What is the area of the rectangle shown?`, w*h, [2*(w+h), w+h, w*h+w, w*h-h], `Area = ${w} × ${h} = ${w*h}.`)
+    : Q(`What is the perimeter of the rectangle shown?`, 2*(w+h), [w*h, w+h, 2*(w+h)+2, 2*(w+h)-2], `Perimeter = 2 × (${w} + ${h}) = ${2*(w+h)}.`);
+  q.draw = {t:'rect', w, h}; return q;
+}
+function genFigShaded(){
+  const n=choice([4,5,6,8,10]), k=rnd(1,n-1);
+  const q = QS(`What fraction of the circle shown is shaded?`, frac(k,n),
+    [`${k}/${n+1}`, frac(n-k,n), `${k+1}/${n}`, `1/${k}`, `${k}/${n*2}`],
+    `${k} of ${n} equal parts are shaded: ${k}/${n}${gcd(k,n)>1?` = ${frac(k,n)}`:''}.`);
+  q.draw = {t:'pie', n, k}; return q;
+}
+function genFigSpinner(){
+  const n=choice([4,5,6,8]), k=rnd(1,n-1);
+  const q = QS(`The spinner shown has ${n} equal sections and ${k} of them are gold. What is the probability the spinner lands on gold?`, frac(k,n),
+    [frac(n-k,n), `${k}/${n+1}`, `1/${k}`, `${k}/${n*2}`, `${k+1}/${n}`],
+    `${k} gold sections out of ${n} equal sections: ${frac(k,n)}.`);
+  q.draw = {t:'spin', n, k}; return q;
+}
+function genFigBars(){
+  const l=['Mon','Tue','Wed','Thu'];
+  let v, mi, ni;
+  do {
+    v = l.map(()=>rnd(2,12));
+    mi = v.indexOf(Math.max(...v)); ni = v.indexOf(Math.min(...v));
+  } while (v[mi] === v[ni]);
+  const q = Q(`The chart shows how many pages Jo read each day. How many more pages were read on ${l[mi]} than on ${l[ni]}?`, v[mi]-v[ni],
+    [v[mi]+v[ni], v[mi], v[ni], v[mi]-v[ni]+1],
+    `${l[mi]}: ${v[mi]} pages; ${l[ni]}: ${v[ni]} pages; ${v[mi]} − ${v[ni]} = ${v[mi]-v[ni]}.`);
+  q.draw = {t:'bars', l, v}; return q;
+}
+
+/* ---- STRETCH tier: a notch above the real test; adaptive modes only, high skill only ---- */
+function genRemovedAverage(){
+  let A,B,removed;
+  do { A=rnd(8,20); B=rnd(6,20); removed=4*A-3*B; } while (removed<1 || removed>60 || A===B);
+  return Q(`The average of four numbers is ${A}. When one number is removed, the average of the remaining three is ${B}. What number was removed?`, removed,
+    [A-B, 4*A-4*B, removed+1, removed-1],
+    `The four total 4 × ${A} = ${4*A}; the three total 3 × ${B} = ${3*B}; removed = ${4*A} − ${3*B} = ${removed}.`);
+}
+function genPipesTogether(){
+  const [a,b,t] = choice([[3,6,2],[4,12,3],[6,12,4],[5,20,4],[10,15,6],[6,3,2],[12,4,3]]);
+  return Q(`One hose fills a pool in ${a} hours. A second hose fills it in ${b} hours. Working together, how many hours do they take?`, t,
+    [Math.round((a+b)/2), a+b, Math.min(a,b), t+1],
+    `In one hour they fill 1/${a} + 1/${b} of the pool = 1/${t}, so together they take ${t} hours.`);
+}
+function genTwoVarWord(){
+  const pen=rnd(3,9), pencil=rnd(1,pen-1);
+  const c1=3*pencil+2*pen, c2=pencil+pen;
+  return Q(`Three pencils and two pens cost $${c1}. One pencil and one pen cost $${c2}. What does one pen cost?`, pen,
+    [pencil, c2, pen+1, pen-1],
+    `Two (pencil + pen) pairs cost 2 × $${c2} = $${2*c2}; subtracting from $${c1} leaves one pencil = $${c1-2*c2}, so a pen = $${c2} − $${c1-2*c2} = $${pen}.`, money);
+}
+function genRectRatioArea(){
+  const w=rnd(2,6), k=choice([2,3,4]), l=k*w, area=l*w, perim=2*(l+w);
+  return Q(`A rectangle's length is ${k} times its width, and its area is ${area}. What is its perimeter?`, perim,
+    [area, l+w, perim+2, 2*l+w],
+    `If width = w, then ${k}w × w = ${area}, so w = ${w} and length = ${l}. Perimeter = 2 × (${l} + ${w}) = ${perim}.`);
+}
+function genExponentQuotient(){
+  const b=choice([2,3,5]), e1=rnd(3,5), e2=rnd(2,e1+2), e3=rnd(1, e1+e2-1), ans=e1+e2-e3;
+  return Q(`If (${b}^${e1} × ${b}^${e2}) ÷ ${b}^${e3} = ${b}^x, what is x?`, ans,
+    [e1+e2+e3, e1*e2-e3, ans+1, ans-1],
+    `Multiplying adds exponents (${e1}+${e2}=${e1+e2}); dividing subtracts: ${e1+e2} − ${e3} = ${ans}.`);
+}
+const STRETCH_GENS = [genRemovedAverage, genPipesTogether, genTwoVarWord, genRectRatioArea, genExponentQuotient];
+
+/* Difficulty tiers — every practice set draws a balanced mix (L1 easier / L2 medium / L3 hard). */
+const L1_GENS = [
+  genProportion, genPercentRed, genTriangleArea, genBoxVolume, genRemainder, genMedian,
+  genSequence, genMultiStepWord, genFractionOf, genPerimeterRect, genOrderOps, genNegatives, genTimeConvert,
+  genFigRect, genFigShaded, genFigBars
+];
+const L2_GENS = [
+  genTwoSideLinear, genSolveExpression, genRatio, genPercentIncrease, genReversePercent,
+  genPythagoras, genExponentSolve, genAverageMissing, genConsecutive, genCoordDistance, genRatioShare,
+  genFractionAdd, genMode, genAngleTriangle, genDiscount, genSimpleProb, genSlope, genSquareRootEq,
+  genWorkBackwards, genCountingPrinciple, genMixedPowers, genConsecutiveEven,
+  genFigRightTri, genFigTriArea, genFigSpinner
+];
+const L3_GENS = [
+  genExponentEval, genPercentOfPercent, genCustomOp, genLcm, genAgeProblem,
+  genInequalityInt, genPolygonAngles, genAvgSpeed, genExpRules,
+  genSystemEq, genFactoredQuad, genFunctionEval, genTwoEvents, genThreeRatio
+];
+const QUANT_GENS = [...L1_GENS, ...L2_GENS, ...L3_GENS];
+
+/* ================= Lessons: teach first, then drill the exact topic ================= */
+const TOPICS = [
+  { id:'percents', title:'Percents', sub:'of, off, and change',
+    gens:[genPercentIncrease, genReversePercent, genPercentRed, genPercentOfPercent, genDiscount],
+    lesson:`<p><b>Percent means "per 100."</b> So 25% is 25 out of every 100 — the same as 25/100 or 0.25.</p>
+      <p><b>The one move that solves most percent problems:</b> "x% of N" means multiply: (x ÷ 100) × N.</p>
+      <div class="passage"><b>Worked example:</b> What is 30% of 80?<br>30 ÷ 100 = 0.30, then 0.30 × 80 = <b>24</b>.</div>
+      <p><b>Percent change</b> = (change ÷ <b>original</b>) × 100. The trap: always divide by the number you <i>started</i> with, not the new one.</p>
+      <p><b>Working backwards:</b> if 20% of a number is 12, the number is 12 ÷ 0.20 = 60.</p>`},
+  { id:'ratios', title:'Ratios & Proportions', sub:'parts and scaling',
+    gens:[genRatio, genProportion, genRatioShare, genThreeRatio],
+    lesson:`<p><b>A ratio counts parts.</b> Boys to girls 2:3 means every group of 5 has 2 boys and 3 girls.</p>
+      <p><b>The magic move: find the size of ONE part.</b> Total ÷ (sum of parts) = one part. Then multiply.</p>
+      <div class="passage"><b>Worked example:</b> $40 is split in the ratio 3:5. Parts: 3 + 5 = 8. One part = $40 ÷ 8 = $5. The shares are 3 × $5 = <b>$15</b> and 5 × $5 = <b>$25</b>.</div>
+      <p><b>Proportions</b> (same rate): if 3 pens cost $6, one pen costs $2, so 7 pens cost $14. Always drop to ONE unit first.</p>`},
+  { id:'fractions', title:'Fractions', sub:'of, plus, and reducing',
+    gens:[genFractionOf, genFractionAdd, genFigShaded],
+    lesson:`<p><b>"Of" means multiply.</b> 2/3 of 18 = 18 ÷ 3 × 2 = 12. Divide by the bottom, multiply by the top.</p>
+      <p><b>Adding needs a common denominator.</b> You can only add same-sized slices.</p>
+      <div class="passage"><b>Worked example:</b> 1/4 + 1/3. Common denominator 12: 3/12 + 4/12 = <b>7/12</b>.</div>
+      <p><b>Always reduce at the end:</b> 6/8 → 3/4. The SSAT answer choices are almost always in lowest terms.</p>`},
+  { id:'equations', title:'Solving Equations', sub:'find x without fear',
+    gens:[genTwoSideLinear, genSolveExpression, genWorkBackwards, genSystemEq, genInequalityInt, genFactoredQuad],
+    lesson:`<p><b>One rule:</b> whatever you do to one side, do to the other. Your goal is x alone on one side.</p>
+      <div class="passage"><b>Worked example:</b> 5x + 3 = 2x + 15.<br>Subtract 2x: 3x + 3 = 15. Subtract 3: 3x = 12. Divide by 3: <b>x = 4</b>.</div>
+      <p><b>The classic SSAT trap:</b> the question asks for "3x + 1", not x. Solve for x first, then answer what they actually asked.</p>
+      <p><b>Check your answer</b> by plugging it back in — ten seconds that catches most mistakes.</p>`},
+  { id:'exponents', title:'Exponents & Roots', sub:'powers without panic',
+    gens:[genExponentSolve, genExponentEval, genExpRules, genSquareRootEq, genMixedPowers, genExponentQuotient],
+    lesson:`<p><b>An exponent counts multiplications:</b> 2⁴ = 2 × 2 × 2 × 2 = 16.</p>
+      <p><b>Same base, multiplying → ADD the exponents:</b> 2³ × 2⁴ = 2⁷.</p>
+      <p><b>Anything to the power 0 is 1.</b> Even 999⁰ = 1. Free points if you remember this.</p>
+      <div class="passage"><b>Worked example:</b> If 3ˣ = 81, then since 3 × 3 × 3 × 3 = 81, <b>x = 4</b>.</div>
+      <p><b>Square roots undo squares:</b> √144 = 12 because 12² = 144. Know the perfect squares up to 15² = 225.</p>`},
+  { id:'triangles', title:'Triangles', sub:'angles, area, Pythagoras',
+    gens:[genPythagoras, genAngleTriangle, genTriangleArea, genFigRightTri, genFigTriArea],
+    lesson:`<p><b>Angles always add to 180°.</b> Two angles given? Subtract both from 180.</p>
+      <p><b>Area = ½ × base × height.</b> The height must meet the base at a right angle.</p>
+      <p><b>Right triangles: a² + b² = c²</b> (c is the longest side, opposite the right angle).</p>
+      <div class="passage"><b>Worked example:</b> legs 6 and 8. 6² + 8² = 36 + 64 = 100 = 10². Hypotenuse = <b>10</b>.</div>
+      <p><b>Shortcut:</b> the SSAT loves the famous triples — 3-4-5, 6-8-10, 5-12-13. Spot them and skip the arithmetic.</p>`},
+  { id:'shapes', title:'Shapes & Solids', sub:'perimeter, area, volume',
+    gens:[genPerimeterRect, genBoxVolume, genPolygonAngles, genFigRect, genRectRatioArea],
+    lesson:`<p><b>Perimeter = walk around the edge</b> (add all sides). <b>Area = cover it</b> (for rectangles: length × width).</p>
+      <p><b>Volume = fill it:</b> length × width × height for a box.</p>
+      <div class="passage"><b>Worked example:</b> a box 4 × 3 × 2 holds 4 × 3 × 2 = <b>24</b> cubic units.</div>
+      <p><b>Polygon angles:</b> the inside angles of an n-sided shape add to (n − 2) × 180°. A hexagon: (6−2) × 180 = 720°.</p>`},
+  { id:'averages', title:'Averages & Data', sub:'mean, median, mode',
+    gens:[genAverageMissing, genMedian, genMode, genFigBars, genRemovedAverage],
+    lesson:`<p><b>Mean (average) = total ÷ count.</b> The power move: work with TOTALS. If 4 numbers average 10, they total 40 — that unlocks every "find the missing number" problem.</p>
+      <div class="passage"><b>Worked example:</b> Four tests average 85. Three scores are 80, 90, 82 (total 252). All four total 4 × 85 = 340. Missing score: 340 − 252 = <b>88</b>.</div>
+      <p><b>Median</b> = middle value after sorting (sort first — that is the trap!). <b>Mode</b> = the value that appears most often.</p>`},
+  { id:'probability', title:'Probability & Counting', sub:'chances and choices',
+    gens:[genSimpleProb, genTwoEvents, genCountingPrinciple, genFigSpinner],
+    lesson:`<p><b>Probability = what you want ÷ everything possible.</b> 3 red out of 10 marbles → P(red) = 3/10.</p>
+      <p><b>Two independent things BOTH happening → multiply.</b></p>
+      <div class="passage"><b>Worked example:</b> P(two heads in a row) = 1/2 × 1/2 = <b>1/4</b>.</div>
+      <p><b>Counting outfits:</b> choices multiply too. 3 shirts × 2 pants = 6 outfits. Don't add — multiply.</p>`},
+  { id:'patterns', title:'Patterns & Number Sense', sub:'sequences, remainders, LCM',
+    gens:[genSequence, genConsecutive, genConsecutiveEven, genRemainder, genLcm],
+    lesson:`<p><b>Sequences: find the step.</b> Subtract neighbors — 5, 8, 11 steps by +3, so next is 14.</p>
+      <p><b>Consecutive integers: think middle.</b> If three consecutive numbers sum to 36, the middle is 36 ÷ 3 = 12, so they are 11, 12, 13.</p>
+      <div class="passage"><b>Worked example:</b> remainder of 23 ÷ 5? 5 × 4 = 20, and 23 − 20 = <b>3</b>.</div>
+      <p><b>LCM (least common multiple):</b> list multiples of the bigger number and stop at the first one the smaller divides: for 6 and 8 → 8, 16, 24 ✓.</p>`},
+  { id:'wordproblems', title:'Word Problems', sub:'translate English into math',
+    gens:[genMultiStepWord, genAgeProblem, genAvgSpeed, genCustomOp, genFunctionEval, genPipesTogether, genTwoVarWord],
+    lesson:`<p><b>Word problems are translation.</b> "is" → equals. "of" → multiply. "more than" → add. "per" → divide.</p>
+      <p><b>Multi-step: do ONE step at a time and write each number down.</b> Rushing all steps in your head is where points die.</p>
+      <div class="passage"><b>Worked example:</b> "Leo is 3 times as old as his sister; together they are 24." Their ages make 3 + 1 = 4 parts. One part = 24 ÷ 4 = 6. Leo = <b>18</b>.</div>
+      <p><b>Made-up symbols</b> (like a ◆ b = 2a + b) aren't scary — they're instructions. Just substitute the numbers in.</p>`},
+  { id:'basics', title:'Number Basics', sub:'order of operations, negatives, units',
+    gens:[genOrderOps, genNegatives, genTimeConvert],
+    lesson:`<p><b>Order of operations:</b> multiply and divide BEFORE you add and subtract (parentheses first of all).</p>
+      <div class="passage"><b>Worked example:</b> 3 + 4 × 5 = 3 + 20 = <b>23</b> — not 35. The multiplication goes first even though it comes second.</div>
+      <p><b>Negative numbers: think of a number line or a thermometer.</b> Starting at −7 and rising 12 lands at +5. Adding moves right (warmer), subtracting moves left (colder).</p>
+      <p><b>Unit conversions multiply:</b> hours to minutes is × 60. Two and a half hours = 2.5 × 60 = 150 minutes. Half an hour is 30 minutes — memorize the halves.</p>`},
+  { id:'coordinate', title:'Coordinate Plane', sub:'points, slope, distance',
+    gens:[genSlope, genCoordDistance],
+    lesson:`<p><b>A point (x, y):</b> x is across, y is up. Alphabetical order — across, then up.</p>
+      <p><b>Slope = rise ÷ run</b> — how much the line climbs for each step right.</p>
+      <div class="passage"><b>Worked example:</b> from (1, 2) to (3, 8): rise = 6, run = 2, slope = <b>3</b>.</div>
+      <p><b>Distance between points is secretly Pythagoras:</b> the rise and run are the two legs; the distance is the hypotenuse.</p>`}
+];
+
+/* ---- Easy mode: single-step, small numbers ---- */
+function genEzAdd(){ const a=rnd(5,49),b=rnd(5,49); return Q(`What is ${a} + ${b}?`, a+b, [a+b+1,a+b-1,a+b+10,a+b-10], `${a} + ${b} = ${a+b}.`); }
+function genEzSub(){ const a=rnd(20,60),b=rnd(2,a-2); return Q(`What is ${a} − ${b}?`, a-b, [a-b+1,a-b-1,a+b,a-b+10], `${a} − ${b} = ${a-b}.`); }
+function genEzMul(){ const a=rnd(2,9),b=rnd(2,9); return Q(`What is ${a} × ${b}?`, a*b, [a*b+a,a*b-a,a*b+1,a+b], `${a} × ${b} = ${a*b}.`); }
+function genEzDiv(){ const b=rnd(2,9),q=rnd(2,9),a=b*q; return Q(`What is ${a} ÷ ${b}?`, q, [q+1,q-1,q+2,b], `${a} ÷ ${b} = ${q}.`); }
+function genEzHalf(){ const n=2*rnd(4,25); return Q(`What is half of ${n}?`, n/2, [n/2+1,n/2-1,n,n/2+5], `Half of ${n} is ${n/2}.`); }
+function genEzMissing(){ const a=rnd(2,20),m=rnd(2,20),c=a+m; return Q(`${a} + ___ = ${c}. What is the missing number?`, m, [m+1,m-1,c,m+2], `${c} − ${a} = ${m}.`); }
+function genEzAvg2(){ let a,b; do{a=rnd(2,30);b=rnd(2,30);}while((a+b)%2!==0); return Q(`What is the average of ${a} and ${b}?`, (a+b)/2, [(a+b)/2+1,(a+b)/2-1,a+b,(a+b)/2+2], `(${a} + ${b}) ÷ 2 = ${(a+b)/2}.`); }
+function genEzPercent(){ const p=choice([10,50]),n=10*rnd(2,9),ans=p*n/100; return Q(`What is ${p}% of ${n}?`, ans, [ans+1,ans-1,ans+5,ans*2], `${p}% of ${n} = ${ans}.`); }
+function genEzPerimeter(){ const s=rnd(2,12); return Q(`What is the perimeter of a square with side ${s}?`, 4*s, [s*s,4*s+4,4*s-4,2*s], `Perimeter = 4 × ${s} = ${4*s}.`); }
+function genEzSeq(){ const start=rnd(1,6),step=choice([2,3,5]); return Q(`What comes next: ${start}, ${start+step}, ${start+2*step}, ___?`, start+3*step, [start+3*step+step,start+3*step-step,start+3*step+1,start+4*step], `Add ${step} each time → ${start+2*step} + ${step} = ${start+3*step}.`); }
+const EASY_GENS = [genEzAdd,genEzSub,genEzMul,genEzDiv,genEzHalf,genEzMissing,genEzAvg2,genEzPercent,genEzPerimeter,genEzSeq];
+
+function isEasy(){ return account && account.diff==='easy'; }
+/* Draw `count` questions from a generator list, cycling a shuffled bag so topics don't repeat early. */
+function takeFrom(list, count){
+  const out=[]; let bag=[];
+  for(let i=0;i<count;i++){ if(!bag.length) bag=shuffle(list.slice()); const g=bag.pop(); const q=g(); q._gen=g; out.push(q); }
+  return out;
+}
+/* Balanced set: standard ≈ 30% easier / 45% medium / 25% hard; easy mode mixes basics with L1. */
+function genQuant(n){
+  if (isEasy()){
+    const nE=Math.ceil(n*0.6), n1=n-nE;
+    return shuffle(takeFrom(EASY_GENS,nE).concat(takeFrom(L1_GENS,n1)));
+  }
+  const n1=Math.round(n*0.3), n3=Math.round(n*0.25), n2=n-n1-n3;
+  return shuffle(takeFrom(L1_GENS,n1).concat(takeFrom(L2_GENS,n2), takeFrom(L3_GENS,n3)));
+}
+/* Session bags: every generator in a tier is used once before any repeats — kills the deja vu. */
+const SBAGS = {};
+function drawBag(list, key){
+  let b = SBAGS[key];
+  if (!b || !b.length) b = SBAGS[key] = shuffle(list.slice());
+  return b.pop();
+}
+let lastPickTier = 1;
+function pickGen(){
+  if (isEasy()){ lastPickTier = 0; return Math.random()<0.4 ? drawBag(L1_GENS,'eL1') : drawBag(EASY_GENS,'eEZ'); }
+  // skill 1..10 slides the mix: gentle start (55% easier) toward brutal (60% hard)
+  const t = (((account && account.skill) || 2) - 1) / 9;
+  const p1 = 0.55 - 0.45*t, p3 = 0.10 + 0.50*t;
+  const r = Math.random();
+  if (r < p1){ lastPickTier = 0; return drawBag(L1_GENS,'L1'); }
+  if (r < 1 - p3){ lastPickTier = 1; return drawBag(L2_GENS,'L2'); }
+  lastPickTier = 2;
+  // above skill 7, a share of hard draws go BEYOND test difficulty — train heavy, race light
+  const s = (account && account.skill) || 2;
+  if (s >= 7 && Math.random() < 0.4) return drawBag(STRETCH_GENS,'ST');
+  return drawBag(L3_GENS,'L3');
+}
+/* Skill moves with results: hard questions teach the system more than easy ones. */
+function updateSkill(ok, tier){
+  if (!account || isEasy() || tier == null) return;
+  const gain = [0.05, 0.08, 0.12][tier] || 0.08;
+  account.skill = Math.min(10, Math.max(1, (account.skill || 2) + (ok ? gain : -0.10)));
+  saveStore();
+}
+/* Stateless pickers — used where a seed must reproduce the same question (Daily, Online races). */
+function weightedChoice(){ const r=Math.random(); return r<0.30 ? choice(L1_GENS) : r<0.75 ? choice(L2_GENS) : choice(L3_GENS); }
+function statelessPick(){ if (isEasy()) return Math.random()<0.4 ? choice(L1_GENS) : choice(EASY_GENS); return weightedChoice(); }
+
+/* ================= Verbal & Reading pools — SSAT-level ================= */
+const POOL = {
+  synonyms: [
+    { q:"GARRULOUS", choices:["talkative","gloomy","generous","clumsy","shy"], answer:0, why:"Garrulous means excessively talkative." },
+    { q:"OBSTINATE", choices:["timid","stubborn","cheerful","brief","polite"], answer:1, why:"Obstinate means stubborn." },
+    { q:"EPHEMERAL", choices:["eternal","fleeting","colorful","heavy","ancient"], answer:1, why:"Ephemeral means lasting a very short time — fleeting." },
+    { q:"FRUGAL", choices:["wasteful","thrifty","fearful","honest","greedy"], answer:1, why:"Frugal means careful with money — thrifty." },
+    { q:"ZEALOUS", choices:["indifferent","enthusiastic","jealous","lazy","calm"], answer:1, why:"Zealous means full of energy and enthusiasm." },
+    { q:"TACITURN", choices:["talkative","reserved","tense","tidy","loud"], answer:1, why:"Taciturn means quiet and reserved by nature." },
+    { q:"PRUDENT", choices:["reckless","cautious","prudish","wealthy","foolish"], answer:1, why:"Prudent means showing good judgment — cautious." },
+    { q:"CAPRICIOUS", choices:["steady","unpredictable","greedy","capable","reliable"], answer:1, why:"Capricious means impulsive and unpredictable." },
+    { q:"AUSTERE", choices:["severe","cheerful","eastern","generous","luxurious"], answer:0, why:"Austere means stern or plain — severe." },
+    { q:"LUCID", choices:["clear","lucky","dim","loose","confusing"], answer:0, why:"Lucid means easy to understand — clear." },
+    { q:"VEHEMENT", choices:["gentle","forceful","hollow","vain","calm"], answer:1, why:"Vehement means showing strong, forceful feeling." },
+    { q:"METICULOUS", choices:["sloppy","careful","enormous","mean","hasty"], answer:1, why:"Meticulous means extremely careful and precise." },
+    { q:"AMIABLE", choices:["hostile","friendly","talented","amusing","grumpy"], answer:1, why:"Amiable means good-natured and friendly." },
+    { q:"DEVIOUS", choices:["honest","cunning","divine","direct","loyal"], answer:1, why:"Devious means sneaky or cunning." },
+    { q:"ELOQUENT", choices:["clumsy","articulate","equal","quiet","silent"], answer:1, why:"Eloquent means fluent and persuasive — articulate." },
+    { q:"HAUGHTY", choices:["humble","arrogant","cheerful","hasty","modest"], answer:1, why:"Haughty means arrogant and looking down on others." },
+    { q:"PLACID", choices:["calm","placed","stormy","plain","angry"], answer:0, why:"Placid means peaceful and calm." },
+    { q:"RESILIENT", choices:["fragile","adaptable","reluctant","resident","weak"], answer:1, why:"Resilient means able to recover quickly — adaptable." },
+    { q:"SCRUTINIZE", choices:["ignore","examine","scatter","shout","glance"], answer:1, why:"To scrutinize is to examine closely." },
+    { q:"VERBOSE", choices:["wordy","silent","truthful","verbal","brief"], answer:0, why:"Verbose means using too many words — wordy." },
+    { q:"COPIOUS", choices:["scarce","abundant","copied","clumsy","tiny"], answer:1, why:"Copious means plentiful — abundant." },
+    { q:"INDIGNANT", choices:["resentful","indifferent","poor","grateful","calm"], answer:0, why:"Indignant means angry at unfairness — resentful." },
+    { q:"SPONTANEOUS", choices:["planned","impulsive","sponsored","slow","rehearsed"], answer:1, why:"Spontaneous means done on impulse, without planning." },
+    { q:"BENEVOLENT", choices:["cruel","kind","wealthy","brave","selfish"], answer:1, why:"Benevolent means kind and generous." },
+    { q:"DILIGENT", choices:["lazy","hardworking","clever","tardy","careless"], answer:1, why:"Diligent means hardworking and careful." }
+  ],
+  analogies: [
+    { q:"Parched is to water as famished is to —", choices:["thirst","food","drink","hunger","sleep"], answer:1, why:"Parched means deprived of water; famished means deprived of food." },
+    { q:"Drought is to water as famine is to —", choices:["food","heat","crops","rain","wind"], answer:0, why:"A drought is a lack of water; a famine is a lack of food." },
+    { q:"Sculptor is to statue as poet is to —", choices:["stage","poem","reader","pen","song"], answer:1, why:"A sculptor creates a statue; a poet creates a poem." },
+    { q:"Novice is to expert as apprentice is to —", choices:["student","helper","master","beginner","teacher"], answer:2, why:"A novice grows into an expert; an apprentice grows into a master." },
+    { q:"Antidote is to poison as cure is to —", choices:["doctor","health","medicine","disease","patient"], answer:3, why:"An antidote counteracts poison; a cure counteracts disease." },
+    { q:"Oasis is to desert as island is to —", choices:["sand","ocean","palm","storm","river"], answer:1, why:"An oasis is surrounded by desert; an island is surrounded by ocean." },
+    { q:"Cub is to bear as fawn is to —", choices:["lion","forest","deer","calf","wolf"], answer:2, why:"A cub is a young bear; a fawn is a young deer." },
+    { q:"Stanza is to poem as chapter is to —", choices:["page","book","author","word","library"], answer:1, why:"A stanza is a part of a poem; a chapter is a part of a book." },
+    { q:"Pride is to lions as pod is to —", choices:["fish","birds","whales","wolves","ants"], answer:2, why:"A group of lions is a pride; a group of whales is a pod." },
+    { q:"Frugal is to extravagant as humble is to —", choices:["modest","arrogant","quiet","poor","kind"], answer:1, why:"Frugal and extravagant are opposites, as are humble and arrogant." },
+    { q:"Microscope is to tiny as telescope is to —", choices:["glass","star","distant","bright","small"], answer:2, why:"A microscope is used to view tiny things; a telescope, distant ones." },
+    { q:"Arid is to moisture as barren is to —", choices:["heat","life","sand","desert","color"], answer:1, why:"Arid means lacking moisture; barren means lacking life." },
+    { q:"Tile is to mosaic as thread is to —", choices:["needle","cloth","tapestry","color","loom"], answer:2, why:"Many tiles form a mosaic; many threads form a tapestry." },
+    { q:"Whisper is to shout as glance is to —", choices:["blink","stare","ignore","look","wink"], answer:1, why:"A shout is an intense whisper; a stare is an intense glance." }
+  ],
+  reading: [
+    {
+      passage:"By the time Marcus reached the summit, the cheering crowd below had shrunk to a restless smear of color. He had trained for this climb for three years, sacrificing weekends and friendships, and now, standing at the top, he felt not triumph but a strange hollowness. The mountain that had filled his every waking thought was conquered; what, he wondered, would he think about now?",
+      questions:[
+        { q:"The passage suggests that Marcus feels —", choices:["proud of his achievement","unexpectedly empty","afraid of the climb down","angry at the crowd","eager to climb again"], answer:1, why:"He feels a 'strange hollowness' instead of triumph — unexpectedly empty." },
+        { q:"As used in the passage, “smear” most nearly means —", choices:["stain","blurry mass","insult","bright flash","loud noise"], answer:1, why:"A 'restless smear of color' describes the crowd as a blurry mass." },
+        { q:"The passage is mainly about —", choices:["the dangers of mountain climbing","the emptiness that can follow a long-sought goal","the importance of training hard","Marcus's fear of heights","the view from the summit"], answer:1, why:"It centers on the hollow feeling that follows achieving a defining goal." }
+      ]
+    },
+    {
+      passage:"For centuries, sailors feared the Sargasso Sea, a vast region of the North Atlantic with no shores, bounded only by ocean currents. Thick mats of golden seaweed drift on its surface, and the water lies unusually still. Early sailors told of ships trapped for weeks in its windless calm. Modern scientists, however, prize the Sargasso Sea: its floating forests shelter young sea turtles, eels, and countless fish, making this once-dreaded expanse one of the ocean's most important nurseries.",
+      questions:[
+        { q:"The passage is mainly about —", choices:["why sailors feared every ocean","how a once-feared sea is now valued as a habitat","how seaweed grows in cold water","the danger of ocean currents","how sea turtles migrate"], answer:1, why:"It contrasts the old fear with the sea's modern value as a nursery." },
+        { q:"Scientists' view of the Sargasso Sea differs from early sailors' view because scientists —", choices:["also fear being trapped there","value it as a habitat for young animals","want to clear away the seaweed","build faster ships to cross it","have never sailed there"], answer:1, why:"Scientists prize it as a nursery rather than fearing it." },
+        { q:"As used in the passage, “prize” most nearly means —", choices:["award","value highly","force open","capture","ignore"], answer:1, why:"To prize something is to value it highly." }
+      ]
+    },
+    {
+      passage:"When the printing press arrived in Europe in the 1400s, many scholars were alarmed. Hand-copied books had been rare and precious, available only to the wealthy and the church. Now, critics warned, cheap printed books would spread errors, flood the world with worthless writing, and weaken people's memories. Yet the very flood they feared became a tide of learning: literacy spread, new ideas traveled quickly, and ordinary people gained access to knowledge once locked away.",
+      questions:[
+        { q:"The passage is mainly about —", choices:["how books were copied by hand","a feared new technology that proved beneficial","the high cost of early books","how human memory works","the history of the church"], answer:1, why:"Scholars feared the press, yet it spread learning widely." },
+        { q:"The author's attitude toward the printing press is best described as —", choices:["fearful","approving","indifferent","confused","sarcastic"], answer:1, why:"The author frames its effects positively — 'a tide of learning.'" },
+        { q:"According to the passage, critics worried that printed books would —", choices:["cost too much money","spread errors and weaken memory","help only the church","fall apart quickly","be too heavy to carry"], answer:1, why:"Critics warned of errors, worthless writing, and weakened memory." }
+      ]
+    }
+  ]
+};
+
+/* Course path: topics in teaching order; each unlocks when the previous is mastered */
+const TOPIC_ORDER = ['basics','fractions','percents','ratios','equations','exponents','averages','patterns','triangles','shapes','coordinate','probability','wordproblems'];
+TOPICS.sort((a,b)=> TOPIC_ORDER.indexOf(a.id) - TOPIC_ORDER.indexOf(b.id));
+/* Courses group the topics, Brilliant-style. Topics unlock in order inside their course. */
+const COURSES = [
+  { id:'found',    title:'Foundations',            desc:'The number skills everything else stands on', topics:['basics','fractions','percents','ratios'] },
+  { id:'algebra',  title:'Algebra & Patterns',     desc:'Equations, exponents, and sequences',         topics:['equations','exponents','patterns'] },
+  { id:'geometry', title:'Geometry',               desc:'Triangles, shapes, and the coordinate plane', topics:['triangles','shapes','coordinate'] },
+  { id:'data',     title:'Data, Chance & Words',   desc:'Averages, probability, and word problems',    topics:['averages','probability','wordproblems'] }
+];
+function topicIdxById(id){ return TOPICS.findIndex(t=>t.id===id); }
+function courseOfTopic(i){ const id=TOPICS[i].id; return COURSES.findIndex(c=>c.topics.includes(id)); }
+function courseProgress(c){ let got=0; c.topics.forEach(id=>{ got+=Math.min(topicScore(id),TOPIC_MASTERY); }); return got/(c.topics.length*TOPIC_MASTERY); }
+function topicUnlocked(i){
+  const ci=courseOfTopic(i); if(ci<0) return true;
+  const list=COURSES[ci].topics, pos=list.indexOf(TOPICS[i].id);
+  return pos===0 || topicScore(list[pos-1]) >= TOPIC_MASTERY;
+}
+function pathComplete(){ return TOPICS.every(t=> topicScore(t.id) >= TOPIC_MASTERY); }
+
+/* Wrong answer -> the exact lesson for that question's topic */
+const GEN_TOPIC = new Map();
+TOPICS.forEach((t,i)=> t.gens.forEach(g => GEN_TOPIC.set(g, i)));
+function lessonLinkHTML(q){
+  const i = (q && q._ti != null) ? q._ti : ((q && q._gen != null) ? GEN_TOPIC.get(q._gen) : undefined);
+  if (i === undefined) return '';
+  return `<div style="margin-top:8px"><button class="seg" style="flex:none" onclick="jumpToLesson(${i})">${ico('bulb',13)} Teach me: ${TOPICS[i].title}</button></div>`;
+}
+function recordMiss(q, passage){
+  if (!account || !q) return;
+  const ti = (q._ti != null) ? q._ti : ((q._gen != null) ? GEN_TOPIC.get(q._gen) : null);
+  if (account.misses.some(mm => mm.q === q.q)) return;
+  account.misses.push({ q:q.q, choices:q.choices, answer:q.answer, why:q.why, draw:q.draw||null, passage:passage||'', ti: ti==null?null:ti });
+  if (account.misses.length > 30) account.misses.shift();
+}
+function jumpToLesson(i){
+  resetToHome();
+  document.getElementById('intro').classList.add('hidden');
+  openLesson(i);
+  document.getElementById('learn').classList.remove('hidden');
+  highlightNav('learn');
+}
+
+/* ================= Level / XP system ================= */
+let xp = 0, level = 1, toastTimer = null;
+
+function levelForXP(x){
+  let lvl=1, need=0, step=100;
+  while (x >= need+step){ need+=step; lvl++; step+=50; }
+  return lvl;
+}
+function levelBounds(lvl){
+  let l=1, need=0, step=100;
+  while (l<lvl){ need+=step; step+=50; l++; }
+  return { start:need, next:need+step };
+}
+function loadStore(){
+  let data = null;
+  if (window.__SAVED_DATA && typeof window.__SAVED_DATA === 'object') data = window.__SAVED_DATA;   // native Mac app
+  else { try { data = JSON.parse(localStorage.getItem('ssat_store')); } catch(e){} }                // browser
+  if (data && Array.isArray(data.accounts)) store = data;
+  if (!Array.isArray(store.reports)) store.reports = [];
+  store.accounts.forEach(ensureFields);
+  soundOn = store.sound !== false;
+  account = store.accounts.find(a => a.id === store.currentId) || null;
+  syncXPFromAccount();
+}
+function saveStore(){
+  if (account) account.updatedAt = Date.now();
+  const json = JSON.stringify(store);
+  try { localStorage.setItem('ssat_store', json); } catch(e){}
+  if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.save)
+    window.webkit.messageHandlers.save.postMessage(json);   // persist all accounts to disk in Mac app
+  if (typeof scheduleSync==='function') scheduleSync();
+}
+function syncXPFromAccount(){ xp = account ? account.xp : 0; level = levelForXP(xp); }
+function addXP(amount){
+  if (!account) return false;
+  const before = level;
+  account.xp += amount; xp = account.xp; level = levelForXP(xp);
+  accrueWeek(amount);      // weekly league points
+  saveStore();
+  return level > before;   // true if leveled up
+}
+function levelBarHTML(){
+  const b = levelBounds(level);
+  const cur = xp - b.start, span = b.next - b.start, pctv = Math.min(100, Math.round(cur/span*100));
+  return `<div class="lvl-row"><div class="lvl-badge">★ Level ${level}</div>
+    <div class="lvl-xp">${cur} / ${span} XP to Level ${level+1}</div></div>
+    <div class="xp-track"><div class="xp-fill" style="width:${pctv}%"></div></div>`;
+}
+function renderHomeLevel(){ const el=document.getElementById('levelPanel'); if (el) el.innerHTML = levelBarHTML(); }
+function showToast(msg){
+  const t=document.getElementById('toast'); if(!t) return;
+  t.textContent=msg; t.classList.remove('hidden');
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.add('hidden'), 2400);
+}
+
+/* ================= Juice: sound effects + confetti ================= */
+let audioCtx=null, soundOn=true;
+function actx(){ if(!audioCtx){ try{ audioCtx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } return audioCtx; }
+function beep(freqs, dur, type){
+  if(!soundOn) return; const ctx=actx(); if(!ctx) return;
+  if(ctx.state==='suspended'){ try{ ctx.resume(); }catch(e){} }
+  freqs.forEach((f,i)=>{
+    const o=ctx.createOscillator(), g=ctx.createGain();
+    o.type=type||'sine'; o.frequency.value=f; o.connect(g); g.connect(ctx.destination);
+    const s=ctx.currentTime+i*dur, e=s+dur;
+    g.gain.setValueAtTime(0.0001,s);
+    g.gain.exponentialRampToValueAtTime(0.22,s+0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001,e);
+    o.start(s); o.stop(e+0.02);
+  });
+}
+function playCorrect(){ beep([660,990],0.09,'sine'); }
+function playWrong(){ beep([200,140],0.13,'sawtooth'); }
+function playFanfare(){ beep([523,659,784,1047],0.12,'triangle'); }
+function toggleSound(){
+  soundOn=!soundOn; store.sound=soundOn; saveStore();
+  const b=document.getElementById('soundBtn'); if(b) b.innerHTML = soundOn?ico('volume',15)+' Sound: On':ico('mute',15)+' Sound: Off';
+  if(soundOn) playCorrect();
+}
+function confetti(){
+  const c=document.getElementById('confetti'); if(!c) return;
+  const ctx=c.getContext('2d'); if(!ctx) return;
+  c.width=window.innerWidth; c.height=window.innerHeight;
+  const colors=['#263048','#ca9827','#2f9150','#c04528','#b06a1c'], parts=[];
+  for(let i=0;i<140;i++) parts.push({x:c.width/2, y:c.height*0.3, vx:(Math.random()-0.5)*14, vy:Math.random()*-12-4, col:colors[i%colors.length], s:Math.random()*6+4, rot:Math.random()*6, vr:(Math.random()-0.5)*0.4});
+  let frames=0;
+  (function tick(){
+    ctx.clearRect(0,0,c.width,c.height);
+    parts.forEach(p=>{ p.vy+=0.4; p.x+=p.vx; p.y+=p.vy; p.rot+=p.vr;
+      ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(p.rot); ctx.fillStyle=p.col; ctx.fillRect(-p.s/2,-p.s/2,p.s,p.s); ctx.restore(); });
+    if(++frames<100) requestAnimationFrame(tick); else ctx.clearRect(0,0,c.width,c.height);
+  })();
+}
+function celebrate(){ confetti(); playFanfare(); }
+function flashScreen(ok){
+  const f=document.getElementById('flash'); if(!f) return;
+  f.className=''; void f.offsetWidth;          // restart the animation even on rapid answers
+  f.className = ok ? 'green' : 'red';
+}
+function xpFloat(el, txt){
+  if(!el) return;
+  const r=el.getBoundingClientRect();
+  const d=document.createElement('div'); d.className='xp-float'; d.textContent=txt;
+  d.style.left=(r.left+r.width/2)+'px'; d.style.top=(r.top-4)+'px';
+  document.body.appendChild(d);
+  setTimeout(()=>d.remove(), 950);
+}
+function answerFX(ok, el, txt){
+  flashScreen(ok);
+  if(ok) xpFloat(el, txt || '+10 XP');
+}
+
+/* ================= Local accounts (each person's own on-device account) ================= */
+function uid(){ return 'a' + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+
+/* Soft-lock hash for local account passwords — keeps them out of the save file as plain text. */
+function pinHash(s){ let h=5381; for(let i=0;i<s.length;i++){ h=((h<<5)+h+s.charCodeAt(i))|0; } return 'h'+(h>>>0).toString(36); }
+
+function renderHome(){
+  account = store.accounts.find(a => a.id === store.currentId) || null;
+  const main = document.getElementById('homeMain');
+  if (account){
+    syncXPFromAccount();
+    document.getElementById('accountBar').innerHTML =
+      `<div class="acct-row"><span>${ico('person',14)} <b>${account.name}</b> · ★ Level ${level}</span>
+        <span style="display:flex;gap:6px"><button class="seg" onclick="manageAccount()">Manage</button>
+        <button class="seg" onclick="switchAccount()">Switch</button></span></div>`;
+    main.classList.remove('hidden');
+    renderHomeLevel();
+    renderStreak();
+    renderRankChip();
+    renderDiff();
+    renderNextUp();
+    const sBtn=document.getElementById('soundBtn'); if(sBtn) sBtn.innerHTML = soundOn?ico('volume',15)+' Sound: On':ico('mute',15)+' Sound: Off';
+    document.querySelectorAll('#homeMain [data-ico]:empty').forEach(el2 => { el2.innerHTML = ico(el2.dataset.ico, +(el2.dataset.sz||24)); });
+  } else {
+    renderLogin();
+    main.classList.add('hidden');
+  }
+  renderReportFoot();
+}
+/* The home screen answers "what should I do right now?" */
+function renderNextUp(){
+  const el=document.getElementById('nextUp'); if(!el || !account) return;
+  let mode, title, sub;
+  if (account.misses.length){
+    mode='review'; title='Review your misses'; sub=account.misses.length+' question'+(account.misses.length===1?'':'s')+' waiting for revenge';
+  } else if (account.lastDaily !== dateStr(new Date())){
+    mode='daily'; title="Daily Challenge"; sub="today's 5 questions · bonus XP";
+  } else {
+    let found=null, fi=-1;
+    for (const c of COURSES){ for (const id of c.topics){ const i=topicIdxById(id);
+      if (topicUnlocked(i) && topicScore(id) < TOPIC_MASTERY){ found=TOPICS[i]; fi=i; break; } } if (found) break; }
+    if (found){ mode='lesson:'+fi; title='Continue: '+found.title; sub=Math.min(topicScore(found.id),TOPIC_MASTERY)+'/'+TOPIC_MASTERY+' mastered'; }
+    else { mode='fulltest'; title='Full Test'; sub='every topic mastered — prove it'; }
+  }
+  el.innerHTML=`<button class="tile tile-primary" style="width:100%;margin-bottom:4px;padding:14px 10px" onclick="nextUpGo('${mode}')">
+    <span class="tile-label" style="font-size:16px">${title} &rarr;</span><span class="tile-sub">${sub}</span></button>`;
+}
+function nextUpGo(m){
+  if (m.indexOf('lesson:')===0){ jumpToLesson(+m.split(':')[1]); highlightNav('learn'); return; }
+  navTo(m);
+}
+function renderLogin(){
+  document.getElementById('accountBar').innerHTML = `<div class="acct-box">
+      <div class="acct-title">Log in to Quizard</div>
+      <input id="loginName" placeholder="Name" maxlength="20" autocomplete="off" />
+      <input id="loginPass" type="password" placeholder="Password" maxlength="32" />
+      <div class="acct-btns"><button class="btn" onclick="doLogin()">Log in</button>
+        <button class="btn secondary" onclick="showNewAccount()">Create account</button></div>
+    </div>`;
+}
+function doLogin(){
+  const name=(document.getElementById('loginName').value||'').trim();
+  const pass=(document.getElementById('loginPass').value||'').trim();
+  if(!name){ showToast('Enter your name'); return; }
+  const a=store.accounts.find(x=>x.name.toLowerCase()===name.toLowerCase());
+  if(!a){ showToast('No account with that name'); return; }
+  if(a.pinH && a.pinH!==pinHash(pass)){ showToast('Incorrect password'); return; }
+  setCurrent(a.id);
+}
+function showNewAccount(){
+  document.getElementById('accountBar').innerHTML = `<div class="acct-box">
+      <div class="acct-title">Create your SSAT account</div>
+      <input id="newName" placeholder="Your name" maxlength="20" />
+      <input id="newPin" type="password" placeholder="Optional password (keeps your account private)" maxlength="32" />
+      <div class="acct-btns"><button class="btn" onclick="createAccount()">Create</button>
+        <button class="btn secondary" onclick="renderHome()">Cancel</button></div>
+    </div>`;
+  const n=document.getElementById('newName'); if(n) n.focus();
+}
+function createAccount(){
+  const name=(document.getElementById('newName').value||'').trim();
+  const pin=(document.getElementById('newPin').value||'').trim();
+  if(!name){ showToast('Please enter a name'); return; }
+  if(store.accounts.some(x=>x.name.toLowerCase()===name.toLowerCase())){ showToast('That name is taken — pick another'); return; }
+  const a={ id:uid(), name, pinH: pin?pinHash(pin):'', xp:0 }; ensureFields(a);
+  store.accounts.push(a); store.currentId=a.id; saveStore();
+  setsDone=0; bestScore=-1;
+  renderHome();
+  showToast(`Welcome, ${name}!`);
+}
+function setCurrent(id){
+  store.currentId=id; saveStore();
+  setsDone=0; bestScore=-1;
+  renderHome();
+}
+function switchAccount(){
+  store.currentId=null; account=null; saveStore();
+  const is=document.getElementById('introStats'); if(is) is.classList.add('hidden');
+  renderHome();
+}
+function manageAccount(){
+  document.getElementById('accountBar').innerHTML = `<div class="acct-box">
+      <div class="acct-title">Manage account</div>
+      <input id="editName" value="${account.name}" maxlength="20" />
+      <input id="editPass" type="password" placeholder="${account.pinH ? 'New password (leave blank to keep current)' : 'Set a password (optional)'}" maxlength="32" />
+      <div class="acct-btns"><button class="btn" onclick="saveAccountEdits()">Save changes</button>
+        <button class="btn secondary" onclick="renderHome()">Cancel</button></div>
+      <button class="btn secondary" style="border-color:var(--red);color:var(--red)" onclick="deleteAccount()">Delete this account</button>
+    </div>`;
+  const n=document.getElementById('editName'); if(n) n.focus();
+}
+function saveAccountEdits(){
+  const name=(document.getElementById('editName').value||'').trim();
+  if(!name){ showToast('Name cannot be empty'); return; }
+  account.name=name;
+  const np=(document.getElementById('editPass').value||'').trim();
+  if(np) account.pinH=pinHash(np);   // only update the password if a new one is entered
+  saveStore();
+  renderHome();
+  showToast('Account updated');
+}
+function deleteAccount(){
+  document.getElementById('accountBar').innerHTML = `<div class="acct-box">
+      <div class="acct-title">Delete "${account.name}"? This erases their XP and progress for good.</div>
+      <div class="acct-btns"><button class="btn danger" onclick="confirmDelete()">Delete</button>
+        <button class="btn secondary" onclick="manageAccount()">Cancel</button></div>
+    </div>`;
+}
+function confirmDelete(){
+  store.accounts = store.accounts.filter(a => a.id !== account.id);
+  store.currentId=null; account=null; saveStore();
+  const is=document.getElementById('introStats'); if(is) is.classList.add('hidden');
+  renderHome();
+  showToast('Account deleted');
+}
+
+/* ================= Fun: streaks, achievements, beat-the-clock ================= */
+function ensureFields(a){
+  if(typeof a.xp!=='number') a.xp=0;
+  if(typeof a.streak!=='number') a.streak=0;
+  if(typeof a.bestStreak!=='number') a.bestStreak=0;
+  if(typeof a.lastPlayed!=='string') a.lastPlayed='';
+  if(!Array.isArray(a.achievements)) a.achievements=[];
+  if(!a.stats || typeof a.stats!=='object') a.stats={};
+  const s=a.stats;
+  if(typeof s.answered!=='number') s.answered=0;
+  if(typeof s.correct!=='number') s.correct=0;
+  if(typeof s.perfectSets!=='number') s.perfectSets=0;
+  if(typeof s.bestClock!=='number') s.bestClock=0;
+  if(typeof s.bestScaled!=='number') s.bestScaled=0;
+  if(typeof a.rp!=='number') a.rp=0;
+  if(typeof a.bestRun!=='number') a.bestRun=0;
+  if(typeof a.lastDaily!=='string') a.lastDaily='';
+  if(typeof a.weekPoints!=='number') a.weekPoints=0;
+  if(typeof a.weekId!=='string') a.weekId='';
+  if(typeof a.diff!=='string') a.diff='standard';
+  if(typeof a.vote!=='string') a.vote='';
+  if(typeof a.pin==='string' && a.pin){ a.pinH=pinHash(a.pin); delete a.pin; }   // migrate old plaintext passwords
+  if(typeof a.pinH!=='string') a.pinH='';
+  if(typeof a.onlineName!=='string') a.onlineName='';
+  if(typeof a.onlineSecret!=='string') a.onlineSecret='';
+  if(typeof a.onlineToken!=='string') a.onlineToken='';
+  if(typeof a.onlineRating!=='number') a.onlineRating=0;
+  if(typeof a.skill!=='number') a.skill=2;   // adaptive difficulty, 1 (gentle) to 10 (brutal)
+  if(!a.topics || typeof a.topics!=='object') a.topics={};   // topicId -> correct answers in that drill
+  if(!Array.isArray(a.misses)) a.misses=[];   // missed questions waiting for revenge
+}
+function dateStr(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function markActivity(){
+  if(!account) return;
+  const today=dateStr(new Date());
+  if(account.lastPlayed===today) return;            // already counted today
+  const y=new Date(); y.setDate(y.getDate()-1);
+  account.streak = (account.lastPlayed===dateStr(y)) ? (account.streak+1) : 1;
+  account.lastPlayed=today;
+  if(account.streak>account.bestStreak) account.bestStreak=account.streak;
+  saveStore();
+  renderStreak();
+  showToast(`${account.streak}-day streak — keep it going!`);
+}
+function recordAnswer(ok){ if(!account) return; account.stats.answered++; if(ok) account.stats.correct++; }
+function renderStreak(){
+  const el=document.getElementById('streakLine'); if(!el) return;
+  el.innerHTML = (account && account.streak>0) ? `<span class="streak-chip">${ico('flame',14)} ${account.streak}-day streak</span>` : '';
+}
+
+const ACHIEVEMENTS = [
+  { id:'first',   icon:'star',      title:'First Step',    desc:'Answer your first question correctly.', test:a=>a.stats.correct>=1 },
+  { id:'perfect', icon:'medal',     title:'Perfect Score', desc:'Get 14/14 on a practice test.',         test:a=>a.stats.perfectSets>=1 },
+  { id:'q50',     icon:'paper',     title:'Half Century',  desc:'Answer 50 questions in total.',          test:a=>a.stats.answered>=50 },
+  { id:'q100',    icon:'book',      title:'Centurion',     desc:'Answer 100 questions in total.',         test:a=>a.stats.answered>=100 },
+  { id:'lvl5',    icon:'star',      title:'Rising Star',   desc:'Reach Level 5.',                         test:a=>levelForXP(a.xp)>=5 },
+  { id:'lvl10',   icon:'crown',     title:'Genius',        desc:'Reach Level 10.',                        test:a=>levelForXP(a.xp)>=10 },
+  { id:'streak3', icon:'flame',     title:'On a Roll',     desc:'Practice 3 days in a row.',              test:a=>a.bestStreak>=3 },
+  { id:'streak7', icon:'calendar',  title:'Week Warrior',  desc:'Practice 7 days in a row.',              test:a=>a.bestStreak>=7 },
+  { id:'clock10', icon:'hourglass', title:'Speed Demon',   desc:'Score 10+ in Beat the Clock.',           test:a=>a.stats.bestClock>=10 },
+  { id:'clock15', icon:'trophy',    title:'Lightning',     desc:'Score 15+ in Beat the Clock.',           test:a=>a.stats.bestClock>=15 }
+];
+function checkAchievements(){
+  if(!account) return;
+  const newly=[];
+  ACHIEVEMENTS.forEach(ac=>{
+    if(!account.achievements.includes(ac.id) && ac.test(account)){ account.achievements.push(ac.id); newly.push(ac); }
+  });
+  if(newly.length){ saveStore(); celebrate(); newly.forEach(ac=>showToast(`Achievement unlocked: ${ac.title}`)); }
+}
+function openAchievements(){
+  document.getElementById('intro').classList.add('hidden');
+  renderAchievements();
+  document.getElementById('achievements').classList.remove('hidden');
+}
+function renderAchievements(){
+  const got = account ? account.achievements : [];
+  const cards = ACHIEVEMENTS.map(ac=>{
+    const has=got.includes(ac.id);
+    return `<div class="badge-card ${has?'':'locked'}">
+      <div class="badge-icon" style="color:${has?'var(--gold)':'var(--gray)'}">${ico(has?ac.icon:'lock',18)}</div>
+      <div><div class="badge-title">${ac.title}</div><div class="badge-desc">${ac.desc}</div></div></div>`;
+  }).join('');
+  document.getElementById('achievements').innerHTML = `
+    <div class="card">
+      <div class="section-title">${ico('medal',17)} Achievements — ${got.length}/${ACHIEVEMENTS.length}</div>
+      ${cards}
+      <button class="btn secondary" onclick="closeAchievements()">Back to menu</button>
+    </div>`;
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function closeAchievements(){
+  const el=document.getElementById('achievements'); el.classList.add('hidden'); el.innerHTML='';
+  renderHome();
+  document.getElementById('intro').classList.remove('hidden');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+/* ---- Beat the Clock (60-second blitz) ---- */
+let clockTimeLeft=0, clockScore=0, clockTimer=null, clockCurrent=null, clockAnswered=false;
+function openClock(){
+  document.getElementById('intro').classList.add('hidden');
+  document.getElementById('clock').classList.remove('hidden');
+  const best = account ? account.stats.bestClock : 0;
+  document.getElementById('clock').innerHTML = `
+    <div class="card" style="text-align:center">
+      <div style="color:var(--navy)">${ico('hourglass',40)}</div>
+      <div class="section-title" style="justify-content:center">Beat the Clock</div>
+      <p class="section-instr">60 seconds. As many correct answers as you can. The timer starts when you say so.</p>
+      ${best?`<p style="font-weight:700;color:var(--navy)">Personal best: ${best}</p>`:''}
+      <button class="btn" onclick="clockCountdown()">I'm ready &rarr;</button>
+      <button class="btn secondary" onclick="closeClock()">Back to menu</button>
+    </div>`;
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function clockCountdown(){
+  let n = 3;
+  const tick = ()=>{
+    if (n === 0){ beginClock(); return; }
+    document.getElementById('clock').innerHTML = `
+      <div class="card" style="text-align:center;padding:60px 20px">
+        <div class="score-big" style="font-size:72px">${n}</div>
+      </div>`;
+    playCorrect();
+    n--;
+    clockTimer = setTimeout(tick, 800);
+  };
+  clearTimeout(clockTimer); clearInterval(clockTimer);
+  tick();
+}
+function beginClock(){
+  clockScore=0; clockTimeLeft=60;
+  clearInterval(clockTimer);
+  clockTimer=setInterval(()=>{
+    clockTimeLeft--;
+    const t=document.getElementById('clockTime'); if(t) t.textContent=clockTimeLeft+'s';
+    if(clockTimeLeft<=0) endClock();
+  },1000);
+  nextClockQuestion();
+}
+function nextClockQuestion(){
+  clockAnswered=false;
+  clockCurrent=getStudyQuestion();
+  const q=clockCurrent.q;
+  const choices=q.choices.map((c,i)=>`<label class="choice" id="cc-${i}" onclick="answerClock(${i})"><span>${String.fromCharCode(65+i)}. ${c}</span></label>`).join('');
+  document.getElementById('clock').innerHTML=`
+    <div class="clock-bar"><span class="clock-time" id="clockTime">${clockTimeLeft}s</span>
+      <span class="clock-score">Score: ${clockScore}</span></div>
+    <div class="card">
+      ${clockCurrent.passage?`<div class="passage">${clockCurrent.passage}</div>`:''}
+      <div class="q-stem">${q.q}</div>
+      ${figHTML(q)}
+      ${choices}
+      ${reportLineHTML('clock')}
+    </div>
+    <button class="btn secondary" onclick="closeClock()">← Back to menu</button>`;
+  drawFigs();
+}
+function answerClock(i){
+  if(clockAnswered || clockTimeLeft<=0) return;
+  clockAnswered=true;
+  const right=clockCurrent.q.answer, ok=(i===right);
+  const lab=document.getElementById('cc-'+i); if(lab) lab.classList.add(ok?'correct':'wrong');
+  if(!ok){ const r=document.getElementById('cc-'+right); if(r) r.classList.add('correct'); }
+  recordAnswer(ok); rpForAnswer(ok); updateSkill(ok, clockCurrent.tier);
+  if(!ok) recordMiss(clockCurrent.q, clockCurrent.passage);
+  if(ok) playCorrect(); else playWrong();
+  answerFX(ok, lab);
+  if(ok){ clockScore++; addXP(10); const sc=document.querySelector('.clock-score'); if(sc) sc.textContent='Score: '+clockScore; }
+  setTimeout(()=>{ if(clockTimeLeft>0) nextClockQuestion(); }, 450);
+}
+function endClock(){
+  clearInterval(clockTimer);
+  let best=false;
+  if(account && clockScore>account.stats.bestClock){ account.stats.bestClock=clockScore; best=true; }
+  markActivity(); checkAchievements(); saveStore();
+  if(best) celebrate();
+  const bestVal = account ? account.stats.bestClock : clockScore;
+  document.getElementById('clock').innerHTML=`
+    <div class="card" style="text-align:center">
+      <div class="score-big">${clockScore}</div>
+      <div class="score-sub">correct in 60 seconds  ·  +${clockScore*10} XP</div>
+      ${best?`<div class="verdict v-strong" style="margin-top:12px">★ New personal best!</div>`
+            :`<div style="color:var(--gray);margin-top:10px">Personal best: ${bestVal}</div>`}
+      <button class="btn" onclick="clockCountdown()">Play again →</button>
+      <button class="btn secondary" onclick="closeClock()">Back to menu</button>
+    </div>`;
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function closeClock(){
+  clearInterval(clockTimer);
+  const el=document.getElementById('clock'); el.classList.add('hidden'); el.innerHTML='';
+  renderHome();
+  document.getElementById('intro').classList.remove('hidden');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+/* ---- Versus (two-player hot-seat) ---- */
+let vsPlayers=[{name:'Player 1',score:0},{name:'Player 2',score:0}], vsTurn=0, vsAsked=0, vsCurrent=null, vsAnswered=false;
+function openVersus(){
+  document.getElementById('intro').classList.add('hidden');
+  document.getElementById('versus').classList.remove('hidden');
+  const p1 = account ? account.name : 'Player 1';
+  document.getElementById('versus').innerHTML = `
+    <div class="card">
+      <div class="section-title">${ico('swords',17)} Versus</div>
+      <p class="section-instr">Two players, one device. Take turns answering — after 5 rounds each, whoever's ahead wins (ties go to sudden death). Pass the device each turn.</p>
+      <input id="vsName1" value="${p1}" maxlength="16" />
+      <input id="vsName2" value="Player 2" maxlength="16" />
+      <button class="btn" onclick="startVersus()">Start match →</button>
+      <button class="btn secondary" onclick="closeVersus()">Back to menu</button>
+    </div>`;
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function startVersus(){
+  const n1=(document.getElementById('vsName1').value||'').trim()||'Player 1';
+  const n2=(document.getElementById('vsName2').value||'').trim()||'Player 2';
+  vsPlayers=[{name:n1,score:0},{name:n2,score:0}];
+  vsTurn=0; vsAsked=0;
+  vsTurnIntro();
+}
+function vsBoard(){
+  return `<div class="vs-board">
+    <div class="vs-side ${vsTurn===0?'active':''}"><div class="vs-name">${vsPlayers[0].name}</div><div class="vs-score">${vsPlayers[0].score}</div></div>
+    <div class="vs-vs">vs</div>
+    <div class="vs-side ${vsTurn===1?'active':''}"><div class="vs-name">${vsPlayers[1].name}</div><div class="vs-score">${vsPlayers[1].score}</div></div>
+  </div>`;
+}
+function vsTurnIntro(){
+  document.getElementById('versus').innerHTML = `
+    ${vsBoard()}
+    <div class="card" style="text-align:center">
+      <div class="vs-turn">${vsPlayers[vsTurn].name}'s turn</div>
+      <p class="section-instr">Pass the device to ${vsPlayers[vsTurn].name}, then tap to begin.</p>
+      <button class="btn" onclick="vsShowQuestion()">Start turn →</button>
+    </div>
+    <button class="btn secondary" onclick="closeVersus()">← Back to menu</button>`;
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function vsShowQuestion(){
+  vsAnswered=false;
+  vsCurrent=getStudyQuestion();
+  const q=vsCurrent.q;
+  const choices=q.choices.map((c,i)=>`<label class="choice" id="vc-${i}" onclick="vsAnswer(${i})"><span>${String.fromCharCode(65+i)}. ${c}</span></label>`).join('');
+  document.getElementById('versus').innerHTML=`
+    ${vsBoard()}
+    <div class="card">
+      <div class="vs-turn">${vsPlayers[vsTurn].name}, your question:</div>
+      ${vsCurrent.passage?`<div class="passage">${vsCurrent.passage}</div>`:''}
+      <div class="q-stem">${q.q}</div>
+      ${figHTML(q)}
+      ${choices}
+      <div id="vsNav"></div>
+      ${reportLineHTML('versus')}
+    </div>`;
+  drawFigs();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function vsAnswer(i){
+  if(vsAnswered) return; vsAnswered=true;
+  const right=vsCurrent.q.answer, ok=(i===right);
+  vsCurrent.q.choices.forEach((c,idx)=>{
+    const lab=document.getElementById('vc-'+idx); if(!lab) return;
+    lab.classList.add('locked'); lab.onclick=null;
+    if(idx===right) lab.classList.add('correct'); else if(idx===i) lab.classList.add('wrong');
+  });
+  if(ok) vsPlayers[vsTurn].score++;
+  if(ok) playCorrect(); else playWrong();
+  answerFX(ok, document.getElementById('vc-'+i), '+1');
+  const exp=document.createElement('div'); exp.className='explain'+(ok?' ok':'');
+  exp.innerHTML=(ok?'<b>Correct! +1 point</b> ':'<b style="color:var(--red)">Not quite.</b> ')+`<b>Why:</b> ${vsCurrent.q.why}`;
+  const nav=document.getElementById('vsNav');
+  nav.parentNode.insertBefore(exp, nav);
+  nav.innerHTML=`<button class="btn" onclick="vsAfter()">Continue →</button>`;
+}
+function vsAfter(){
+  vsAsked++;
+  vsTurn = 1 - vsTurn;
+  if (vsAsked>=10 && vsAsked%2===0 && vsPlayers[0].score!==vsPlayers[1].score){ endVersus(); return; }
+  vsTurnIntro();
+}
+function endVersus(){
+  const w = vsPlayers[0].score>vsPlayers[1].score ? vsPlayers[0] : vsPlayers[1];
+  celebrate();
+  document.getElementById('versus').innerHTML=`
+    ${vsBoard()}
+    <div class="card" style="text-align:center">
+      <div style="color:var(--gold)">${ico('trophy',46)}</div>
+      <div class="score-big" style="font-size:26px">${w.name} wins!</div>
+      <div class="score-sub">Final: ${vsPlayers[0].name} ${vsPlayers[0].score} — ${vsPlayers[1].score} ${vsPlayers[1].name}</div>
+      <button class="btn" onclick="startVersus()">Rematch →</button>
+      <button class="btn secondary" onclick="closeVersus()">Back to menu</button>
+    </div>`;
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function closeVersus(){
+  const el=document.getElementById('versus'); el.classList.add('hidden'); el.innerHTML='';
+  renderHome();
+  document.getElementById('intro').classList.remove('hidden');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+/* ================= Ranked ladder ================= */
+const TIERS = [
+  {name:'Bronze',min:0,color:'#a06b32'},{name:'Silver',min:150,color:'#9a968c'},{name:'Gold',min:350,color:'#ca9827'},
+  {name:'Platinum',min:600,color:'#82989e'},{name:'Diamond',min:900,color:'#5aa3bd'},{name:'Master',min:1300,color:'#bd8f2c'}
+];
+/* Tier glyph: shield with a roman numeral, crown for Master — colored per tier */
+function tierIcon(i, size){
+  const s=size||16;
+  if (i===5) return `<span style="color:${TIERS[5].color}">${ico('crown',s)}</span>`;
+  return `<span style="color:${TIERS[i].color}"><svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS.shield}<text x="12" y="14.5" text-anchor="middle" font-family="Georgia,serif" font-size="8" fill="currentColor" stroke="none">${['I','II','III','IV','V'][i]}</text></svg></span>`;
+}
+function tierIndex(rp){ let idx=0; TIERS.forEach((t,i)=>{ if(rp>=t.min) idx=i; }); return idx; }
+function tierForRP(rp){ return TIERS[tierIndex(rp)]; }
+function nextTier(rp){ for(const t of TIERS){ if(t.min>rp) return t; } return null; }
+function awardRP(delta){
+  if(!account) return;
+  const bi=tierIndex(account.rp);
+  account.rp=Math.max(0, account.rp+delta);
+  const ai=tierIndex(account.rp);
+  saveStore(); renderRankChip();
+  if(ai>bi){ celebrate(); showToast(`Promoted to ${TIERS[ai].name}!`); }
+}
+/* RP scales with tier: fast climb early, hard-earned at the top. */
+function rpScale(){
+  const i = account ? tierIndex(account.rp) : 0;
+  return { gain: [4,3,3,2,2,1][i], loss: [1,1,1,2,2,2][i] };
+}
+function rpForAnswer(ok){ const s = rpScale(); awardRP(ok ? s.gain : -s.loss); }
+function renderRankChip(){
+  const el=document.getElementById('rankLine'); if(!el) return;
+  if(!account){ el.innerHTML=''; return; }
+  const t=tierForRP(account.rp);
+  const online = account.onlineRating>0 ? ` <span class="rank-chip">${ico('globe',13)} ${account.onlineRating} online</span>` : '';
+  const skill = !isEasy() ? ` <span class="rank-chip">${ico('bulb',13)} Skill ${(account.skill||2).toFixed(1)}</span>` : '';
+  el.innerHTML=`<span class="rank-chip">${tierIcon(tierIndex(account.rp),15)} ${t.name} · ${account.rp} RP</span>`+skill+online;
+}
+function renderDiff(){
+  const el=document.getElementById('diffSel'); if(!el||!account) return;
+  const d=account.diff||'standard';
+  el.innerHTML=`<button class="seg ${d==='easy'?'seg-on':''}" onclick="setDiff('easy')">Easy</button>
+    <button class="seg ${d==='standard'?'seg-on':''}" onclick="setDiff('standard')">Standard</button>`;
+}
+function setDiff(d){ if(account){ account.diff=d; saveStore(); } renderDiff(); }
+
+/* ================= Weekly league ================= */
+function curWeekId(){
+  const d=new Date(), jan=new Date(d.getFullYear(),0,1);
+  const week=Math.ceil((((d-jan)/86400000)+jan.getDay()+1)/7);
+  return d.getFullYear()+'-W'+week;
+}
+function accrueWeek(amount){
+  if(!account) return;
+  if(account.weekId!==curWeekId()){ account.weekId=curWeekId(); account.weekPoints=0; }
+  account.weekPoints += amount;
+}
+function openCompete(){
+  document.getElementById('intro').classList.add('hidden');
+  const rp=account?account.rp:0, idx=tierIndex(rp), nt=nextTier(rp);
+  const ladder=TIERS.map((t,i)=>`<div class="tier-row ${i===idx?'tier-on':''}"><span>${tierIcon(i,16)} ${t.name}</span><span class="tier-rp">${t.min}+ RP</span></div>`).join('');
+  const prog = nt ? `<p class="section-instr" style="text-align:center">${nt.min-rp} RP to ${nt.name}</p>` : `<p class="section-instr" style="text-align:center">${ico('crown',14)} Top tier reached!</p>`;
+  const wk=curWeekId();
+  const ranked=store.accounts.map(a=>({name:a.name, pts:(a.weekId===wk?(a.weekPoints||0):0)})).sort((x,y)=>y.pts-x.pts);
+  const league=ranked.map((a,i)=>`<div class="tier-row ${account&&a.name===account.name?'tier-on':''}"><span>${i+1}. ${a.name}</span><span class="tier-rp">${a.pts} pts</span></div>`).join('');
+  document.getElementById('compete').innerHTML=`
+    <div class="card">
+      <div class="section-title">${ico('trophy',17)} Your Rank</div>
+      <div style="text-align:center;margin:6px 0">${tierIcon(idx,46)}</div>
+      <div style="text-align:center;font-weight:800;color:var(--navy);font-size:20px">${tierForRP(rp).name} · ${rp} RP</div>
+      ${prog}${ladder}
+    </div>
+    <div class="card">
+      <div class="section-title">How RP works</div>
+      <p class="section-instr" style="margin:0 0 8px">Earn Rank Points in any solo mode:</p>
+      <div class="tier-row"><span><b style="color:var(--green)">✓</b> Correct answer</span><span class="tier-rp" style="color:var(--green)">+${rpScale().gain} RP</span></div>
+      <div class="tier-row"><span><b style="color:var(--red)">✗</b> Wrong answer</span><span class="tier-rp" style="color:var(--red)">−${rpScale().loss} RP</span></div>
+      <p class="section-instr" style="margin:8px 0 0">RP scales with your tier — low ranks climb fast, high ranks earn less and lose more per miss. Versus and Online races give no RP.</p>
+    </div>
+    <div class="card">
+      <div class="section-title">${ico('calendar',16)} This Week's League</div>
+      <p class="section-instr">Weekly XP race between accounts on this device — resets each week.</p>
+      ${league||'<div class="acct-empty">No scores yet this week.</div>'}
+    </div>
+    <button class="btn secondary" onclick="closeCompete()">Back to menu</button>`;
+  document.getElementById('compete').classList.remove('hidden');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function closeCompete(){ const el=document.getElementById('compete'); el.classList.add('hidden'); el.innerHTML=''; renderHome(); document.getElementById('intro').classList.remove('hidden'); window.scrollTo({top:0,behavior:'smooth'}); }
+
+/* ================= Survival runs (3 lives) ================= */
+let survLives=3, survScore=0, survCurrent=null, survAnswered=false;
+function openSurvival(){
+  document.getElementById('intro').classList.add('hidden');
+  survLives=3; survScore=0;
+  document.getElementById('survival').classList.remove('hidden');
+  survNext();
+}
+function survNext(){
+  survAnswered=false; survCurrent=getStudyQuestion();
+  const q=survCurrent.q;
+  const choices=q.choices.map((c,i)=>`<label class="choice" id="sv-${i}" onclick="survAnswer(${i})"><span>${String.fromCharCode(65+i)}. ${c}</span></label>`).join('');
+  document.getElementById('survival').innerHTML=`
+    <div class="clock-bar"><span class="hearts">${heartsHTML(survLives)}</span><span class="clock-score">Streak: ${survScore}</span></div>
+    <div class="card">${survCurrent.passage?`<div class="passage">${survCurrent.passage}</div>`:''}<div class="q-stem">${q.q}</div>${figHTML(q)}${choices}<div id="svNav"></div>${reportLineHTML('survival')}</div>
+    <button class="btn secondary" onclick="closeSurvival()">← Back to menu</button>`;
+  drawFigs();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function survAnswer(i){
+  if(survAnswered) return; survAnswered=true;
+  const right=survCurrent.q.answer, ok=(i===right);
+  const lab=document.getElementById('sv-'+i); if(lab) lab.classList.add(ok?'correct':'wrong');
+  if(!ok){ const r=document.getElementById('sv-'+right); if(r) r.classList.add('correct'); }
+  recordAnswer(ok); rpForAnswer(ok); updateSkill(ok, survCurrent.tier);
+  if(!ok) recordMiss(survCurrent.q, survCurrent.passage);
+  answerFX(ok, lab);
+  if(ok){ survScore++; playCorrect(); addXP(10); } else { survLives--; playWrong(); }
+  markActivity(); checkAchievements();
+  const hb=document.querySelector('.hearts'); if(hb) hb.innerHTML=heartsHTML(survLives);
+  if(survLives<=0){ setTimeout(survEnd, 750); }
+  else { document.getElementById('svNav').innerHTML=`<button class="btn" onclick="survNext()">Next →</button>`; }
+}
+function survEnd(){
+  let best=false;
+  if(account && survScore>account.bestRun){ account.bestRun=survScore; best=true; }
+  saveStore();
+  if(best) celebrate();
+  const bestVal=account?account.bestRun:survScore;
+  document.getElementById('survival').innerHTML=`
+    <div class="card" style="text-align:center">
+      <div style="color:var(--gray)">${ico('sword',40)}</div>
+      <div class="score-big">${survScore}</div><div class="score-sub">question streak · +${survScore*10} XP</div>
+      ${best?`<div class="verdict v-strong" style="margin-top:12px">★ New best run!</div>`:`<div style="color:var(--gray);margin-top:10px">Best run: ${bestVal}</div>`}
+      <button class="btn" onclick="openSurvival()">Try again →</button>
+      <button class="btn secondary" onclick="closeSurvival()">Back to menu</button>
+    </div>`;
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function closeSurvival(){ const el=document.getElementById('survival'); el.classList.add('hidden'); el.innerHTML=''; renderHome(); document.getElementById('intro').classList.remove('hidden'); window.scrollTo({top:0,behavior:'smooth'}); }
+
+/* ================= Daily challenge (seeded by date) ================= */
+function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+function dateSeed(){ const d=dateStr(new Date()); let h=0; for(let i=0;i<d.length;i++) h=(h*31+d.charCodeAt(i))|0; return h>>>0; }
+function withSeed(seed, fn){ const orig=Math.random; Math.random=mulberry32(seed); try{ return fn(); } finally{ Math.random=orig; } }
+let dailyQs=[], dailyIdx=0, dailyCorrect=0, dailyAnswered=false;
+function openDaily(){
+  document.getElementById('intro').classList.add('hidden');
+  document.getElementById('daily').classList.remove('hidden');
+  if(account && account.lastDaily===dateStr(new Date())){
+    document.getElementById('daily').innerHTML=`
+      <div class="card" style="text-align:center">
+        <div style="color:var(--navy)">${ico('calendar',40)}</div>
+        <div class="section-title" style="justify-content:center">Daily Challenge complete!</div>
+        <p class="section-instr">You've done today's challenge. Come back tomorrow for a new one and keep your streak alive.</p>
+        <button class="btn secondary" onclick="closeDaily()">Back to menu</button>
+      </div>`;
+    return;
+  }
+  dailyQs = withSeed(dateSeed(), ()=> Array.from({length:5}, ()=>{ const g=statelessPick(); const q=g(); q._gen=g; return { q, label:'Math' }; }));
+  dailyIdx=0; dailyCorrect=0;
+  dailyShow();
+}
+function dailyShow(){
+  dailyAnswered=false;
+  const item=dailyQs[dailyIdx], q=item.q;
+  const choices=q.choices.map((c,i)=>`<label class="choice" id="dl-${i}" onclick="dailyAnswer(${i})"><span>${String.fromCharCode(65+i)}. ${c}</span></label>`).join('');
+  document.getElementById('daily').innerHTML=`
+    <div class="clock-bar"><span class="clock-time">Daily</span><span class="clock-score">${dailyIdx+1} / 5</span></div>
+    <div class="card">${item.passage?`<div class="passage">${item.passage}</div>`:''}<div class="q-stem">${q.q}</div>${figHTML(q)}${choices}<div id="dlNav"></div>${reportLineHTML('daily')}</div>
+    <button class="btn secondary" onclick="closeDaily()">← Back to menu</button>`;
+  drawFigs();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function dailyAnswer(i){
+  if(dailyAnswered) return; dailyAnswered=true;
+  const item=dailyQs[dailyIdx], right=item.q.answer, ok=(i===right);
+  const lab=document.getElementById('dl-'+i); if(lab) lab.classList.add(ok?'correct':'wrong');
+  if(!ok){ const r=document.getElementById('dl-'+right); if(r) r.classList.add('correct'); }
+  recordAnswer(ok); rpForAnswer(ok);
+  if(!ok) recordMiss(item.q, item.passage);
+  answerFX(ok, lab);
+  if(ok){ dailyCorrect++; playCorrect(); addXP(10); } else playWrong();
+  const exp=document.createElement('div'); exp.className='explain'+(ok?' ok':'');
+  exp.innerHTML=(ok?'<b>Correct! +10 XP</b> ':'<b style="color:var(--red)">Not quite.</b> ')+`<b>Why:</b> ${item.q.why}`+(ok?'':`<div class="explain-ans">Correct answer: ${String.fromCharCode(65+right)}. ${item.q.choices[right]}</div>`+lessonLinkHTML(item.q));
+  const nav=document.getElementById('dlNav'); nav.parentNode.insertBefore(exp,nav);
+  nav.innerHTML=`<button class="btn" onclick="dailyNext()">${dailyIdx<4?'Next →':'Finish'}</button>`;
+}
+function dailyNext(){
+  dailyIdx++;
+  if(dailyIdx<5){ dailyShow(); return; }
+  if(account) account.lastDaily=dateStr(new Date());
+  addXP(30); markActivity(); checkAchievements(); saveStore(); celebrate();
+  document.getElementById('daily').innerHTML=`
+    <div class="card" style="text-align:center">
+      <div style="color:var(--gold)">${ico('star',40)}</div>
+      <div class="score-big">${dailyCorrect}/5</div><div class="score-sub">today's challenge · +${dailyCorrect*10+30} XP · +20 RP</div>
+      <p class="section-instr" style="margin-top:10px">Come back tomorrow for a new challenge!</p>
+      <button class="btn secondary" onclick="closeDaily()">Back to menu</button>
+    </div>`;
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function closeDaily(){ const el=document.getElementById('daily'); el.classList.add('hidden'); el.innerHTML=''; renderHome(); document.getElementById('intro').classList.remove('hidden'); window.scrollTo({top:0,behavior:'smooth'}); }
+
+/* ================= Full Test: 25 questions, 30 minutes, real SSAT rules ================= */
+let fullTest=false, testTimerId=null, testSecs=0, testStartAt=0;
+const FT_N=25, FT_SECS=30*60;
+
+function openFullTest(){
+  document.getElementById('intro').classList.add('hidden');
+  const best = account ? account.stats.bestScaled : 0;
+  document.getElementById('fulltest').innerHTML = `
+    <div class="card">
+      <div class="section-title">${ico('hourglass',18)} Full Test — Quantitative Section</div>
+      <p class="section-instr">This works exactly like the real SSAT quant section:</p>
+      <div class="tier-row"><span>${FT_N} questions, all visible — skip and come back freely</span></div>
+      <div class="tier-row"><span>30 minutes on the clock; it submits itself at 0:00</span></div>
+      <div class="tier-row"><span>No feedback until the end</span></div>
+      <div class="tier-row"><span>Real scoring: +1 per correct, −¼ per wrong, blanks cost nothing — so don't wild-guess</span></div>
+      ${best?`<p style="font-weight:700;color:var(--navy);margin-top:10px">Your best estimated score: ${best}</p>`:''}
+      <button class="btn" style="margin-top:10px" onclick="startFullTest()">Begin the test &rarr;</button>
+      <button class="btn secondary" onclick="closeFullTest()">Back to menu</button>
+    </div>`;
+  document.getElementById('fulltest').classList.remove('hidden');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function closeFullTest(){
+  clearInterval(testTimerId); fullTest=false;
+  const el=document.getElementById('fulltest'); el.classList.add('hidden'); el.innerHTML='';
+  renderHome();
+  document.getElementById('intro').classList.remove('hidden');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function startFullTest(){
+  fullTest=true;
+  const el=document.getElementById('fulltest'); el.classList.add('hidden'); el.innerHTML='';
+  newSet(FT_N);
+  testSecs=FT_SECS; testStartAt=Date.now();
+  const form=document.getElementById('quiz');
+  const bar=document.createElement('div');
+  bar.className='card';
+  bar.style.cssText='position:sticky;top:8px;z-index:20;padding:10px 16px;display:flex;justify-content:space-between;align-items:center';
+  bar.innerHTML=`<span style="font-weight:700;color:var(--navy)">Quantitative &middot; ${FT_N} questions</span><span class="clock-time" id="ftTime">30:00</span>`;
+  form.prepend(bar);
+  clearInterval(testTimerId);
+  testTimerId=setInterval(()=>{
+    testSecs--;
+    const t=document.getElementById('ftTime');
+    if(t){ t.textContent=fmtTime(testSecs); if(testSecs<=60) t.style.background='var(--red)'; }
+    if(testSecs<=0){ clearInterval(testTimerId); showToast('Time! Scoring your test…'); grade(true); }
+  },1000);
+}
+function fmtTime(s){ return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); }
+function estScaled(raw){ return Math.round(500 + Math.max(0, raw)/FT_N*300); }
+
+function renderTestResults(correct, wrongChosen, blanks){
+  clearInterval(testTimerId);
+  const raw = correct - 0.25*wrongChosen;
+  const est = estScaled(raw);
+  const used = Math.min(FT_SECS, Math.round((Date.now()-testStartAt)/1000));
+  let best=false;
+  if (account && est > account.stats.bestScaled){ account.stats.bestScaled = est; best = true; saveStore(); }
+  const res=document.getElementById('results');
+  res.innerHTML=`
+    <div class="card">
+      <div class="score-ring"><div class="score-big">&asymp; ${est}</div><div class="score-sub">estimated SSAT quant score (500–800 scale)</div></div>
+      ${best?`<div class="verdict v-strong">★ New personal best!</div>`:''}
+      <div class="stats">
+        <div class="stat"><b>${correct}</b><span>correct</span></div>
+        <div class="stat"><b>${wrongChosen}</b><span>wrong</span></div>
+        <div class="stat"><b>${blanks}</b><span>blank</span></div>
+      </div>
+      <p style="text-align:center;color:var(--gray);font-size:13.5px">Raw score: ${correct} − ¼&times;${wrongChosen} = <b>${raw.toFixed(2).replace(/\.?0+$/,'')}</b> of ${FT_N} &middot; time used ${fmtTime(used)}</p>
+      <p style="color:var(--gray);font-size:12.5px;text-align:center">Rough estimate — the real test scales scores against everyone who took it. Treat &plusmn;30 as the honest range.</p>
+      <p style="color:var(--gray);font-size:13.5px;margin-top:10px">Scroll up to review — explanations show under every question you missed, with a lesson link.</p>
+      <button class="btn" onclick="closeFullTestToIntro()">Take another test &rarr;</button>
+      <button class="btn secondary" onclick="goHome()">Back to menu</button>
+    </div>`;
+  res.classList.remove('hidden');
+  res.scrollIntoView({behavior:'smooth', block:'start'});
+}
+function closeFullTestToIntro(){
+  goHome();
+  openFullTest();
+}
+
+/* ================= Set builder ================= */
+let QUIZ = [], qIndexMap = [], TOTAL = 0, setsDone = 0, bestScore = -1;
+
+function buildSet(n){
+  n = n || 14;
+  let qs;
+  if (fullTest){
+    // real-test difficulty: the actual UL quant section is stingy — 20/44/36, hard-leaning
+    const n1=Math.round(n*0.2), n3=Math.round(n*0.36), n2=n-n1-n3;
+    qs = shuffle(takeFrom(L1_GENS,n1).concat(takeFrom(L2_GENS,n2), takeFrom(L3_GENS,n3)));
+  } else {
+    qs = genQuant(n);
+  }
+  QUIZ = [
+    { section:"Quantitative (Math)", instr: fullTest ? "Choose the best answer. Wrong answers cost ¼ point; blanks cost nothing." : "Choose the best answer. No calculator.", questions: qs }
+  ];
+  TOTAL = QUIZ.reduce((s,sec)=>s+sec.questions.length,0);
+  qIndexMap = [];
+}
+
+/* ================= Render ================= */
+function start(){ document.getElementById('intro').classList.add('hidden'); newSet(); }
+
+/* ---------- Study Mode: one question at a time, instant feedback ---------- */
+let studySection='mixed', studyTotal=0, studyCorrect=0, studyCurrent=null, studyAnswered=false, studyMode='math';
+
+function openStudy(){
+  studyMode='math';
+  document.getElementById('intro').classList.add('hidden');
+  studySection='mixed'; studyTotal=0; studyCorrect=0;
+  loadStudy();
+  document.getElementById('study').classList.remove('hidden');
+}
+function openVerbal(){
+  studyMode='verbal';
+  document.getElementById('intro').classList.add('hidden');
+  studyTotal=0; studyCorrect=0;
+  loadStudy();
+  document.getElementById('study').classList.remove('hidden');
+}
+function setStudySection(sec){ studySection=sec; loadStudy(); }
+function getStudyQuestion(){ const g = pickGen(); const q = g(); q._gen = g; return { q, label:'Math', tier: lastPickTier }; }
+/* Verbal preview: analogies + reading from the hand-written pool (small on purpose — it's a taste test) */
+function getVerbalQuestion(){
+  if (Math.random()<0.5) return { q: choice(POOL.analogies), label:'Analogies · preview' };
+  const p=choice(POOL.reading), q=choice(p.questions);
+  return { q, passage:p.passage, label:'Reading · preview' };
+}
+function loadStudy(){
+  if (studyMode==='review' && (!account || !account.misses.length)){ openReview(); return; }
+  studyAnswered=false;
+  studyCurrent = studyMode==='verbal' ? getVerbalQuestion() : studyMode==='topic' ? getTopicQuestion() : studyMode==='review' ? getReviewQuestion() : getStudyQuestion();
+  renderStudy();
+}
+function renderStudy(){
+  const q=studyCurrent.q;
+  const choices=q.choices.map((c,i)=>`<label class="choice" id="sc-${i}" onclick="answerStudy(${i})"><span>${String.fromCharCode(65+i)}. ${c}</span></label>`).join('');
+  document.getElementById('study').innerHTML=`
+    <div class="card">
+      <div class="study-head"><span>${studyCurrent.label}${studyMode==='topic'?` · ${Math.min(topicScore(topicId),TOPIC_MASTERY)}/${TOPIC_MASTERY} mastered`:``} · <span id="studyLvl">★ Lvl ${level}</span></span> <span class="study-score">${studyCorrect}/${studyTotal} correct</span></div>
+      ${studyCurrent.passage?`<div class="passage">${studyCurrent.passage}</div>`:''}
+      <div class="q-stem">${q.q}</div>
+      ${figHTML(q)}
+      ${choices}
+      <div id="studyExplain"></div>
+      <div id="studyNav"></div>
+      ${reportLineHTML('study')}
+    </div>
+    <button class="btn secondary" onclick="studyHome()">Back to menu</button>`;
+  drawFigs();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function answerStudy(i){
+  if (studyAnswered) return;
+  studyAnswered=true;
+  const q=studyCurrent.q, right=q.answer;
+  q.choices.forEach((c,idx)=>{
+    const lab=document.getElementById('sc-'+idx);
+    lab.classList.add('locked'); lab.onclick=null;
+    if (idx===right) lab.classList.add('correct');
+    else if (idx===i) lab.classList.add('wrong');
+  });
+  studyTotal++;
+  const ok = i===right;
+  let leveled=false;
+  if (ok){ studyCorrect++; leveled = addXP(10); }
+  if (ok && studyMode==='topic' && account){ account.topics[topicId] = topicScore(topicId) + 1; }
+  if (!ok && studyMode!=='review') recordMiss(q, studyCurrent.passage);
+  if (studyMode==='review' && account && account.misses.length){ const mm=account.misses.shift(); if(!ok) account.misses.push(mm); }
+  recordAnswer(ok); rpForAnswer(ok); updateSkill(ok, studyCurrent.tier); markActivity(); checkAchievements(); saveStore();
+  if (ok) playCorrect(); else playWrong();
+  answerFX(ok, document.getElementById('sc-'+i));
+  if (leveled) celebrate();
+  const exp=document.getElementById('studyExplain');
+  exp.className='explain'+(ok?' ok':'');
+  exp.innerHTML = (ok?`<b>Correct! +10 XP</b> `:`<b style="color:var(--red)">Not quite.</b> `)
+    + `<b>Why:</b> ${q.why}`
+    + (ok?'':`<div class="explain-ans">Correct answer: ${String.fromCharCode(65+right)}. ${q.choices[right]}</div>`+lessonLinkHTML(q));
+  const sc=document.querySelector('.study-score'); if (sc) sc.textContent=`${studyCorrect}/${studyTotal} correct`;
+  const lv=document.getElementById('studyLvl'); if (lv) lv.textContent='★ Lvl '+level;
+  if (leveled) showToast(`Level up! You reached Level ${level}`);
+  document.getElementById('studyNav').innerHTML=`<button class="btn" onclick="loadStudy()">Next question →</button>`;
+}
+function studyHome(){
+  const s=document.getElementById('study'); s.classList.add('hidden'); s.innerHTML='';
+  renderHome();
+  document.getElementById('intro').classList.remove('hidden');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+function newSet(n){
+  const form = document.getElementById('quiz');
+  form.innerHTML = '';
+  const res = document.getElementById('results');
+  res.innerHTML = ''; res.classList.add('hidden');
+  buildSet(n);
+
+  let num = 0;
+  QUIZ.forEach((sec, si) => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `<div class="section-title">${sec.section}</div>
+      <p class="section-instr">${sec.instr}</p>` + (sec.passage ? `<div class="passage">${sec.passage}</div>` : '');
+    sec.questions.forEach((qq, qi) => {
+      num++; const gnum = num;
+      qIndexMap.push({si, qi, gnum});
+      const qDiv = document.createElement('div');
+      qDiv.className = 'q'; qDiv.id = `q-${gnum}`;
+      let html = `<div class="q-stem"><span class="q-num">${gnum}.</span> ${qq.q}</div>` + figHTML(qq);
+      qq.choices.forEach((c, ci) => {
+        html += `<label class="choice"><input type="radio" name="q${gnum}" value="${ci}"><span>${String.fromCharCode(65+ci)}. ${c}</span></label>`;
+      });
+      html += reportLineHTML('practice', gnum);
+      qDiv.innerHTML = html;
+      card.appendChild(qDiv);
+    });
+    form.appendChild(card);
+  });
+  form.classList.remove('hidden');
+  drawFigs();
+  document.getElementById('submitBtn').classList.remove('hidden');
+  document.getElementById('backBtn').classList.remove('hidden');
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+/* ================= Grade ================= */
+function grade(force){
+  if (!fullTest){
+    for (let n=1; n<=TOTAL; n++){
+      if (!document.querySelector(`input[name="q${n}"]:checked`)){
+        document.getElementById('formError').classList.remove('hidden');
+        document.getElementById(`q-${n}`).scrollIntoView({behavior:'smooth', block:'center'});
+        return;
+      }
+    }
+  }
+  document.getElementById('formError').classList.add('hidden');
+  clearInterval(testTimerId);
+
+  let correct = 0, wrongChosen = 0, blanks = 0;
+  const perSection = QUIZ.map(s => ({name:s.section, got:0, total:s.questions.length}));
+
+  qIndexMap.forEach(({si, qi, gnum}) => {
+    const chosenEl = document.querySelector(`input[name="q${gnum}"]:checked`);
+    const chosen = chosenEl ? parseInt(chosenEl.value) : -1;
+    const right = QUIZ[si].questions[qi].answer;
+    document.querySelectorAll(`#q-${gnum} label.choice`).forEach((lab,i)=>{
+      lab.classList.add('locked');
+      lab.querySelector('input').disabled = true;
+      if (i === right) lab.classList.add('correct');
+      else if (chosen >= 0 && i === chosen) lab.classList.add('wrong');
+    });
+    if (chosen === right){ correct++; perSection[si].got++; }
+    else if (chosen === -1){ blanks++; }
+    else {
+      wrongChosen++;
+      recordMiss(QUIZ[si].questions[qi], QUIZ[si].passage);
+      const ex = document.createElement('div');
+      ex.className = 'explain';
+      const correctText = QUIZ[si].questions[qi].choices[right];
+      ex.innerHTML = `<b>Why:</b> ${QUIZ[si].questions[qi].why}`
+        + `<div class="explain-ans">Correct answer: ${String.fromCharCode(65+right)}. ${correctText}</div>`
+        + lessonLinkHTML(QUIZ[si].questions[qi]);
+      document.getElementById(`q-${gnum}`).appendChild(ex);
+    }
+  });
+
+  setsDone++;
+  if (correct > bestScore) bestScore = correct;
+  const gained = correct*10, bonus = (correct===TOTAL) ? (fullTest?100:50) : 0;
+  const leveled = addXP(gained + bonus);
+  renderHomeLevel();
+  if (account){ account.stats.answered += (TOTAL - blanks); account.stats.correct += correct; if (correct===TOTAL) account.stats.perfectSets++; saveStore(); }
+  markActivity();
+  checkAchievements();
+  const rpS = rpScale();
+  awardRP(correct*rpS.gain - wrongChosen*rpS.loss);   // scaled by tier; blanks are neutral
+  if (leveled) showToast(`Level up! You reached Level ${level}`);
+  if (leveled || correct===TOTAL) celebrate(); else playCorrect();
+  if (fullTest){ fullTest=false; renderTestResults(correct, wrongChosen, blanks); }
+  else renderResults(correct, perSection, {gained, bonus});
+}
+
+function renderResults(correct, perSection, xpInfo){
+  document.getElementById('submitBtn').classList.add('hidden');
+  document.getElementById('backBtn').classList.add('hidden');
+  let verdict, vclass;
+  if (correct >= 12){ verdict="Strong work — keep sharpening timing and stretch into harder material."; vclass="v-strong"; }
+  else if (correct >= 8){ verdict="On track — focus on the weakest section over the next few sets."; vclass="v-mid"; }
+  else { verdict="Lots of upside — keep at it; improvement comes fast with steady practice."; vclass="v-low"; }
+
+  const bars = perSection.map(s => {
+    const pct = Math.round((s.got/s.total)*100);
+    return `<div class="bar-row"><div class="bar-label">${s.name}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+      <div style="width:38px;text-align:right">${s.got}/${s.total}</div></div>`;
+  }).join('');
+
+  const res = document.getElementById('results');
+  res.innerHTML = `
+    <div class="card">
+      <div class="score-ring"><div class="score-big">${correct}/${TOTAL}</div><div class="score-sub">questions correct</div></div>
+      <div class="verdict ${vclass}">${verdict}</div>
+      <div style="text-align:center;color:var(--amber);font-weight:700;margin:2px 0 10px">+${xpInfo.gained} XP${xpInfo.bonus?` &nbsp;·&nbsp; +${xpInfo.bonus} perfect-score bonus!`:''}</div>
+      <div class="level-panel" style="margin-bottom:8px">${levelBarHTML()}</div>
+      <div class="stats">
+        <div class="stat"><b>${setsDone}</b><span>sets done</span></div>
+        <div class="stat"><b>${bestScore}/${TOTAL}</b><span>your best</span></div>
+      </div>
+      <div style="font-weight:700;color:var(--navy);margin:14px 0 4px">By section</div>
+      ${bars}
+      <p style="color:var(--gray);font-size:13.5px;margin-top:14px">Scroll up to review each question — explanations show for any you missed.</p>
+      <button class="btn" onclick="newSet()">Take a new set →</button>
+      <button class="btn secondary" onclick="goHome()">Back to menu</button>
+    </div>`;
+  res.classList.remove('hidden');
+  res.scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function goHome(){
+  clearInterval(testTimerId); fullTest=false;
+  document.getElementById('quiz').classList.add('hidden');
+  document.getElementById('quiz').innerHTML = '';
+  document.getElementById('results').classList.add('hidden');
+  document.getElementById('results').innerHTML = '';
+  document.getElementById('submitBtn').classList.add('hidden');
+  document.getElementById('backBtn').classList.add('hidden');
+  renderHome();
+  document.getElementById('intro').classList.remove('hidden');
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+/* ================= Question reports (flag bad questions for review) ================= */
+let pendingReport = null, clearArmed = false;
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function reportLineHTML(mode, gnum){
+  const suf = gnum ? '-'+gnum : '';
+  return `<div class="rpt-line" id="rptLine${suf}"><button class="rpt-btn" onclick="openReport('${mode}'${gnum?','+gnum:''})">${ico('flag',12)} Report this question</button></div>`;
+}
+function reportTarget(mode, gnum){
+  if (mode==='study')    return studyCurrent && { q:studyCurrent.q, passage:studyCurrent.passage };
+  if (mode==='clock')    return clockCurrent && { q:clockCurrent.q, passage:clockCurrent.passage };
+  if (mode==='survival') return survCurrent  && { q:survCurrent.q,  passage:survCurrent.passage };
+  if (mode==='daily')    return dailyQs[dailyIdx] && { q:dailyQs[dailyIdx].q, passage:dailyQs[dailyIdx].passage };
+  if (mode==='versus')   return vsCurrent    && { q:vsCurrent.q,    passage:vsCurrent.passage };
+  if (mode==='practice'){ const m=qIndexMap.find(x=>x.gnum===gnum); return m && { q:QUIZ[m.si].questions[m.qi], passage:QUIZ[m.si].passage }; }
+  return null;
+}
+function openReport(mode, gnum){
+  const t = reportTarget(mode, gnum);
+  if (!t || !t.q) return;
+  pendingReport = { mode, t };
+  const el = document.getElementById('rptLine'+(gnum?'-'+gnum:'')); if (!el) return;
+  el.innerHTML = `<span class="rpt-chips"><span style="color:var(--gray)">What's wrong?</span>`
+    + ['Wrong answer','Confusing','Typo','Too hard/easy'].map(r=>`<button class="seg" onclick="submitReport('${r}','${gnum||''}')">${r}</button>`).join('')
+    + `</span>`;
+}
+function submitReport(reason, suf){
+  if (!pendingReport) return;
+  const { mode, t } = pendingReport, q = t.q;
+  store.reports.push({
+    date: new Date().toISOString().slice(0,16).replace('T',' '),
+    who: account ? account.name : '?',
+    mode, reason,
+    diff: (account && account.diff) || 'standard',
+    q: q.q, choices: q.choices.slice(),
+    answer: String.fromCharCode(65+q.answer)+'. '+q.choices[q.answer],
+    why: q.why, passage: t.passage || ''
+  });
+  saveStore(); pendingReport = null;
+  const el = document.getElementById('rptLine'+(suf?'-'+suf:''));
+  if (el) el.innerHTML = '<span class="rpt-done">✓ Reported</span>';
+  showToast('Question reported');
+  renderReportFoot();
+}
+function renderReportFoot(){
+  const el = document.getElementById('rptFoot'); if (!el) return;
+  const n = (store.reports||[]).length;
+  el.innerHTML = n ? `· <a onclick="openReports()">${ico('flag',11)} ${n} reported question${n>1?'s':''}</a>` : '';
+}
+function openReports(){
+  document.getElementById('intro').classList.add('hidden');
+  clearArmed = false;
+  const cards = (store.reports||[]).map((r,i)=>`
+    <div class="rpt-card">
+      <div class="rpt-meta">#${i+1} · ${r.date} · ${esc(r.who)} · ${r.mode} · ${r.diff} · <b>${r.reason}</b></div>
+      ${r.passage?`<div class="passage">${esc(r.passage)}</div>`:''}
+      <div class="q-stem" style="font-size:14px">${esc(r.q)}</div>
+      <div>${r.choices.map((c,ci)=>String.fromCharCode(65+ci)+'. '+esc(c)).join(' &nbsp; ')}</div>
+      <div style="color:var(--green);font-weight:600;margin-top:4px">Marked correct: ${esc(r.answer)}</div>
+      <div style="color:var(--gray);margin-top:2px">Why: ${esc(r.why)}</div>
+    </div>`).join('');
+  document.getElementById('reports').innerHTML = `
+    <div class="card">
+      <div class="section-title">${ico('flag',16)} Reported questions — ${(store.reports||[]).length}</div>
+      <p class="section-instr">Questions flagged during practice.</p>
+      ${cards || '<div class="acct-empty">Nothing reported yet.</div>'}
+      ${(store.reports||[]).length ? `<button class="btn" onclick="copyReports()">Copy all</button>
+      <button class="btn secondary" id="clearRptBtn" onclick="clearReports()">Clear all</button>` : ''}
+      <button class="btn secondary" onclick="closeReports()">Back to menu</button>
+    </div>`;
+  document.getElementById('reports').classList.remove('hidden');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function copyReports(){
+  const txt = 'QUIZARD REPORTED QUESTIONS ('+store.reports.length+')\n\n' + store.reports.map((r,i)=>
+`#${i+1} [${r.date} · ${r.who} · ${r.mode} · ${r.diff} · ${r.reason}]${r.passage?'\nPassage: '+r.passage:''}
+Q: ${r.q}
+${r.choices.map((c,ci)=>String.fromCharCode(65+ci)+'. '+c).join('  ')}
+Marked correct: ${r.answer}
+Explanation: ${r.why}`).join('\n\n');
+  const done = ()=>showToast('Copied');
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(done).catch(()=>fallbackCopy(txt, done));
+  } else fallbackCopy(txt, done);
+}
+function fallbackCopy(txt, done){
+  const ta=document.createElement('textarea'); ta.value=txt; document.body.appendChild(ta);
+  ta.select(); try{ document.execCommand('copy'); done(); }catch(e){ showToast('Copy failed'); }
+  document.body.removeChild(ta);
+}
+function clearReports(){
+  const b=document.getElementById('clearRptBtn');
+  if (!clearArmed){ clearArmed=true; if(b) b.textContent='Tap again to clear for good'; return; }
+  store.reports = []; saveStore();
+  renderReportFoot(); openReports();
+  showToast('Reports cleared');
+}
+function closeReports(){
+  const el=document.getElementById('reports'); el.classList.add('hidden'); el.innerHTML='';
+  renderHome();
+  document.getElementById('intro').classList.remove('hidden');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+/* ================= Feature vote (early users pick what gets built next) ================= */
+const VOTE_OPTIONS = [
+  {id:'verbal', title:'Full verbal section',      desc:'Synonyms, analogies, and reading — the rest of the SSAT.'},
+  {id:'test',   title:'Real Test Mode',           desc:'A timed 25-question section with a score estimate at the end.'},
+  {id:'parent', title:'Parent progress report',   desc:'A summary of strengths and weak spots to show your parents.'},
+  {id:'review', title:'Missed-question review',   desc:'Re-practice the kinds of questions you get wrong.'}
+];
+/* Live tallies come from the Quizard server: one vote per online player, tied to their account. */
+function fillVoteLocal(){
+  if (!voteScreenVisible()) return;
+  const counts={}; store.accounts.forEach(a=>{ if(a.vote) counts[a.vote]=(counts[a.vote]||0)+1; });
+  VOTE_OPTIONS.forEach(o=>{
+    const el=document.getElementById('voteCount-'+o.id);
+    if(el){ const c=counts[o.id]||0; el.textContent = c+' vote'+(c===1?'':'s'); }
+  });
+  const n=document.getElementById('voteNote'); if(n) n.textContent='Offline — showing votes from this device only.';
+}
+function refreshVoteCounts(){
+  if (ows && ows.readyState===1 && oMe){ osend({t:'vote_counts'}); return; }
+  if (account) ensureOnlineIdentity();   // connects quietly; auth handler pushes our vote + fetches counts
+}
+function openVote(){
+  document.getElementById('intro').classList.add('hidden');
+  const mine = account ? account.vote : '';
+  const rows = VOTE_OPTIONS.map(o=>`
+    <div class="tier-row ${mine===o.id?'tier-on':''}" style="cursor:pointer" onclick="castVote('${o.id}')">
+      <span><b>${o.title}</b><br><span style="font-weight:400;font-size:12.5px;color:var(--gray)">${o.desc}</span></span>
+      <span class="tier-rp" id="voteCount-${o.id}">&hellip;</span>
+    </div>`).join('');
+  document.getElementById('vote').innerHTML = `
+    <div class="card">
+      <div class="section-title">${ico('ballot',17)} What should we build next?</div>
+      <p class="section-instr">You're an early user, so you get a say. Tap an option to vote — tap again to take it back.
+        <span id="voteNote" style="display:block;margin-top:4px">Loading live totals&hellip;</span></p>
+      ${rows}
+      ${mine?`<p class="section-instr" style="margin-top:10px">Your vote: <b>${(VOTE_OPTIONS.find(o=>o.id===mine)||{}).title||''}</b></p>`:''}
+      <button class="btn secondary" onclick="closeVote()">Back to menu</button>
+    </div>`;
+  document.getElementById('vote').classList.remove('hidden');
+  refreshVoteCounts();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function castVote(id){
+  if(!account){ showToast('Log in to vote'); return; }
+  account.vote = (account.vote===id) ? '' : id;
+  saveStore();
+  openVote();   // re-renders; refreshVoteCounts inside will push or connect
+  if (ows && ows.readyState===1 && oMe) osend({t:'set_vote', vote:account.vote});
+  if(account.vote) showToast('Vote counted — thanks!');
+}
+function closeVote(){
+  const el=document.getElementById('vote'); el.classList.add('hidden'); el.innerHTML='';
+  renderHome();
+  document.getElementById('intro').classList.remove('hidden');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+/* ================= Online competitions (accounts + live races via server/) ================= */
+let ows=null, oState='idle', oMe=null, oOpp=null, oRound=0, oRaceQ=null, oAnswered=false, oScore={you:0,opp:0};
+
+function serverUrl(){ return store.serverUrl || 'wss://quizard-server.quizard.workers.dev'; }
+
+function openOnline(){
+  document.getElementById('intro').classList.add('hidden');
+  document.getElementById('online').classList.remove('hidden');
+  renderOnlineHome();
+  if (!oMe) ensureOnlineIdentity();
+}
+/* Your device account IS your online identity — no second login.
+   Ladder: saved session token -> saved secret -> auto-register (name auto-suffixed if taken). */
+let oAuthStage = 0;
+function randSecret(){ let s=''; while(s.length<32) s+=Math.random().toString(36).slice(2); return s.slice(0,32); }
+function sanitizeOnlineName(n){
+  let s=(n||'').replace(/[^A-Za-z0-9_]/g,'').slice(0,12);
+  return s.length>=3 ? s : 'Wizard';
+}
+function ensureOnlineIdentity(){
+  if (!account){ if(onlineScreenVisible()) renderOnlineHome('Log into an account on this device first.'); return; }
+  oAuthStage = 0;
+  oconnect(onlineAuthAttempt);
+}
+function onlineAuthAttempt(){
+  if (!account) return;
+  if (oAuthStage===0){
+    if (account.onlineToken && account.onlineName) return osend({t:'token_login', name:account.onlineName, token:account.onlineToken});
+    oAuthStage = 1;
+  }
+  if (oAuthStage===1){
+    if (account.onlineSecret && account.onlineName) return osend({t:'login', name:account.onlineName, pass:account.onlineSecret});
+    oAuthStage = 2;
+  }
+  if (!account.onlineSecret){ account.onlineSecret = randSecret(); saveStore(); }
+  osend({t:'register', name:sanitizeOnlineName(account.name), pass:account.onlineSecret, auto:true});
+}
+function closeOnline(){
+  if (ows){ try{ ows.close(); }catch(e){} ows=null; }
+  oState='idle';
+  const el=document.getElementById('online'); el.classList.add('hidden'); el.innerHTML='';
+  renderHome();
+  document.getElementById('intro').classList.remove('hidden');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function onlineScreenVisible(){ const el=document.getElementById('online'); return el && !el.classList.contains('hidden'); }
+function voteScreenVisible(){ const el=document.getElementById('vote'); return el && !el.classList.contains('hidden'); }
+function renderOnlineHome(msg){
+  const o=document.getElementById('online'); if(!o) return;
+  if(!onlineScreenVisible()) return;
+  o.innerHTML=`
+  <div class="card">
+    <div class="section-title">${ico('globe',17)} Online — live races</div>
+    <p class="section-instr">Race a real opponent on the same question — first correct answer takes the point, first to 3 points wins the match. Wrong answers lock you out of the round, so accuracy beats speed-guessing.</p>
+    ${oMe ? `
+      <div class="acct-row" style="margin-bottom:10px"><span>${ico('person',14)} Playing as <b>${esc(oMe.name)}</b> &middot; ${oMe.rating} rating</span>
+        <span class="tier-rp">${oMe.wins}W &ndash; ${oMe.losses}L</span></div>
+      <div class="tier-row" style="margin-bottom:10px"><span>Show my rating to other players</span>
+        <button class="seg ${oMe.showRating?'seg-on':''}" style="flex:none;min-width:64px" onclick="osend({t:'set_privacy', showRating:${oMe.showRating?'false':'true'}})">${oMe.showRating?'On':'Off'}</button></div>
+      <p class="section-instr" style="margin:0 0 10px">Progress backs up to the cloud automatically.</p>
+      <button class="btn" onclick="findMatch()">Find a match &rarr;</button>
+      <button class="btn secondary" onclick="showLeaderboard()">Leaderboard</button>
+    ` : `
+      <p class="section-instr" style="text-align:center">${msg ? '' : 'Connecting&hellip;'}</p>
+      ${msg ? `<div class="err">${esc(msg)}</div>
+      <button class="btn" style="margin-top:10px" onclick="ensureOnlineIdentity()">Try again</button>
+      <p class="section-instr" style="margin:12px 0 4px">Server address:</p>
+      <input id="onServer" value="${esc(serverUrl())}" onchange="store.serverUrl=this.value.trim(); saveStore()" />` : ''}
+    `}
+    <button class="btn secondary" onclick="closeOnline()">Back to menu</button>
+  </div>`;
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function oconnect(cb){
+  if (ows && ows.readyState===1) return cb();
+  try { ows = new WebSocket(serverUrl()); }
+  catch(e){ return renderOnlineHome("That server address doesn't look right."); }
+  ows.onopen = cb;
+  ows.onerror = ()=>{ renderOnlineHome("Can't reach the server. Is it running at " + serverUrl() + "?"); fillVoteLocal(); };
+  ows.onclose = ()=>{ if (oState==='racing'||oState==='queued'){ oState='idle'; renderOnlineHome('Connection lost.'); } ows=null; };
+  ows.onmessage = (ev)=>{ let m; try{ m=JSON.parse(ev.data); }catch(e){ return; } onlineMsg(m); };
+}
+function osend(obj){ if (ows && ows.readyState===1) ows.send(JSON.stringify(obj)); }
+function findMatch(){
+  oState='queued';
+  oconnect(()=>osend({t:'queue'}));
+  document.getElementById('online').innerHTML=`
+    <div class="card" style="text-align:center">
+      <div class="section-title" style="justify-content:center">${ico('globe',17)} Searching&hellip;</div>
+      <p class="section-instr">Waiting for an opponent. Anyone else searching right now gets matched with you.</p>
+      <button class="btn secondary" onclick="osend({t:'cancel_queue'}); oState='idle'; renderOnlineHome()">Cancel</button>
+    </div>`;
+}
+function showLeaderboard(){ oconnect(()=>osend({t:'leaderboard'})); }
+
+/* Progress sync: when logged into Online, this device's current account backs up to the server. */
+let syncTimer=null;
+function syncPayload(){ const a=account; return { xp:a.xp, rp:a.rp, streak:a.streak, bestStreak:a.bestStreak,
+  lastPlayed:a.lastPlayed, achievements:a.achievements, stats:a.stats, bestRun:a.bestRun,
+  lastDaily:a.lastDaily, weekPoints:a.weekPoints, weekId:a.weekId, diff:a.diff, vote:a.vote, skill:a.skill, topics:a.topics, misses:a.misses }; }
+function syncUp(){ if(!oMe || !account) return; osend({t:'sync_up', data:syncPayload(), updatedAt:account.updatedAt||Date.now()}); }
+function scheduleSync(){ if(!oMe || !account || !ows || ows.readyState!==1) return; clearTimeout(syncTimer); syncTimer=setTimeout(syncUp, 3000); }
+function applySync(data){ if(!account || !data) return; Object.assign(account, data); ensureFields(account); syncXPFromAccount(); saveStore(); }
+
+/* Both players generate the identical question from the server's seed. */
+function genRaceQuestion(seed){ return withSeed(seed, ()=> weightedChoice()()); }
+
+function renderRace(){
+  const q=oRaceQ;
+  const choicesHtml=q.choices.map((c,i)=>`<label class="choice" id="rc-${i}" onclick="raceAnswer(${i})"><span>${String.fromCharCode(65+i)}. ${c}</span></label>`).join('');
+  document.getElementById('online').innerHTML=`
+    <div class="clock-bar"><span class="clock-time">Round ${oRound}</span><span class="clock-score" id="raceScore">${oScore.you} &ndash; ${oScore.opp}</span></div>
+    <div class="card">
+      <div class="vs-turn">You vs ${esc(oOpp?oOpp.name:'?')} &mdash; first correct answer wins the point</div>
+      <div class="q-stem">${q.q}</div>
+      ${figHTML(q)}
+      ${choicesHtml}
+      <div id="raceStatus" style="text-align:center;margin-top:10px;min-height:20px;font-size:13.5px;color:var(--gray)"></div>
+    </div>
+    <button class="btn secondary" onclick="closeOnline()">Quit match</button>`;
+  drawFigs();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function lockRaceChoices(){
+  if(!oRaceQ) return;
+  oRaceQ.choices.forEach((c,idx)=>{ const l=document.getElementById('rc-'+idx); if(l){ l.classList.add('locked'); l.onclick=null; } });
+}
+function raceAnswer(i){
+  if (oAnswered || oState!=='racing' || !oRaceQ) return;
+  oAnswered=true;
+  const ok = (i===oRaceQ.answer);
+  const lab=document.getElementById('rc-'+i);
+  if (lab) lab.classList.add(ok?'correct':'wrong');
+  lockRaceChoices();
+  answerFX(ok, lab, '+1');
+  if (ok) playCorrect(); else playWrong();
+  osend({t:'answer', n:oRound, correct:ok});
+  const bar=document.getElementById('raceStatus');
+  if (bar) bar.textContent = ok ? 'Correct — checking who was first…' : 'Locked out this round — waiting for your opponent…';
+}
+function onlineMsg(m){
+  if (m.t==='auth'){
+    if (!m.ok){
+      if (oAuthStage < 2){ oAuthStage++; onlineAuthAttempt(); return; }
+      fillVoteLocal();
+      return renderOnlineHome(m.msg||'Could not connect');
+    }
+    oAuthStage = 0;
+    oMe={name:m.name, rating:m.rating, wins:m.wins, losses:m.losses, showRating:m.showRating!==false};
+    if (account){
+      account.onlineName=m.name;
+      account.onlineRating=m.rating;
+      if (m.token) account.onlineToken=m.token;
+      if (m.data && (m.dataUpdatedAt||0) > (account.updatedAt||0)) applySync(m.data);
+      else syncUp();
+      saveStore();
+      osend({t:'set_vote', vote:account.vote||''});   // keep the server tally in step; reply carries live counts
+    }
+    renderOnlineHome();
+  }
+  else if (m.t==='match_start'){
+    oState='racing'; oOpp=m.opp; oScore={you:0,opp:0};
+    document.getElementById('online').innerHTML=`
+      <div class="card" style="text-align:center">
+        <div class="section-title" style="justify-content:center">${ico('swords',17)} Matched!</div>
+        <p class="section-instr">You vs <b>${esc(oOpp.name)}</b>${oOpp.rating!=null?` (${oOpp.rating} rating)`:''}. First to ${m.winPoints} points. Get ready&hellip;</p>
+      </div>`;
+  }
+  else if (m.t==='round'){
+    oRound=m.n; oAnswered=false; if(m.score) oScore=m.score;
+    oRaceQ=genRaceQuestion(m.seed);
+    renderRace();
+  }
+  else if (m.t==='round_result'){
+    if(m.score) oScore=m.score;
+    const sc=document.getElementById('raceScore'); if(sc) sc.innerHTML=`${oScore.you} &ndash; ${oScore.opp}`;
+    const bar=document.getElementById('raceStatus');
+    if(bar) bar.innerHTML = m.winner
+      ? (m.youWon ? '<b style="color:var(--green)">You took the point!</b>' : `<b style="color:var(--red)">${esc(m.winner)} got it first</b>`)
+      : '<b>Nobody got it — next question…</b>';
+    if (!oAnswered) lockRaceChoices();
+    oAnswered=true;
+  }
+  else if (m.t==='match_end'){
+    oState='idle';
+    if(m.score) oScore=m.score;
+    if(oMe){ oMe.rating=m.rating; if(m.won) oMe.wins++; else oMe.losses++; }
+    if(account){ account.onlineRating=m.rating; saveStore(); renderRankChip(); }
+    if(m.won) celebrate();
+    document.getElementById('online').innerHTML=`
+      <div class="card" style="text-align:center">
+        <div style="color:${m.won?'var(--gold)':'var(--gray)'}">${ico(m.won?'trophy':'swords',44)}</div>
+        <div class="score-big" style="font-size:26px">${m.won?'Victory!':'Defeat'}</div>
+        <div class="score-sub">${oScore.you} &ndash; ${oScore.opp} vs ${esc(oOpp?oOpp.name:'opponent')} &middot; ${m.delta>0?'+':''}${m.delta} rating &rarr; ${m.rating}</div>
+        <button class="btn" onclick="findMatch()">Race again &rarr;</button>
+        <button class="btn secondary" onclick="renderOnlineHome()">Online home</button>
+      </div>`;
+  }
+  else if (m.t==='leaderboard'){
+    const rows=(m.top||[]).map((u,i)=>`<div class="tier-row ${oMe&&u.name===oMe.name?'tier-on':''}"><span>${i+1}. ${esc(u.name)}</span><span class="tier-rp">${u.rating!=null?u.rating:'&mdash;'} &middot; ${u.wins}W&ndash;${u.losses}L</span></div>`).join('');
+    document.getElementById('online').innerHTML=`
+      <div class="card">
+        <div class="section-title">${ico('trophy',17)} Leaderboard</div>
+        ${rows||'<div class="acct-empty">No players yet.</div>'}
+        <button class="btn secondary" onclick="renderOnlineHome()">Back</button>
+      </div>`;
+  }
+  else if (m.t==='vote_counts'){
+    VOTE_OPTIONS.forEach(o=>{
+      const el=document.getElementById('voteCount-'+o.id);
+      if(el){ const c=(m.counts&&m.counts[o.id])||0; el.textContent = c+' vote'+(c===1?'':'s'); }
+    });
+    const n=document.getElementById('voteNote'); if(n) n.textContent='Live totals from every Quizard player.';
+  }
+  else if (m.t==='privacy'){ if(oMe) oMe.showRating=m.showRating; renderOnlineHome(); showToast(m.showRating?'Rating visible to others':'Rating hidden from others'); }
+  else if (m.t==='error'){ renderOnlineHome(m.msg||'Server error'); }
+}
+
+/* ================= Learn mode: lesson -> targeted drill ================= */
+let topicGens=null, topicTitle='', topicId='';
+const TOPIC_MASTERY = 10;
+function topicScore(id){ return (account && account.topics && account.topics[id]) || 0; }
+function openLearn(){
+  document.getElementById('intro').classList.add('hidden');
+  const cards = COURSES.map((c,ci)=>{
+    const p = Math.round(courseProgress(c)*100);
+    const mastered = c.topics.filter(id=>topicScore(id)>=TOPIC_MASTERY).length;
+    return `
+    <div class="tier-row" style="cursor:pointer;padding:13px 12px" onclick="openCourse(${ci})">
+      <span style="display:flex;align-items:center;gap:12px">
+        <span style="width:46px;height:46px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:conic-gradient(#2f9150 ${p}%, #e8e0c9 0)">
+          <span style="width:34px;height:34px;border-radius:50%;background:var(--card);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--navy)">${p}%</span>
+        </span>
+        <span><b>${c.title}</b><br><span style="font-weight:400;font-size:12.5px;color:var(--gray)">${c.desc}</span></span>
+      </span>
+      <span class="tier-rp">${mastered}/${c.topics.length}</span>
+    </div>`;}).join('');
+  const banner = pathComplete() ? `<div class="verdict v-strong" style="margin-bottom:10px">${ico('trophy',16)} Every course complete — you are SSAT-ready.</div>` : '';
+  document.getElementById('learn').innerHTML = `
+    <div class="card">
+      <div class="section-title">${ico('bulb',18)} Courses</div>
+      <p class="section-instr">Each course is a path of short lessons. Master a topic (${TOPIC_MASTERY} correct) to unlock the next one.</p>
+      ${account && account.misses.length ? `<div class="tier-row" style="cursor:pointer;border-color:var(--amber)" onclick="navTo('review')"><span><b>Review your misses</b><br><span style="font-weight:400;font-size:12.5px;color:var(--gray)">beat the ${account.misses.length} question${account.misses.length===1?'':'s'} that beat you</span></span><span class="tier-rp">${ico('refresh',15)}</span></div>` : ''}
+      ${banner}${cards}
+      <button class="btn secondary" onclick="closeLearn()">Back to menu</button>
+    </div>`;
+  document.getElementById('learn').classList.remove('hidden');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function openCourse(ci){
+  const c = COURSES[ci];
+  const rows = c.topics.map(id=>{
+    const i = topicIdxById(id), t = TOPICS[i];
+    const cnt = Math.min(topicScore(id), TOPIC_MASTERY), pctv = Math.round(cnt/TOPIC_MASTERY*100), done = cnt >= TOPIC_MASTERY;
+    if (!topicUnlocked(i)){
+      const prev = TOPICS[topicIdxById(c.topics[c.topics.indexOf(id)-1])];
+      return `<div class="tier-row" style="opacity:.45;cursor:pointer" onclick="showToast('Master ${prev.title} first (${Math.min(topicScore(prev.id),TOPIC_MASTERY)}/${TOPIC_MASTERY})')">
+        <span><b>${t.title}</b><br><span style="font-weight:400;font-size:12.5px;color:var(--gray)">${t.sub}</span></span>
+        <span class="tier-rp">${ico('lock',14)}</span></div>`;
+    }
+    return `<div class="tier-row" style="cursor:pointer;background:linear-gradient(to right, rgba(47,145,80,.16) ${pctv}%, transparent ${pctv}%);${done?'border-color:var(--green);':''}" onclick="openLesson(${i})">
+      <span><b>${t.title}</b><br><span style="font-weight:400;font-size:12.5px;color:var(--gray)">${t.sub}</span></span>
+      <span class="tier-rp" style="${done?'color:var(--green);font-weight:700;':''}">${done?'✓ mastered':(cnt>0?cnt+'/'+TOPIC_MASTERY:'&rarr;')}</span></div>`;
+  }).join('');
+  document.getElementById('learn').innerHTML = `
+    <div class="card">
+      <div class="section-title">${ico('bulb',18)} ${c.title}</div>
+      <p class="section-instr">${c.desc}</p>
+      ${rows}
+      <button class="btn secondary" onclick="openLearn()">All courses</button>
+    </div>`;
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+/* Brilliant-style lesson: one bite at a time, with check questions woven in */
+let lsTopic=-1, lsSteps=[], lsStep=0, lsAnswered=false;
+function lessonSteps(t){
+  const parts = t.lesson.split(/(?=<p>|<div class="passage")/).map(x=>x.trim()).filter(Boolean);
+  const steps = parts.map(p=>({type:'text', html:p}));
+  steps.splice(Math.min(2, steps.length), 0, {type:'check'});
+  steps.push({type:'check'});
+  return steps;
+}
+function openLesson(i){
+  lsTopic=i; lsSteps=lessonSteps(TOPICS[i]); lsStep=0; lsAnswered=false;
+  renderLessonStep();
+  document.getElementById('learn').classList.remove('hidden');
+}
+function renderLessonStep(){
+  const t = TOPICS[lsTopic], st = lsSteps[lsStep];
+  const pctv = Math.round(lsStep/(lsSteps.length)*100);
+  if (st.type==='check' && !st.q){
+    const g = drawBag(t.gens, 'ls_'+t.id); const q = g(); q._gen = g; st.q = q;
+  }
+  let body, nav;
+  if (st.type==='text'){
+    body = `<div style="font-size:15px">${st.html}</div>`;
+    nav = `<button class="btn" style="margin-top:14px" onclick="lessonContinue()">Continue &rarr;</button>`;
+  } else {
+    const q = st.q;
+    const choicesHtml = q.choices.map((c,i)=>`<label class="choice" id="lc-${i}" onclick="lessonAnswer(${i})"><span>${String.fromCharCode(65+i)}. ${c}</span></label>`).join('');
+    body = `<p class="section-instr" style="margin-bottom:8px">Quick check:</p><div class="q-stem">${q.q}</div>${figHTML(q)}${choicesHtml}<div id="lsExplain"></div>`;
+    nav = `<div id="lsNav"></div>`;
+  }
+  document.getElementById('learn').innerHTML = `
+    <div class="card">
+      <div class="study-head"><span>${t.title}</span><span class="study-score">step ${lsStep+1} of ${lsSteps.length}</span></div>
+      <div class="xp-track" style="margin-bottom:14px"><div style="height:100%;border-radius:999px;background:var(--green);width:${pctv}%"></div></div>
+      ${body}${nav}
+      <button class="btn secondary" onclick="openCourse(${courseOfTopic(lsTopic)})">Back to course</button>
+    </div>`;
+  drawFigs();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function lessonAnswer(i){
+  const st = lsSteps[lsStep];
+  if (st.type!=='check' || lsAnswered) return;
+  lsAnswered = true;
+  const q = st.q, ok = (i===q.answer);
+  q.choices.forEach((c,idx)=>{ const l=document.getElementById('lc-'+idx); if(l){ l.classList.add('locked'); l.onclick=null; if(idx===q.answer) l.classList.add('correct'); else if(idx===i) l.classList.add('wrong'); } });
+  answerFX(ok, document.getElementById('lc-'+i), '+5 XP');
+  if (ok) playCorrect(); else playWrong();
+  if (account){
+    if (ok){ account.topics[TOPICS[lsTopic].id] = topicScore(TOPICS[lsTopic].id) + 1; addXP(5); }
+    else recordMiss(q, '');
+    saveStore();
+  }
+  const exp=document.getElementById('lsExplain');
+  if(exp){ exp.className='explain'+(ok?' ok':''); exp.innerHTML=(ok?'<b>Correct!</b> ':'<b style="color:var(--red)">Not quite.</b> ')+`<b>Why:</b> ${q.why}`; }
+  const nav=document.getElementById('lsNav');
+  if(nav) nav.innerHTML = `<button class="btn" style="margin-top:10px" onclick="lessonContinue()">Continue &rarr;</button>`;
+}
+function lessonContinue(){
+  lsAnswered = false;
+  lsStep++;
+  if (lsStep >= lsSteps.length){
+    const t = TOPICS[lsTopic];
+    document.getElementById('learn').innerHTML = `
+      <div class="card" style="text-align:center">
+        <div style="color:var(--gold)">${ico('star',40)}</div>
+        <div class="section-title" style="justify-content:center">Lesson complete</div>
+        <div style="margin:12px 0">
+          <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--gray);margin-bottom:4px"><span>Mastery</span><span>${Math.min(topicScore(t.id),TOPIC_MASTERY)}/${TOPIC_MASTERY}</span></div>
+          <div class="xp-track"><div style="height:100%;border-radius:999px;background:var(--green);width:${Math.min(100,Math.round(topicScore(t.id)/TOPIC_MASTERY*100))}%"></div></div>
+        </div>
+        <button class="btn" onclick="practiceTopic(${lsTopic})">Drill ${t.title} &rarr;</button>
+        <button class="btn secondary" onclick="openCourse(${courseOfTopic(lsTopic)})">Back to course</button>
+      </div>`;
+    window.scrollTo({top:0,behavior:'smooth'});
+    return;
+  }
+  renderLessonStep();
+}
+function practiceTopic(i){
+  if (!topicUnlocked(i)){ showToast('That topic is still locked'); return; }
+  studyMode='topic'; topicGens=TOPICS[i].gens; topicTitle=TOPICS[i].title; topicId=TOPICS[i].id;
+  const el=document.getElementById('learn'); el.classList.add('hidden'); el.innerHTML='';
+  studyTotal=0; studyCorrect=0;
+  loadStudy();
+  document.getElementById('study').classList.remove('hidden');
+}
+function openReview(){
+  if (!account || !account.misses.length){
+    document.getElementById('intro').classList.add('hidden');
+    document.getElementById('study').innerHTML = `
+      <div class="card" style="text-align:center">
+        <div style="color:var(--green)">${ico('star',40)}</div>
+        <div class="section-title" style="justify-content:center">No misses to review</div>
+        <p class="section-instr">Every question you get wrong lands here so you can beat it. Right now the pile is empty — nice.</p>
+        <button class="btn secondary" onclick="studyHome()">Back to menu</button>
+      </div>`;
+    document.getElementById('study').classList.remove('hidden');
+    return;
+  }
+  studyMode='review';
+  document.getElementById('intro').classList.add('hidden');
+  studyTotal=0; studyCorrect=0;
+  loadStudy();
+  document.getElementById('study').classList.remove('hidden');
+}
+function getReviewQuestion(){
+  const mm = account.misses[0];
+  const q = { q:mm.q, choices:mm.choices, answer:mm.answer, why:mm.why, draw:mm.draw, _ti:mm.ti };
+  return { q, passage:mm.passage, label:'Review · '+account.misses.length+' left', tier:1 };
+}
+function getTopicQuestion(){
+  const g = drawBag(topicGens, 'topic_'+topicTitle); const q = g(); q._gen = g;
+  return { q, label: topicTitle, tier: 1 };
+}
+function closeLearn(){
+  const el=document.getElementById('learn'); el.classList.add('hidden'); el.innerHTML='';
+  renderHome();
+  document.getElementById('intro').classList.remove('hidden');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+/* ================= Sidebar navigation ================= */
+const MODE_DIVS = ['quiz','results','study','clock','versus','survival','daily','compete','achievements','reports','online','learn','vote','fulltest'];
+function resetToHome(){
+  clearInterval(clockTimer); clearTimeout(clockTimer);
+  clearInterval(testTimerId); fullTest=false;
+  if (oState==='queued'){ osend({t:'cancel_queue'}); oState='idle'; }
+  if (oState==='racing'){ try{ ows.close(); }catch(e){} ows=null; oState='idle'; }
+  MODE_DIVS.forEach(id=>{ const el=document.getElementById(id); if(el){ el.classList.add('hidden'); el.innerHTML=''; }});
+  document.getElementById('submitBtn').classList.add('hidden');
+  document.getElementById('backBtn').classList.add('hidden');
+  document.getElementById('formError').classList.add('hidden');
+  renderHome();
+  document.getElementById('intro').classList.remove('hidden');
+}
+function navTo(mode){
+  resetToHome();
+  const map = { learn:openLearn, daily:openDaily, practice:start, fulltest:openFullTest, study:openStudy, verbal:openVerbal, review:openReview,
+                clock:openClock, survival:openSurvival, versus:openVersus, online:openOnline,
+                compete:openCompete, achievements:openAchievements, vote:openVote };
+  if (mode !== 'home' && map[mode]) map[mode]();
+  highlightNav(mode);
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+function highlightNav(mode){
+  document.querySelectorAll('.snav').forEach(b=>b.classList.toggle('on', b.dataset.mode===mode));
+}
+function renderSidebar(){
+  const nav=document.getElementById('sidebar'); if(!nav) return;
+  const item = (mode, icon, label) => `<button class="snav" data-mode="${mode}" onclick="navTo('${mode}')">${ico(icon,16)} ${label}</button>`;
+  nav.innerHTML = `
+    <div class="sbrand">Quizard</div>
+    ${item('home','home','Home')}
+    <div class="sdiv"></div>
+    ${item('learn','bulb','Learn')}
+    ${item('daily','calendar','Daily')}
+    ${item('practice','paper','Practice Test')}
+    ${item('fulltest','hourglass','Full Test')}
+    ${item('study','book','Study')}
+    ${item('verbal','alpha','Verbal')}
+    ${item('review','refresh','Review Misses')}
+    <div class="sdiv"></div>
+    ${item('clock','hourglass','Beat the Clock')}
+    ${item('survival','sword','Survival')}
+    ${item('versus','swords','Versus')}
+    ${item('online','globe','Online')}
+    <div class="sdiv"></div>
+    ${item('compete','trophy','Rank & League')}
+    ${item('achievements','medal','Achievements')}
+    ${item('vote','ballot','Vote')}`;
+  highlightNav('home');
+}
+
+/* ================= Scratch paper ================= */
+function toggleScratch(){
+  const p=document.getElementById('scratchPad');
+  p.classList.toggle('hidden');
+  if (!p.classList.contains('hidden')){ const t=document.getElementById('scratchText'); if(t) t.focus(); }
+}
+function clearScratch(){ const t=document.getElementById('scratchText'); if(t){ t.value=''; t.focus(); } }
+
+/* PWA: only when properly hosted (https) — the Mac app and file:// are untouched */
+if ('serviceWorker' in navigator && location.protocol === 'https:'){
+  navigator.serviceWorker.register('sw.js').catch(()=>{});
+}
+
+/* ---------- Init ---------- */
+document.querySelectorAll('[data-ico]').forEach(el => { el.innerHTML = ico(el.dataset.ico, +(el.dataset.sz||24)); });
+renderSidebar();
+loadStore();
+renderHome();
+</script>
+</body>
+</html>
