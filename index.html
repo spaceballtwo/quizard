@@ -1145,6 +1145,8 @@ function updateSkill(ok, tier){
 /* Stateless pickers — used where a seed must reproduce the same question (Daily, Online races). */
 function weightedChoice(){ const r=Math.random(); return r<0.30 ? choice(L1_GENS) : r<0.75 ? choice(L2_GENS) : choice(L3_GENS); }
 function statelessPick(){ if (isEasy()) return Math.random()<0.4 ? choice(L1_GENS) : choice(EASY_GENS); return weightedChoice(); }
+/* Races are competitive — mostly hard questions so speed alone can't win. */
+function raceChoice(){ const r=Math.random(); return r<0.10 ? choice(L1_GENS) : r<0.50 ? choice(L2_GENS) : choice(L3_GENS); }
 
 /* ================= Analogy engine: relationship banks -> thousands of distinct questions ================= */
 const ANALOGY_REL = [
@@ -2549,10 +2551,10 @@ function closeReports(){
 
 /* ================= Feature vote (early users pick what gets built next) ================= */
 const VOTE_OPTIONS = [
-  {id:'verbal', title:'Full verbal section',      desc:'Synonyms, analogies, and reading — the rest of the SSAT.'},
-  {id:'test',   title:'Real Test Mode',           desc:'A timed 25-question section with a score estimate at the end.'},
-  {id:'parent', title:'Parent progress report',   desc:'A summary of strengths and weak spots to show your parents.'},
-  {id:'review', title:'Missed-question review',   desc:'Re-practice the kinds of questions you get wrong.'}
+  {id:'battle',  title:'Math battle game',   desc:'A real game mode — right answers attack, streaks power you up.'},
+  {id:'tourney', title:'Online tournaments', desc:'Bracket competitions — win your way to the crown.'},
+  {id:'vocab',   title:'Vocabulary trainer', desc:'Daily SSAT word lists, reviewed right before you forget them.'},
+  {id:'friends', title:'Friends',            desc:'Add friends, compare progress, challenge them to a race.'}
 ];
 /* Live tallies come from the Quizard server: one vote per online player, tied to their account. */
 function fillVoteLocal(){
@@ -2580,6 +2582,7 @@ function openVote(){
     <div class="card">
       <div class="section-title">${ico('ballot',17)} What should we build next?</div>
       <p class="section-instr">You're an early user, so you get a say. Tap an option to vote — tap again to take it back.
+        <span style="display:block;margin-top:4px">Everything on the last ballot — verbal, Full Test, parent reports, miss review — got built and is live. New ballot:</span>
         <span id="voteNote" style="display:block;margin-top:4px">Loading live totals&hellip;</span></p>
       ${rows}
       ${mine?`<p class="section-instr" style="margin-top:10px">Your vote: <b>${(VOTE_OPTIONS.find(o=>o.id===mine)||{}).title||''}</b></p>`:''}
@@ -2712,7 +2715,7 @@ function scheduleSync(){ if(!oMe || !account || !ows || ows.readyState!==1) retu
 function applySync(data){ if(!account || !data) return; Object.assign(account, data); ensureFields(account); syncXPFromAccount(); saveStore(); }
 
 /* Both players generate the identical question from the server's seed. */
-function genRaceQuestion(seed){ return withSeed(seed, ()=> weightedChoice()()); }
+function genRaceQuestion(seed){ return withSeed(seed, ()=> raceChoice()()); }
 
 function renderRace(){
   const q=oRaceQ;
