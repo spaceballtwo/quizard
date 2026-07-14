@@ -3390,10 +3390,11 @@ function openPremium(){
       ${isP ? `
         <div class="explain ok" style="margin-top:4px"><b>You're Premium.</b> Everything is unlocked for your family — thanks for backing a small team.</div>`
       : `
-        <p class="section-instr">One price, everything included, for the whole test season — per family, not per kid.</p>
+        <p class="section-instr">One price, everything included, for the whole test season.</p>
         <div style="text-align:center;margin:10px 0 14px">
           <span style="font-size:34px;font-weight:800;color:var(--navy)">$49</span>
           <span style="color:var(--gray);font-size:13px"> / season</span>
+          <div style="color:var(--gray);font-size:12.5px;margin-top:2px">family subscription — covers up to 6 accounts</div>
         </div>
         <button class="btn" onclick="buyPremium()">Get Premium — $49</button>
         <p class="section-instr" style="text-align:center;margin-top:6px">Beta preview: no card needed yet — tapping unlocks instantly while we're in beta.</p>`}
@@ -3406,7 +3407,7 @@ function openPremium(){
       ${rowP('Parent Reports','progress, growth, and gaps — written out')}
       ${rowP('Online races','live head-to-head with ratings')}
       ${rowP('Review Misses','every wrong answer waits for revenge')}
-      <p class="section-instr" style="margin-top:12px">Founded and run by middle schoolers working toward college — every season pass goes straight into making Quizard better.</p>
+      <p class="section-instr" style="margin-top:12px">Founded and run by middle schoolers working toward college.</p>
     </div>`;
   window.scrollTo({top:0,behavior:'smooth'});
 }
