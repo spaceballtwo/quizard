@@ -262,7 +262,7 @@ Rules you must follow:
 You are given a JSON fact sheet. Use ONLY those facts — never invent numbers, topics, or events. If a fact is missing or null, simply don't mention it.
 
 Write exactly three short paragraphs, ~170 words total, plain text:
-1. Wins — what is going well, with the specific numbers.
+1. Wins — what is going well, with the specific numbers. If a growth section is present, lead with the improvement over time (skills climbing, questions answered since the start date).
 2. Focus areas — where practice should go next. Frame these as natural next steps in progress, never as failings or labels. Never call the student (or any of their skills) behind, weak, low, or struggling — compare only to their own earlier progress, never to other kids or to their own stronger areas.
 3. One concrete, doable suggestion for this week (a specific topic lesson or mode in the app).
 
