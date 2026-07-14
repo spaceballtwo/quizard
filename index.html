@@ -188,6 +188,15 @@
   .snav:hover { background:rgba(255,255,255,.07); color:#f6eed3; }
   .snav.on { background:rgba(202,152,39,.18); color:var(--gold-soft); }
   .sdiv { height:1px; background:rgba(255,255,255,.09); margin:9px 6px; }
+  .menu-fab { position:fixed; left:12px; top:calc(12px + env(safe-area-inset-top, 0px)); z-index:52;
+              width:42px; height:42px; border-radius:10px; background:var(--navy-dark); color:var(--gold-soft);
+              border:none; cursor:pointer; display:flex; align-items:center; justify-content:center;
+              box-shadow:0 3px 10px rgba(0,0,0,.25); }
+  @media (min-width:980px){ .menu-fab { display:none; } }
+  body.snav-open #sidebar { display:block; z-index:51; box-shadow:0 0 40px rgba(0,0,0,.45);
+                            padding-top:calc(14px + env(safe-area-inset-top, 0px)); }
+  #sideveil { position:fixed; inset:0; z-index:50; background:rgba(0,0,0,.35); display:none; }
+  body.snav-open #sideveil { display:block; }
   #coachPanel { position:fixed; left:16px; bottom:84px; z-index:45; width:min(360px, calc(100vw - 32px));
                 background:var(--card); border:1.5px solid var(--gold); border-radius:14px;
                 box-shadow:0 10px 30px rgba(0,0,0,.25); display:flex; flex-direction:column; max-height:70vh; }
@@ -239,6 +248,8 @@
 </style>
 </head>
 <body>
+<button class="menu-fab" onclick="toggleSidenav()" title="Menu"><span data-ico="menu" data-sz="22" style="display:flex"></span></button>
+<div id="sideveil" onclick="toggleSidenav()"></div>
 <nav id="sidebar"></nav>
 <div id="toast" class="toast hidden"></div>
 <canvas id="confetti" style="position:fixed; inset:0; width:100%; height:100%; pointer-events:none; z-index:60"></canvas>
@@ -379,6 +390,7 @@ function pick(arr,n){ return shuffle(arr.slice()).slice(0,n); }
 /* ===== Icon set: hand-drawn line glyphs (stroke = currentColor, so they inherit text color) ===== */
 const ICONS = {
   calendar:'<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/>',
+  menu:'<path d="M4 7h16M4 12h16M4 17h16"/>',
   paper:'<rect x="5" y="3.5" width="14" height="17" rx="2"/><path d="M8.5 8.5h7M8.5 12h7M8.5 15.5h4.5"/>',
   book:'<path d="M4 5.5C6.5 4.8 9.5 5 12 6.8c2.5-1.8 5.5-2 8-1.3v12.7c-2.5-.7-5.5-.5-8 1.3-2.5-1.8-5.5-2-8-1.3Z"/><path d="M12 6.8v12.7"/>',
   hourglass:'<path d="M7 4h10M7 20h10M8.5 4v2.3c0 2.6 3.5 3.6 3.5 5.7s-3.5 3.1-3.5 5.7V20M15.5 4v2.3c0 2.6-3.5 3.6-3.5 5.7s3.5 3.1 3.5 5.7V20"/>',
@@ -1303,6 +1315,18 @@ function recordMiss(q, passage){
   if (account.misses.length > 30) account.misses.shift();
 }
 /* Every answered math question feeds the knowledge map, whatever mode it came from. */
+function snapshotProgress(){
+  if (!account) return;
+  const today = dateStr(new Date());
+  if (account.hist.length && account.hist[account.hist.length-1].d === today) return;
+  account.hist.push({ d:today,
+    sk:+((account.skill||2).toFixed(2)),
+    va:+((account.verbalSkill.analogies||2).toFixed(2)),
+    vr:+((account.verbalSkill.reading||2).toFixed(2)),
+    vs:+((account.verbalSkill.synonyms||2).toFixed(2)),
+    ans:account.stats.answered||0, sc:account.stats.bestScaled||0 });
+  if (account.hist.length > 60) account.hist.shift();
+}
 function noteTopicResult(q, ok){
   if (!account || !q) return;
   const ti = (q._ti != null) ? q._ti : ((q._gen != null) ? GEN_TOPIC.get(q._gen) : null);
@@ -1631,10 +1655,12 @@ function ensureFields(a){
   if(!a.lessonsDone || typeof a.lessonsDone!=='object') a.lessonsDone={};
   if(!a.tstats || typeof a.tstats!=='object') a.tstats={};        // per-topic [answered, correct] across every mode
   if(typeof a.diagAt!=='string') a.diagAt='';
+  if(!Array.isArray(a.hist)) a.hist=[];                            // daily progress snapshots — the report's growth data
 }
 function dateStr(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function markActivity(){
   if(!account) return;
+  snapshotProgress();
   const today=dateStr(new Date());
   if(account.lastPlayed===today) return;            // already counted today
   const y=new Date(); y.setDate(y.getDate()-1);
@@ -2736,7 +2762,7 @@ function showLeaderboard(){ oconnect(()=>osend({t:'leaderboard'})); }
 let syncTimer=null;
 function syncPayload(){ const a=account; return { xp:a.xp, rp:a.rp, streak:a.streak, bestStreak:a.bestStreak,
   lastPlayed:a.lastPlayed, achievements:a.achievements, stats:a.stats, bestRun:a.bestRun,
-  lastDaily:a.lastDaily, weekPoints:a.weekPoints, weekId:a.weekId, diff:a.diff, vote:a.vote, skill:a.skill, topics:a.topics, misses:a.misses, verbalSkill:a.verbalSkill, lessonsDone:a.lessonsDone, tstats:a.tstats, diagAt:a.diagAt }; }
+  lastDaily:a.lastDaily, weekPoints:a.weekPoints, weekId:a.weekId, diff:a.diff, vote:a.vote, skill:a.skill, topics:a.topics, misses:a.misses, verbalSkill:a.verbalSkill, lessonsDone:a.lessonsDone, tstats:a.tstats, diagAt:a.diagAt, hist:a.hist }; }
 function syncUp(){ if(!oMe || !account) return; osend({t:'sync_up', data:syncPayload(), updatedAt:account.updatedAt||Date.now()}); }
 function scheduleSync(){ if(!oMe || !account || !ows || ows.readyState!==1) return; clearTimeout(syncTimer); syncTimer=setTimeout(syncUp, 3000); }
 function applySync(data){ if(!account || !data) return; Object.assign(account, data); ensureFields(account); syncXPFromAccount(); saveStore(); }
@@ -3052,8 +3078,10 @@ function resetToHome(){
   renderHome();
   document.getElementById('intro').classList.remove('hidden');
 }
+function toggleSidenav(){ document.body.classList.toggle('snav-open'); }
 function navTo(mode){
   playSwoosh();
+  document.body.classList.remove('snav-open');
   resetToHome();
   const map = { learn:openLearn, daily:openDaily, practice:start, fulltest:openFullTest, study:openStudy, verbal:openVerbal, review:openReview, coach:openCoachPage, report:openReport, gaps:openGaps,
                 clock:openClock, survival:openSurvival, versus:openVersus, online:openOnline,
@@ -3332,6 +3360,51 @@ function diagAnswer(i){
   }, ok?650:1400);
 }
 
+/* ===== Windows install gate: web visitors on a PC get the download-the-app page ===== */
+let deferredInstall=null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall=e; });
+window.addEventListener('appinstalled', () => { igDismiss(); });
+function isStandalone(){ return matchMedia('(display-mode: standalone)').matches || window.navigator.standalone===true; }
+function installGate(){
+  if (location.protocol!=='https:' || isStandalone()) return;
+  const isWin=/Windows/i.test(navigator.userAgent);
+  const isIOS=/iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
+  if (!isWin && !isIOS) return;
+  let done=false; try{ done=!!localStorage.getItem('q_ig_done'); }catch(e){}
+  if (done) return;
+  const g=document.createElement('div');
+  g.id='installGate';
+  g.style.cssText='position:fixed;inset:0;z-index:80;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:20px;overflow:auto';
+  const winBody=`
+    <p class="section-instr" style="text-align:center">Quizard installs as a real Windows app — its own window, its own Start-menu icon, works offline.</p>
+    <button class="btn" id="igBtn" onclick="igInstall()">Install Quizard</button>
+    <div style="text-align:left;font-size:13.5px;margin:14px 0 4px">
+      <b>If the button doesn't do it:</b>
+      <p style="margin:6px 0">1. Look for the <b>install icon</b> at the right end of the address bar (Edge and Chrome show a tiny screen with a down arrow).</p>
+      <p style="margin:6px 0">2. Or open the browser menu (&hellip;) and choose <b>Apps &rarr; Install Quizard</b>.</p>
+      <p style="margin:6px 0">3. Open Quizard from your Start menu like any other app.</p>
+    </div>`;
+  const iosBody=`
+    <p class="section-instr" style="text-align:center">Quizard installs on your home screen — full screen, its own icon, works offline.</p>
+    <div style="text-align:left;font-size:13.5px;margin:14px 0 4px">
+      <p style="margin:6px 0">1. Open this page in <b>Safari</b> (this only works there).</p>
+      <p style="margin:6px 0">2. Tap the <b>Share</b> button — the square with the arrow pointing up.</p>
+      <p style="margin:6px 0">3. Scroll down and tap <b>Add to Home Screen</b>, then <b>Add</b>.</p>
+      <p style="margin:6px 0">4. Open <b>Quizard</b> from your home screen like any app.</p>
+    </div>`;
+  g.innerHTML=`<div class="card" style="max-width:540px;text-align:center">
+    <h2 style="letter-spacing:1px">${isIOS?'Get Quizard on your iPhone or iPad':'Get Quizard on your PC'}</h2>
+    ${isIOS?iosBody:winBody}
+    <button class="btn secondary" onclick="igDismiss()">Keep playing in the browser</button>
+  </div>`;
+  document.body.appendChild(g);
+}
+function igInstall(){
+  if (deferredInstall){ deferredInstall.prompt(); deferredInstall.userChoice.then(()=>{ deferredInstall=null; igDismiss(); }); }
+  else showToast('Use the install icon in the address bar, or menu → Apps → Install Quizard');
+}
+function igDismiss(){ try{ localStorage.setItem('q_ig_done','1'); }catch(e){} const g=document.getElementById('installGate'); if(g) g.remove(); }
+
 /* ===== Parent Report — app computes the numbers, AI only writes the prose ===== */
 function reportUrl(){ return serverUrl().replace(/^ws/,'http') + '/report'; }
 function reportFacts(){
@@ -3343,7 +3416,21 @@ function reportFacts(){
   (a.misses||[]).forEach(m=>{ if(m.ti!=null && TOPICS[m.ti]) missCounts[TOPICS[m.ti].title]=(missCounts[TOPICS[m.ti].title]||0)+1; });
   const focus=Object.entries(missCounts).sort((x,y)=>y[1]-x[1]).slice(0,3).map(([k,v])=>k+' ('+v+' recent misses)');
   const verdicts = TOPICS.map((t,i)=>({t, v:topicVerdict(i)}));
+  const today = dateStr(new Date());
+  const base = (a.hist||[]).find(h=>h.d!==today) ? a.hist[0] : null;
+  const avgNow = ((a.skill||2)+(a.verbalSkill.analogies||2)+(a.verbalSkill.reading||2)+(a.verbalSkill.synonyms||2))/4;
+  const growth = (base && base.d!==today) ? {
+    since: base.d,
+    mathSkillChange:+(((a.skill||2)-base.sk).toFixed(1)),
+    analogiesChange:+(((a.verbalSkill.analogies||2)-base.va).toFixed(1)),
+    readingChange:+(((a.verbalSkill.reading||2)-base.vr).toFixed(1)),
+    synonymsChange:+(((a.verbalSkill.synonyms||2)-base.vs).toFixed(1)),
+    averageSkillChange:+((avgNow-(base.sk+base.va+base.vr+base.vs)/4).toFixed(1)),
+    questionsAnsweredSince:(s.answered||0)-base.ans,
+    estimatedScoreChange:(s.bestScaled && base.sc) ? s.bestScaled-base.sc : null
+  } : null;
   return {
+    growth,
     knowledgeGaps: verdicts.filter(x=>x.v.cat==='gap').map(x=>x.t.title),
     strongTopics: verdicts.filter(x=>x.v.cat==='strong').map(x=>x.t.title),
     tookDiagnostic: account.diagAt||null,
@@ -3352,6 +3439,7 @@ function reportFacts(){
     currentStreakDays:a.streak||0, bestStreakDays:a.bestStreak||0,
     mathSkillOutOf10:+((a.skill||2).toFixed(1)),
     verbalSkillOutOf10:{ analogies:+((a.verbalSkill.analogies||2).toFixed(1)), reading:+((a.verbalSkill.reading||2).toFixed(1)), synonyms:+((a.verbalSkill.synonyms||2).toFixed(1)) },
+    averageSkillOutOf10:+((((a.skill||2)+(a.verbalSkill.analogies||2)+(a.verbalSkill.reading||2)+(a.verbalSkill.synonyms||2))/4).toFixed(1)),
     topicsMastered:mastered, topicsInProgress:inProgress,
     recentTroubleSpots:focus,
     bestFullTestEstimate:s.bestScaled||null,
@@ -3362,14 +3450,22 @@ function reportFactsRows(f){
   const row=(k,v)=>`<div class="tier-row"><span>${k}</span><span class="tier-rp" style="text-align:right">${v}</span></div>`;
   return row('Questions answered', f.questionsAnswered+' ('+f.accuracyPct+'% correct)')
     + row('Practice streak', f.currentStreakDays+' days &middot; best '+f.bestStreakDays)
+    + row('Estimated SSAT score', f.bestFullTestEstimate ? f.bestFullTestEstimate : 'no Full Test taken yet')
     + row('Math skill', f.mathSkillOutOf10+' / 10')
-    + row('Verbal skill', 'analogies '+f.verbalSkillOutOf10.analogies+' &middot; reading '+f.verbalSkillOutOf10.reading+' &middot; synonyms '+f.verbalSkillOutOf10.synonyms)
+    + row('Analogies skill', f.verbalSkillOutOf10.analogies+' / 10')
+    + row('Reading skill', f.verbalSkillOutOf10.reading+' / 10')
+    + row('Synonyms skill', f.verbalSkillOutOf10.synonyms+' / 10')
+    + row('Average skill', f.averageSkillOutOf10+' / 10')
+    + (f.growth ? row('Growth since '+f.growth.since,
+        (f.growth.averageSkillChange>=0?'+':'')+f.growth.averageSkillChange+' average skill &middot; '
+        +(f.growth.mathSkillChange>=0?'+':'')+f.growth.mathSkillChange+' math &middot; '
+        +f.growth.questionsAnsweredSince+' questions answered'
+        +(f.growth.estimatedScoreChange!=null?' &middot; '+(f.growth.estimatedScoreChange>=0?'+':'')+f.growth.estimatedScoreChange+' est. score':'')) : '')
     + row('Topics mastered', f.topicsMastered.length+' of '+TOPICS.length+(f.topicsMastered.length?': '+esc(f.topicsMastered.join(', ')):''))
     + (f.topicsInProgress.length ? row('In progress', esc(f.topicsInProgress.join(', '))) : '')
     + (f.knowledgeGaps.length ? row('Knowledge gaps', esc(f.knowledgeGaps.join(', '))) : '')
     + (f.strongTopics.length ? row('Strengths', esc(f.strongTopics.join(', '))) : '')
     + (f.recentTroubleSpots.length ? row('Trouble spots', esc(f.recentTroubleSpots.join(', '))) : '')
-    + (f.bestFullTestEstimate ? row('Best full-test estimate', f.bestFullTestEstimate) : '')
     + (f.perfectPracticeSets ? row('Perfect practice sets', f.perfectPracticeSets) : '');
 }
 function openReport(){
@@ -3444,6 +3540,7 @@ renderSidebar();
 loadStore();
 renderHome();
 autoOnline();
+installGate();
 </script>
 </body>
 </html>
