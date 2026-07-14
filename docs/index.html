@@ -213,6 +213,15 @@
   .chip:hover { border-color:var(--gold); }
   .coach-ava { width:30px; height:30px; border-radius:50%; background:linear-gradient(160deg,#e0c169,#ca9827);
                display:flex; align-items:center; justify-content:center; color:#1a2136; flex-shrink:0; }
+  #coachDock { max-width:640px; margin:0 auto; background:var(--card); border:1.5px solid var(--gold); border-radius:14px;
+               box-shadow:0 6px 22px rgba(0,0,0,.12); display:flex; flex-direction:column; overflow:hidden; }
+  #coachDock .coach-msgs { height:min(52vh, 460px); }
+  .koji-card { display:flex; align-items:center; gap:12px; width:100%; text-align:left; background:var(--navy-dark);
+               border:1.5px solid var(--gold); border-radius:14px; padding:12px 14px; cursor:pointer;
+               margin-bottom:12px; color:#f6eed3; font:inherit; }
+  .koji-card:hover { filter:brightness(1.1); }
+  .koji-name { font-weight:800; font-size:14.5px; color:var(--gold-soft); }
+  .koji-line { font-weight:400; font-size:12.5px; opacity:.85; }
   .scratch-fab { position:fixed; right:16px; bottom:16px; z-index:40; width:52px; height:52px; border-radius:50%;
                  background:var(--navy); color:var(--gold-soft); border:none; cursor:pointer;
                  display:flex; align-items:center; justify-content:center;
@@ -235,7 +244,7 @@
 <canvas id="confetti" style="position:fixed; inset:0; width:100%; height:100%; pointer-events:none; z-index:60"></canvas>
 <div id="flash"></div>
 
-<button class="coach-fab" onclick="coachOpenSmart()" title="Ask the Coach"><span data-ico="chat" data-sz="26" style="display:flex"></span></button>
+<button class="coach-fab" onclick="coachOpenSmart()" title="Ask Sage"><span data-ico="chat" data-sz="26" style="display:flex"></span></button>
 <button class="scratch-fab" onclick="toggleScratch()" title="Scratch paper"><span data-ico="quill" data-sz="22" style="display:flex"></span></button>
 <div id="coachPanel" class="hidden"></div>
 
@@ -272,6 +281,11 @@
         <span id="rankLine"></span><span id="streakLine"></span>
       </div>
       <div id="nextUp"></div>
+      <button class="koji-card" onclick="navTo('coach')">
+        <span class="coach-ava" style="width:46px;height:46px"><span data-ico="chat" data-sz="22" style="display:flex"></span></span>
+        <span style="flex:1"><span class="koji-name">Sage &middot; your Coach</span><br><span class="koji-line">&ldquo;What should we work on today? Ask me anything &mdash; or I&rsquo;ll make you a plan.&rdquo;</span></span>
+        <span style="color:var(--gold-soft);font-weight:700">&rarr;</span>
+      </button>
       <div class="mlabel">Your courses</div>
       <div id="homeCourses" class="mrow" style="grid-template-columns:1fr 1fr"></div>
       <button class="mbtn" style="width:100%;justify-content:center;margin-top:14px" onclick="toggleModes()"><span data-ico="home" data-sz="15"></span>All modes &amp; settings</button>
@@ -283,7 +297,7 @@
         <button class="mbtn" onclick="navTo('study')"><span data-ico="book" data-sz="16"></span>Study</button>
         <button class="mbtn" onclick="navTo('verbal')"><span data-ico="alpha" data-sz="16"></span>Verbal</button>
         <button class="mbtn" onclick="navTo('review')"><span data-ico="refresh" data-sz="16"></span>Review</button>
-        <button class="mbtn" onclick="coachOpenGeneral()"><span data-ico="chat" data-sz="16"></span>Coach</button>
+        <button class="mbtn" onclick="navTo('coach')"><span data-ico="chat" data-sz="16"></span>Coach</button>
       </div>
       <div class="mlabel">Test yourself</div>
       <div class="mrow">
@@ -302,6 +316,7 @@
         <button class="mbtn" onclick="navTo('compete')"><span data-ico="trophy" data-sz="16"></span>Rank</button>
         <button class="mbtn" onclick="navTo('achievements')"><span data-ico="medal" data-sz="16"></span>Badges</button>
         <button class="mbtn" onclick="navTo('vote')"><span data-ico="ballot" data-sz="16"></span>Vote</button>
+        <button class="mbtn" onclick="navTo('report')"><span data-ico="paper" data-sz="16"></span>Parent Report</button>
       </div>
       <div style="display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:16px">
         <div id="diffSel" class="seg-bar" style="flex:0 1 220px;margin:0"></div>
@@ -337,6 +352,8 @@
   <div id="online" class="hidden"></div>
 
   <div id="learn" class="hidden"></div>
+  <div id="coachpage" class="hidden"></div>
+  <div id="parentreport" class="hidden"></div>
 
   <div id="fulltest" class="hidden"></div>
 
@@ -1586,6 +1603,8 @@ function ensureFields(a){
   if(typeof a.skill!=='number') a.skill=2;   // adaptive difficulty, 1 (gentle) to 10 (brutal)
   if(!a.topics || typeof a.topics!=='object') a.topics={};   // topicId -> correct answers in that drill
   if(!Array.isArray(a.misses)) a.misses=[];   // missed questions waiting for revenge
+  if(!a.verbalSkill || typeof a.verbalSkill!=='object') a.verbalSkill={analogies:2, reading:2, synonyms:2};
+  if(!a.lessonsDone || typeof a.lessonsDone!=='object') a.lessonsDone={};
 }
 function dateStr(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function markActivity(){
@@ -2183,9 +2202,9 @@ function openVerbal(){
     <div class="card">
       <div class="section-title">${ico('alpha',18)} Verbal</div>
       <p class="section-instr">Pick a section — analogies are generated fresh every time; reading draws from the passage library.</p>
-      <div class="tier-row" style="cursor:pointer" onclick="startVerbal('analogies')"><span><b>Analogies</b><br><span style="font-weight:400;font-size:12.5px;color:var(--gray)">A is to B as C is to —</span></span><span class="tier-rp">&rarr;</span></div>
-      <div class="tier-row" style="cursor:pointer" onclick="startVerbal('reading')"><span><b>Reading</b><br><span style="font-weight:400;font-size:12.5px;color:var(--gray)">passages with comprehension questions</span></span><span class="tier-rp">&rarr;</span></div>
-      <div class="tier-row" style="cursor:pointer" onclick="startVerbal('synonyms')"><span><b>Synonyms</b><br><span style="font-weight:400;font-size:12.5px;color:var(--gray)">pick the closest meaning</span></span><span class="tier-rp">&rarr;</span></div>
+      <div class="tier-row" style="cursor:pointer" onclick="startVerbal('analogies')"><span><b>Analogies</b><br><span style="font-weight:400;font-size:12.5px;color:var(--gray)">A is to B as C is to —</span></span><span class="tier-rp">${ico('bulb',12)} ${(account?(account.verbalSkill.analogies||2):2).toFixed(1)}</span></div>
+      <div class="tier-row" style="cursor:pointer" onclick="startVerbal('reading')"><span><b>Reading</b><br><span style="font-weight:400;font-size:12.5px;color:var(--gray)">passages with comprehension questions</span></span><span class="tier-rp">${ico('bulb',12)} ${(account?(account.verbalSkill.reading||2):2).toFixed(1)}</span></div>
+      <div class="tier-row" style="cursor:pointer" onclick="startVerbal('synonyms')"><span><b>Synonyms</b><br><span style="font-weight:400;font-size:12.5px;color:var(--gray)">pick the closest meaning</span></span><span class="tier-rp">${ico('bulb',12)} ${(account?(account.verbalSkill.synonyms||2):2).toFixed(1)}</span></div>
       <div class="tier-row" style="cursor:pointer" onclick="startVerbal('mixed')"><span><b>Mixed</b><br><span style="font-weight:400;font-size:12.5px;color:var(--gray)">all three, shuffled</span></span><span class="tier-rp">&rarr;</span></div>
       <button class="btn secondary" onclick="studyHome()">Back to menu</button>
     </div>`;
@@ -2204,11 +2223,17 @@ function getVerbalQuestion(){
   const kind = verbalKind==='mixed' ? choice(['analogies','reading','synonyms']) : verbalKind;
   if (kind==='analogies'){
     const q = Math.random()<0.12 ? choice(POOL.analogies) : genAnalogy();
-    return { q, label:'Analogies' };
+    return { q, label:'Analogies', vkind:'analogies' };
   }
-  if (kind==='synonyms') return { q: choice(POOL.synonyms), label:'Synonyms' };
+  if (kind==='synonyms') return { q: choice(POOL.synonyms), label:'Synonyms', vkind:'synonyms' };
   const p = choice(POOL.reading), q = choice(p.questions);
-  return { q, passage:p.passage, label:'Reading' };
+  return { q, passage:p.passage, label:'Reading', vkind:'reading' };
+}
+function updateVerbalSkill(kind, ok){
+  if (!account || !kind) return;
+  const v = account.verbalSkill;
+  v[kind] = Math.min(10, Math.max(1, (v[kind]||2) + (ok ? 0.08 : -0.10)));
+  saveStore();
 }
 function loadStudy(){
   if (studyMode==='review' && (!account || !account.misses.length)){ openReview(); return; }
@@ -2221,7 +2246,7 @@ function renderStudy(){
   const choices=q.choices.map((c,i)=>`<label class="choice" id="sc-${i}" onclick="answerStudy(${i})"><span>${String.fromCharCode(65+i)}. ${c}</span></label>`).join('');
   document.getElementById('study').innerHTML=`
     <div class="card">
-      <div class="study-head"><span>${studyCurrent.label}${studyMode==='topic'?` · ${Math.min(topicScore(topicId),TOPIC_MASTERY)}/${TOPIC_MASTERY} mastered`:``} · <span id="studyLvl">★ Lvl ${level}</span></span> <span class="study-score">${studyCorrect}/${studyTotal} correct</span></div>
+      <div class="study-head"><span>${studyCurrent.label}${studyMode==='topic'?` · ${Math.min(topicScore(topicId),TOPIC_MASTERY)}/${TOPIC_MASTERY} mastered`:``}${studyMode==='verbal'&&studyCurrent.vkind&&account?` · Skill ${(account.verbalSkill[studyCurrent.vkind]||2).toFixed(1)}`:``} · <span id="studyLvl">★ Lvl ${level}</span></span> <span class="study-score">${studyCorrect}/${studyTotal} correct</span></div>
       ${studyCurrent.passage?`<div class="passage">${studyCurrent.passage}</div>`:''}
       <div class="q-stem">${q.q}</div>
       ${figHTML(q)}
@@ -2249,6 +2274,7 @@ function answerStudy(i){
   let leveled=false;
   if (ok){ studyCorrect++; leveled = addXP(10); }
   if (ok && studyMode==='topic' && account){ account.topics[topicId] = topicScore(topicId) + 1; }
+  if (studyMode==='verbal' && studyCurrent.vkind) updateVerbalSkill(studyCurrent.vkind, ok);
   if (!ok && studyMode!=='review') recordMiss(q, studyCurrent.passage);
   if (studyMode==='review' && account && account.misses.length){ const mm=account.misses.shift(); if(!ok) account.misses.push(mm); }
   recordAnswer(ok); rpForAnswer(ok); updateSkill(ok, studyCurrent.tier); markActivity(); checkAchievements(); saveStore();
@@ -2675,7 +2701,7 @@ function showLeaderboard(){ oconnect(()=>osend({t:'leaderboard'})); }
 let syncTimer=null;
 function syncPayload(){ const a=account; return { xp:a.xp, rp:a.rp, streak:a.streak, bestStreak:a.bestStreak,
   lastPlayed:a.lastPlayed, achievements:a.achievements, stats:a.stats, bestRun:a.bestRun,
-  lastDaily:a.lastDaily, weekPoints:a.weekPoints, weekId:a.weekId, diff:a.diff, vote:a.vote, skill:a.skill, topics:a.topics, misses:a.misses }; }
+  lastDaily:a.lastDaily, weekPoints:a.weekPoints, weekId:a.weekId, diff:a.diff, vote:a.vote, skill:a.skill, topics:a.topics, misses:a.misses, verbalSkill:a.verbalSkill, lessonsDone:a.lessonsDone }; }
 function syncUp(){ if(!oMe || !account) return; osend({t:'sync_up', data:syncPayload(), updatedAt:account.updatedAt||Date.now()}); }
 function scheduleSync(){ if(!oMe || !account || !ows || ows.readyState!==1) return; clearTimeout(syncTimer); syncTimer=setTimeout(syncUp, 3000); }
 function applySync(data){ if(!account || !data) return; Object.assign(account, data); ensureFields(account); syncXPFromAccount(); saveStore(); }
@@ -2855,6 +2881,7 @@ let lsTopic=-1, lsSteps=[], lsStep=0, lsAnswered=false;
 function lessonSteps(t){
   const parts = t.lesson.split(/(?=<p>|<div class="passage")/).map(x=>x.trim()).filter(Boolean);
   const steps = parts.map(p=>({type:'text', html:p}));
+  if (account && account.lessonsDone && account.lessonsDone[t.id]) return steps;   // finished lessons re-read without the quick checks
   steps.splice(Math.min(2, steps.length), 0, {type:'check'});
   steps.push({type:'check'});
   return steps;
@@ -2913,6 +2940,7 @@ function lessonContinue(){
   lsStep++;
   if (lsStep >= lsSteps.length){
     const t = TOPICS[lsTopic];
+    if (account){ account.lessonsDone[t.id] = true; saveStore(); }
     document.getElementById('learn').innerHTML = `
       <div class="card" style="text-align:center">
         <div style="color:var(--gold)">${ico('star',40)}</div>
@@ -2973,7 +3001,7 @@ function closeLearn(){
 }
 
 /* ================= Sidebar navigation ================= */
-const MODE_DIVS = ['quiz','results','study','clock','versus','survival','daily','compete','achievements','reports','online','learn','vote','fulltest'];
+const MODE_DIVS = ['quiz','results','study','clock','versus','survival','daily','compete','achievements','reports','online','learn','vote','fulltest','coachpage','parentreport'];
 function resetToHome(){
   clearInterval(clockTimer); clearTimeout(clockTimer);
   clearInterval(testTimerId); fullTest=false;
@@ -2989,7 +3017,7 @@ function resetToHome(){
 }
 function navTo(mode){
   resetToHome();
-  const map = { learn:openLearn, daily:openDaily, practice:start, fulltest:openFullTest, study:openStudy, verbal:openVerbal, review:openReview, coach:coachOpenGeneral,
+  const map = { learn:openLearn, daily:openDaily, practice:start, fulltest:openFullTest, study:openStudy, verbal:openVerbal, review:openReview, coach:openCoachPage, report:openReport,
                 clock:openClock, survival:openSurvival, versus:openVersus, online:openOnline,
                 compete:openCompete, achievements:openAchievements, vote:openVote };
   if (mode !== 'home' && map[mode]) map[mode]();
@@ -3022,12 +3050,29 @@ function renderSidebar(){
     <div class="sdiv"></div>
     ${item('compete','trophy','Rank & League')}
     ${item('achievements','medal','Achievements')}
+    ${item('report','paper','Parent Report')}
     ${item('vote','ballot','Vote')}`;
   highlightNav('home');
 }
 
 /* ================= Coach: open-ended AI tutor, anchored to the missed question ================= */
-let coachCtx=null, coachMsgs=[], coachBusy=false;
+let coachCtx=null, coachMsgs=[], coachBusy=false, coachTarget='panel';
+function coachHost(){
+  if (coachTarget==='page'){ const d=document.getElementById('coachDock'); if (d) return d; coachTarget='panel'; }
+  return document.getElementById('coachPanel');
+}
+function openCoachPage(){
+  if (!account){ showToast('Log into an account first'); return; }
+  document.getElementById('intro').classList.add('hidden');
+  const el=document.getElementById('coachpage');
+  el.classList.remove('hidden');
+  el.innerHTML = '<div id="coachDock"></div>';
+  coachTarget='page';
+  if (!account.onlineToken || !ows || ows.readyState!==1) ensureOnlineIdentity();
+  coachCtx = coachProgressCtx(); coachMsgs = [];
+  if (!account.coachConsent){ renderCoachConsent(); return; }
+  renderCoach();
+}
 function tutorUrl(){ return serverUrl().replace(/^ws/,'http') + '/tutor'; }
 function coachBtnHTML(){ return `<div style="margin-top:8px"><button class="seg" style="flex:none" onclick="coachOpen()">${ico('chat',13)} Ask the Coach</button></div>`; }
 function coachProgressCtx(){
@@ -3062,7 +3107,7 @@ function coachOpen(){
   renderCoach();
 }
 function renderCoachConsent(){
-  const p=document.getElementById('coachPanel');
+  const p=coachHost();
   p.classList.remove('hidden');
   p.innerHTML=`
     <div class="coach-head"><span>${ico('chat',15)} Quizard Coach</span><button onclick="coachClose()">close</button></div>
@@ -3081,12 +3126,12 @@ function coachConsent(){
   renderCoach();
 }
 function renderCoach(){
-  const p=document.getElementById('coachPanel');
+  const p=coachHost();
   p.classList.remove('hidden');
   const fmt = s => esc(s).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>');
   const msgs = coachMsgs.map(m=>`<div class="cmsg ${m.role==='user'?'you':'coach'}">${fmt(m.content)}</div>`).join('');
   p.innerHTML=`
-    <div class="coach-head"><span style="display:flex;align-items:center;gap:8px"><span class="coach-ava">${ico('chat',16)}</span><span>Coach<br><span style="font-weight:400;font-size:10.5px;opacity:.75">your study wizard</span></span></span><button onclick="coachClose()">close</button></div>
+    <div class="coach-head"><span style="display:flex;align-items:center;gap:8px"><span class="coach-ava">${ico('chat',16)}</span><span>Sage<br><span style="font-weight:400;font-size:10.5px;opacity:.75">your Coach &middot; study wizard</span></span></span><button onclick="coachClose()">close</button></div>
     <div class="coach-msgs" id="coachMsgs">
       <div class="cmsg coach">${coachCtx && coachCtx.general ? "Hi! I can teach you any topic, quiz you, or look at your progress and tell you exactly what to work on next. What do you want to do?" : "I saw that one! Want a hint, or should I walk you through it? You can also just ask me anything about this problem."}</div>
       ${msgs}
@@ -3144,7 +3189,92 @@ function coachChip(text){
   const inp=document.getElementById('coachInput');
   if(inp){ inp.value=text; coachSend(); }
 }
-function coachClose(){ const p=document.getElementById('coachPanel'); p.classList.add('hidden'); p.innerHTML=''; }
+
+/* ===== Parent Report — app computes the numbers, AI only writes the prose ===== */
+function reportUrl(){ return serverUrl().replace(/^ws/,'http') + '/report'; }
+function reportFacts(){
+  const a=account, s=a.stats;
+  const mastered = TOPICS.filter(t=>topicScore(t.id)>=TOPIC_MASTERY).map(t=>t.title);
+  const inProgress = TOPICS.filter(t=>{const v=topicScore(t.id); return v>0 && v<TOPIC_MASTERY;})
+    .map(t=>t.title+' ('+Math.min(topicScore(t.id),TOPIC_MASTERY)+'/'+TOPIC_MASTERY+')');
+  const missCounts={};
+  (a.misses||[]).forEach(m=>{ if(m.ti!=null && TOPICS[m.ti]) missCounts[TOPICS[m.ti].title]=(missCounts[TOPICS[m.ti].title]||0)+1; });
+  const focus=Object.entries(missCounts).sort((x,y)=>y[1]-x[1]).slice(0,3).map(([k,v])=>k+' ('+v+' recent misses)');
+  return {
+    questionsAnswered:s.answered||0, correctAnswers:s.correct||0,
+    accuracyPct: s.answered ? Math.round(s.correct/s.answered*100) : 0,
+    currentStreakDays:a.streak||0, bestStreakDays:a.bestStreak||0,
+    mathSkillOutOf10:+((a.skill||2).toFixed(1)),
+    verbalSkillOutOf10:{ analogies:+((a.verbalSkill.analogies||2).toFixed(1)), reading:+((a.verbalSkill.reading||2).toFixed(1)), synonyms:+((a.verbalSkill.synonyms||2).toFixed(1)) },
+    topicsMastered:mastered, topicsInProgress:inProgress,
+    recentTroubleSpots:focus,
+    bestFullTestEstimate:s.bestScaled||null,
+    perfectPracticeSets:s.perfectSets||0
+  };
+}
+function reportFactsRows(f){
+  const row=(k,v)=>`<div class="tier-row"><span>${k}</span><span class="tier-rp" style="text-align:right">${v}</span></div>`;
+  return row('Questions answered', f.questionsAnswered+' ('+f.accuracyPct+'% correct)')
+    + row('Practice streak', f.currentStreakDays+' days &middot; best '+f.bestStreakDays)
+    + row('Math skill', f.mathSkillOutOf10+' / 10')
+    + row('Verbal skill', 'analogies '+f.verbalSkillOutOf10.analogies+' &middot; reading '+f.verbalSkillOutOf10.reading+' &middot; synonyms '+f.verbalSkillOutOf10.synonyms)
+    + row('Topics mastered', f.topicsMastered.length+' of '+TOPICS.length+(f.topicsMastered.length?': '+esc(f.topicsMastered.join(', ')):''))
+    + (f.topicsInProgress.length ? row('In progress', esc(f.topicsInProgress.join(', '))) : '')
+    + (f.recentTroubleSpots.length ? row('Trouble spots', esc(f.recentTroubleSpots.join(', '))) : '')
+    + (f.bestFullTestEstimate ? row('Best full-test estimate', f.bestFullTestEstimate) : '')
+    + (f.perfectPracticeSets ? row('Perfect practice sets', f.perfectPracticeSets) : '');
+}
+function openReport(){
+  if (!account){ showToast('Log into an account first'); return; }
+  if (!account.onlineToken || !ows || ows.readyState!==1) ensureOnlineIdentity();
+  document.getElementById('intro').classList.add('hidden');
+  const el=document.getElementById('parentreport');
+  el.classList.remove('hidden');
+  el.innerHTML=`
+    <div class="card">
+      <div class="section-title">${ico('paper',17)} Parent Report</div>
+      <p class="section-instr">For parents: every number below is computed by the app from your child's practice. The written summary is drafted by AI from those numbers only — nothing else is shared with it.</p>
+      ${account.coachConsent
+        ? `<button class="btn" id="repBtn" onclick="generateReport()">Write this week's report</button>`
+        : `<p class="section-instr"><b>A parent or guardian must approve AI features first.</b> The write-up is generated by Claude (Anthropic) from the stats below; reports are not stored.</p>
+           <button class="btn" onclick="reportConsent()">I'm a parent/guardian — approve</button>`}
+      <div id="reportOut"></div>
+      <div class="mlabel" style="margin-top:16px">The numbers</div>
+      ${reportFactsRows(reportFacts())}
+    </div>`;
+}
+function reportConsent(){
+  account.coachConsent=true; saveStore();
+  if (ows && ows.readyState===1 && oMe) osend({t:'coach_consent'}); else ensureOnlineIdentity();
+  openReport();
+}
+function generateReport(){
+  const btn=document.getElementById('repBtn'); if(btn){ btn.disabled=true; btn.textContent='Writing…'; }
+  const done=()=>{ const b=document.getElementById('repBtn'); if(b){ b.disabled=false; b.textContent="Write this week's report"; } };
+  fetch(reportUrl(), { method:'POST', headers:{'content-type':'application/json'},
+    body: JSON.stringify({ name:account.onlineName, token:account.onlineToken, facts:reportFacts() }) })
+  .then(r=>r.json())
+  .then(d=>{
+    const out=document.getElementById('reportOut'); done(); if(!out) return;
+    if (d.reply){
+      const fm=s=>esc(s).replace(/\n\n/g,'</p><p style="margin-top:8px">').replace(/\n/g,'<br>');
+      out.innerHTML=`<div class="explain ok" style="margin-top:12px"><p>${fm(d.reply)}</p>
+        <div style="font-size:11px;color:var(--gray);margin-top:10px">Written by AI from the numbers below &middot; ${new Date().toLocaleDateString()}</div></div>`;
+    }
+    else if (d.error==='limit') out.innerHTML='<div class="explain" style="margin-top:12px">Report limit reached for today — try again tomorrow.</div>';
+    else if (d.error==='consent'){ account.coachConsent=false; saveStore(); openReport(); }
+    else if (d.error==='auth'){ ensureOnlineIdentity(); out.innerHTML='<div class="explain" style="margin-top:12px">Reconnecting your account — press the button again in a moment.</div>'; }
+    else if (d.error==='inactive') out.innerHTML='<div class="explain" style="margin-top:12px">Reports aren’t switched on yet — soon!</div>';
+    else out.innerHTML='<div class="explain" style="margin-top:12px">Something went wrong — try again in a moment.</div>';
+  })
+  .catch(()=>{ done(); const out=document.getElementById('reportOut'); if(out) out.innerHTML='<div class="explain" style="margin-top:12px">Can’t reach the server — are you online?</div>'; });
+}
+function coachClose(){
+  const page = coachTarget==='page';
+  coachTarget='panel';
+  const p=document.getElementById('coachPanel'); p.classList.add('hidden'); p.innerHTML='';
+  if (page) navTo('home');
+}
 
 /* ================= Scratch paper ================= */
 function toggleScratch(){
