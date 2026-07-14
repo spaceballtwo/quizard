@@ -197,6 +197,12 @@
                             padding-top:calc(14px + env(safe-area-inset-top, 0px)); }
   #sideveil { position:fixed; inset:0; z-index:50; background:rgba(0,0,0,.35); display:none; }
   body.snav-open #sideveil { display:block; }
+  #tourVeil { position:fixed; inset:0; z-index:70; background:rgba(18,25,44,.5); }
+  #tourCard { position:fixed; left:50%; transform:translateX(-50%); bottom:calc(20px + env(safe-area-inset-bottom, 0px));
+              z-index:72; width:min(430px, calc(100vw - 28px)); background:var(--card); border:1.5px solid var(--gold);
+              border-radius:14px; padding:14px 16px; box-shadow:0 12px 34px rgba(0,0,0,.35); }
+  .tour-hi { position:relative; z-index:71 !important; outline:3px solid var(--gold); border-radius:12px;
+             box-shadow:0 0 0 6px rgba(202,152,39,.28); }
   #coachPanel { position:fixed; left:16px; bottom:84px; z-index:45; width:min(360px, calc(100vw - 32px));
                 background:var(--card); border:1.5px solid var(--gold); border-radius:14px;
                 box-shadow:0 10px 30px rgba(0,0,0,.25); display:flex; flex-direction:column; max-height:70vh; }
@@ -299,7 +305,7 @@
       </button>
       <div class="mlabel">Your courses</div>
       <div id="homeCourses" class="mrow" style="grid-template-columns:1fr 1fr"></div>
-      <button class="mbtn" style="width:100%;justify-content:center;margin-top:14px" onclick="toggleModes()"><span data-ico="home" data-sz="15"></span>All modes &amp; settings</button>
+      <button id="allModesBtn" class="mbtn" style="width:100%;justify-content:center;margin-top:14px" onclick="toggleModes()"><span data-ico="home" data-sz="15"></span>All modes &amp; settings</button>
       <div id="allModes" class="hidden">
       <div class="mlabel">Learn</div>
       <div class="mrow">
@@ -1490,6 +1496,7 @@ function renderHome(){
     renderHomeCourses();
     const sBtn=document.getElementById('soundBtn'); if(sBtn) sBtn.innerHTML = soundOn?ico('volume',15)+' Sound: On':ico('mute',15)+' Sound: Off';
     document.querySelectorAll('#homeMain [data-ico]:empty').forEach(el2 => { el2.innerHTML = ico(el2.dataset.ico, +(el2.dataset.sz||24)); });
+    setTimeout(maybeTour, 400);
   } else {
     renderLogin();
     main.classList.add('hidden');
@@ -1656,6 +1663,7 @@ function ensureFields(a){
   if(!a.tstats || typeof a.tstats!=='object') a.tstats={};        // per-topic [answered, correct] across every mode
   if(typeof a.diagAt!=='string') a.diagAt='';
   if(!Array.isArray(a.hist)) a.hist=[];                            // daily progress snapshots — the report's growth data
+  if(typeof a.tourDone!=='boolean') a.tourDone=false;
 }
 function dateStr(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function markActivity(){
@@ -2762,7 +2770,7 @@ function showLeaderboard(){ oconnect(()=>osend({t:'leaderboard'})); }
 let syncTimer=null;
 function syncPayload(){ const a=account; return { xp:a.xp, rp:a.rp, streak:a.streak, bestStreak:a.bestStreak,
   lastPlayed:a.lastPlayed, achievements:a.achievements, stats:a.stats, bestRun:a.bestRun,
-  lastDaily:a.lastDaily, weekPoints:a.weekPoints, weekId:a.weekId, diff:a.diff, vote:a.vote, skill:a.skill, topics:a.topics, misses:a.misses, verbalSkill:a.verbalSkill, lessonsDone:a.lessonsDone, tstats:a.tstats, diagAt:a.diagAt, hist:a.hist }; }
+  lastDaily:a.lastDaily, weekPoints:a.weekPoints, weekId:a.weekId, diff:a.diff, vote:a.vote, skill:a.skill, topics:a.topics, misses:a.misses, verbalSkill:a.verbalSkill, lessonsDone:a.lessonsDone, tstats:a.tstats, diagAt:a.diagAt, hist:a.hist, tourDone:a.tourDone }; }
 function syncUp(){ if(!oMe || !account) return; osend({t:'sync_up', data:syncPayload(), updatedAt:account.updatedAt||Date.now()}); }
 function scheduleSync(){ if(!oMe || !account || !ows || ows.readyState!==1) return; clearTimeout(syncTimer); syncTimer=setTimeout(syncUp, 3000); }
 function applySync(data){ if(!account || !data) return; Object.assign(account, data); ensureFields(account); syncXPFromAccount(); saveStore(); }
@@ -3358,6 +3366,55 @@ function diagAnswer(i){
       openGaps(); renderNextUp();
     } else renderDiagQ();
   }, ok?650:1400);
+}
+
+/* ===== One-time tour: every account gets walked through the app once ===== */
+let tourStep=0, tourOn=false;
+function tourSteps(){
+  const wide = window.innerWidth>=980;
+  return [
+    {t:'Welcome to Quizard', x:"Your SSAT training ground. Here's the 30-second tour — skip any time."},
+    {sel:'#nextUp', t:'Next up', x:'Quizard always picks your smartest next move and puts it right here. When in doubt, tap this.'},
+    {sel:'.koji-card', t:'Meet Sage', x:'Your coach. Ask for a hint, a lesson, or "what should I work on?" — a parent approves it once, then Sage lives bottom-left on every screen.'},
+    {sel:'#homeCourses', t:'Courses', x:'Lessons that build mastery topic by topic. The rings fill up as you go.'},
+    {sel:'#allModesBtn', t:'Everything else', x:'Full tests, practice, games, online races, the Knowledge Map, and settings all live under this button.'},
+    {sel:'.scratch-fab', t:'Scratch paper', x:'Bottom-right on every screen — work it out before you answer.'},
+    {sel: wide?'#sidebar':'.menu-fab', t:'Jump anywhere', x: wide?'The sidebar takes you straight to any mode.':'This menu button opens the sidebar from any screen.'},
+    {t:'One smart first move', x:'Take the 26-question diagnostic so Quizard can map what you already know and where the gaps are.', cta:true}
+  ];
+}
+function maybeTour(){
+  if (!account || account.tourDone || tourOn) return;
+  const main=document.getElementById('homeMain');
+  if (!main || main.classList.contains('hidden')) return;
+  tourOn=true; tourStep=0; renderTourStep();
+}
+function renderTourStep(){
+  clearTourHi();
+  const steps=tourSteps(), s=steps[tourStep];
+  let veil=document.getElementById('tourVeil');
+  if(!veil){ veil=document.createElement('div'); veil.id='tourVeil'; veil.onclick=tourNext; document.body.appendChild(veil); }
+  let card=document.getElementById('tourCard');
+  if(!card){ card=document.createElement('div'); card.id='tourCard'; document.body.appendChild(card); }
+  if(s.sel){ const el=document.querySelector(s.sel); if(el){ el.classList.add('tour-hi'); if(el.scrollIntoView) el.scrollIntoView({block:'center', behavior:'smooth'}); } }
+  card.innerHTML=`
+    <div style="font-weight:800;font-size:16px;color:var(--navy)">${s.t}</div>
+    <p style="font-size:13.5px;margin:6px 0 10px">${s.x}</p>
+    <div style="display:flex;align-items:center;gap:8px">
+      <span style="flex:1;font-size:11.5px;color:var(--gray)">${tourStep+1} of ${steps.length}</span>
+      <button class="seg" style="flex:none" onclick="endTour(false)">Skip</button>
+      ${s.cta?`<button class="btn" style="width:auto;padding:9px 16px" onclick="endTour(true)">Find my gaps</button>`
+             :`<button class="btn" style="width:auto;padding:9px 16px" onclick="tourNext()">Next</button>`}
+    </div>`;
+}
+function clearTourHi(){ document.querySelectorAll('.tour-hi').forEach(e=>e.classList.remove('tour-hi')); }
+function tourNext(){ tourStep++; if(tourStep>=tourSteps().length) endTour(false); else renderTourStep(); }
+function endTour(goDiag){
+  tourOn=false; clearTourHi();
+  const v=document.getElementById('tourVeil'); if(v) v.remove();
+  const c=document.getElementById('tourCard'); if(c) c.remove();
+  if(account && !account.tourDone){ account.tourDone=true; saveStore(); }
+  if(goDiag){ navTo('gaps'); startDiag(); }
 }
 
 /* ===== Windows install gate: web visitors on a PC get the download-the-app page ===== */
