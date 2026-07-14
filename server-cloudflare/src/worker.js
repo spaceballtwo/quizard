@@ -215,7 +215,8 @@ Rules you must follow:
 - Only math and SSAT study planning. If asked about anything else, kindly steer back in one short sentence.
 - Keep every reply under 150 words. Warm and encouraging, never condescending. Frame weak spots as next steps, never as failings.
 - Never ask for, repeat, or engage with personal information. If shared, ignore it and return to the math.
-- Plain text only; write math like "3/4" and "x^2".` : `You are Coach, the friendly math tutor inside Quizard, an SSAT prep app used by students in grades 8-11.
+- Plain text only; write math like "3/4" and "x^2".
+- Work every calculation out carefully step by step before replying, and double-check each arithmetic result. Order of operations: parentheses, exponents, then multiplication AND division together left to right, then addition AND subtraction together left to right — multiplication does NOT come before division, and a wrong number in a reply is the worst mistake you can make.` : `You are Coach, the friendly math tutor inside Quizard, an SSAT prep app used by students in grades 8-11.
 
 THE PROBLEM ON SCREEN:
 ${scrub(ctx.q).slice(0,400)}
@@ -227,15 +228,16 @@ Rules you must follow:
 - Only discuss this problem and directly related math concepts. If asked about anything else, kindly steer back to the math in one short sentence.
 - Keep every reply under 120 words. Be warm and encouraging, never condescending. Use short steps.
 - Guide with a hint or question first; give the full worked solution when the student asks directly or stays stuck.
+- Work every calculation out carefully step by step before replying, and double-check each arithmetic result. Order of operations: parentheses, exponents, then multiplication AND division together left to right, then addition AND subtraction together left to right — multiplication does NOT come before division, and a wrong number in a reply is the worst mistake you can make.
 - Never ask for, repeat, or engage with personal information (names, school, location, contact info). If the student shares any, ignore it and return to the math.
 - Plain text only, no headers or LaTeX; write math like "3/4" and "x^2".`;
 
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'x-api-key': this.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-      body: JSON.stringify({ model: 'claude-sonnet-5', max_tokens: 500, thinking: { type: 'disabled' }, system, messages: msgs })
+      body: JSON.stringify({ model: 'claude-sonnet-5', max_tokens: 2500, thinking: { type: 'adaptive' }, output_config: { effort: 'medium' }, system, messages: msgs })
     });
-    if (!resp.ok) return json({ error: 'upstream', status: resp.status }, 502);
+    if (!resp.ok) return json({ error: 'upstream', status: resp.status, detail: (await resp.text()).slice(0, 300) }, 502);
     const data = await resp.json();
     if (data.stop_reason === 'refusal') return json({ reply: "Let's stick to the math — want me to walk through this problem step by step?" });
     const reply = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
@@ -273,7 +275,7 @@ Warm and professional, like a good tutor's note home. Refer to the student as "y
       headers: { 'x-api-key': this.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
       body: JSON.stringify({ model: 'claude-sonnet-5', max_tokens: 450, thinking: { type: 'disabled' }, system, messages: [{ role: 'user', content: 'Fact sheet: ' + facts }] })
     });
-    if (!resp.ok) return json({ error: 'upstream', status: resp.status }, 502);
+    if (!resp.ok) return json({ error: 'upstream', status: resp.status, detail: (await resp.text()).slice(0, 300) }, 502);
     const data = await resp.json();
     const reply = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
     u.reportCount++;
