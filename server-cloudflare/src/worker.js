@@ -190,7 +190,7 @@ export class QuizardLobby {
     const day = new Date().toISOString().slice(0, 10);
     if (u.tutorDay !== day){ u.tutorDay = day; u.tutorCount = 0; }
     // Unlimited plan lifts the daily cap (200 is a fair-use ceiling, not a advertised limit)
-    const cap = (u.data && u.data.premiumPlan === 'unlimited') ? 200 : 30;
+    const cap = (u.data && u.data.premiumPlan === 'unlimited') ? 100 : 30;
     if (u.tutorCount >= cap) return json({ error: 'limit' }, 429);
     if (!this.env.ANTHROPIC_API_KEY) return json({ error: 'inactive' }, 503);
 
@@ -245,7 +245,7 @@ Rules you must follow:
     const reply = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
     u.tutorCount++;
     await this.putUser(key, u);
-    const capLeft = ((u.data && u.data.premiumPlan === 'unlimited') ? 200 : 30) - u.tutorCount;
+    const capLeft = ((u.data && u.data.premiumPlan === 'unlimited') ? 100 : 30) - u.tutorCount;
     return json({ reply: reply || "Hmm, try asking that another way?", left: capLeft });
   }
 
