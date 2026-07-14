@@ -385,7 +385,7 @@
 </div>
 
 <script>
-const APP_VERSION = '0.14.2';
+const APP_VERSION = '0.15.0';
 /* ===== Local accounts: each person has their own on-device SSAT account ===== */
 let store = { accounts: [], currentId: null };
 function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
@@ -1002,25 +1002,132 @@ function genExponentQuotient(){
     [e1+e2+e3, e1*e2-e3, ans+1, ans-1],
     `Multiplying adds exponents (${e1}+${e2}=${e1+e2}); dividing subtracts: ${e1+e2} − ${e3} = ${ans}.`);
 }
+/* ===== v0.15.0: wider bank — new generators in every tier ===== */
+function genRoundEstimate(){
+  const a=rnd(31,89), b=rnd(11,29), exact=a*b, correct=Math.round(exact/100)*100;
+  return Q(`Which is the best estimate of ${a} × ${b}, rounded to the nearest hundred?`, correct,
+    [correct+100, correct-100, correct+200, Math.round(exact/10)*10],
+    `${a} × ${b} = ${exact}, which rounds to ${correct}.`);
+}
+function genUnitPrice(){
+  const unit=rnd(2,9)*25, n=rnd(3,8), m=rnd(9,15);
+  const total=(n*unit)/100, ans=(m*unit)/100;
+  return Q(`${n} pencils cost $${total.toFixed(2)}. At the same price, how much do ${m} pencils cost?`,
+    ans, [ans+1, ans-1, ans*2, total+(m-n)],
+    `One pencil costs $${(unit/100).toFixed(2)}; ${m} × $${(unit/100).toFixed(2)} = $${ans.toFixed(2)}.`,
+    v=>`$${(+v).toFixed(2)}`);
+}
+function genDozenCost(){
+  const price=rnd(2,6), dozens=rnd(3,7), n=dozens*12, ans=dozens*price;
+  return Q(`Eggs cost $${price} per dozen. How much do ${n} eggs cost?`, ans,
+    [ans+price, ans-price, n*price, ans+1], `${n} eggs = ${dozens} dozen; ${dozens} × $${price} = $${ans}.`, money);
+}
+function genPerimeterTri(){
+  const a=rnd(5,14), b=rnd(6,15), c=rnd(Math.abs(a-b)+2, a+b-1), p=a+b+c;
+  return Q(`A triangle has sides of length ${a}, ${b}, and ${c}. What is its perimeter?`, p,
+    [p+2, p-2, a*b, p+c], `Perimeter = ${a} + ${b} + ${c} = ${p}.`);
+}
+function genAvgOfList(){
+  const avg=rnd(6,15), s=rnd(0,2);
+  const vals=[avg-3-s, avg-1, avg+1, avg+3+s];
+  return Q(`What is the average (mean) of ${vals.join(', ')}?`, avg,
+    [avg+1, avg-1, avg+2, vals[3]], `The sum is ${4*avg}; ${4*avg} ÷ 4 = ${avg}.`);
+}
+function genTipTotal(){
+  const bill=rnd(2,5)*20, tp=choice([10,15,20]), tip=bill*tp/100, total=bill+tip;
+  return Q(`A dinner bill is $${bill}. With a ${tp}% tip, what is the total paid?`, total,
+    [bill+tp, tip, total+5, total-5], `Tip = ${tp}% of $${bill} = $${tip}; total = $${bill} + $${tip} = $${total}.`, money);
+}
+function genScaleMap(){
+  const per=rnd(3,9), inches=rnd(3,8), miles=per*inches;
+  return Q(`On a map, 1 inch represents ${per} miles. Two towns are ${inches} inches apart on the map. How many miles apart are they?`,
+    miles, [miles+per, miles-per, per+inches, inches*10], `${inches} × ${per} = ${miles} miles.`);
+}
+function genRectDiagonal(){
+  const t=choice([[3,4,5],[6,8,10],[5,12,13],[9,12,15],[8,15,17]]);
+  return Q(`A rectangle is ${t[0]} units by ${t[1]} units. How long is its diagonal?`, t[2],
+    [t[0]+t[1], t[2]+1, t[2]-1, t[1]+2],
+    `The diagonal makes a right triangle: ${t[0]}² + ${t[1]}² = ${t[0]*t[0]+t[1]*t[1]} = ${t[2]}².`);
+}
+function genPercentOfWhat(){
+  const whole=rnd(2,8)*20, p=choice([20,25,30,40,60,75]), part=whole*p/100;
+  return Q(`${part} is ${p}% of what number?`, whole,
+    [part+p, whole+10, whole-10, part*2], `If ${p}% of n is ${part}, then n = ${part} ÷ ${(p/100)} = ${whole}.`);
+}
+function genProbNot(){
+  const r=rnd(2,5), b=rnd(3,6), g=rnd(2,5), tot=r+b+g, not=b+g;
+  const fr=(x,y)=>{ const d=gcd(x,y); return (x/d)+'/'+(y/d); };
+  return QS(`A bag has ${r} red, ${b} blue, and ${g} green marbles. One is drawn at random. What is the probability it is NOT red?`,
+    fr(not,tot), [fr(r,tot), fr(b,tot), fr(g,tot), fr(not-1,tot), fr(r+1,tot), '1/2', fr(not,not+1)],
+    `${not} of the ${tot} marbles are not red → ${fr(not,tot)}.`);
+}
+function genDataRange(){
+  const vals=Array.from({length:5},()=>rnd(3,40));
+  const mx=Math.max(...vals), mn=Math.min(...vals), range=mx-mn;
+  if (range===0) return genDataRange();
+  return Q(`What is the range of this data set: ${vals.join(', ')}?`, range,
+    [mx, mn, mx+mn, Math.round(vals.reduce((a,c)=>a+c,0)/5)], `Range = greatest − least = ${mx} − ${mn} = ${range}.`);
+}
+function genCompoundRatio(){
+  const a=rnd(2,4), b=rnd(3,5), c=rnd(2,4), d=rnd(3,5), k=rnd(2,4);
+  const cherries=k*b*d, apples=k*a*c;
+  return Q(`In a fruit bowl the ratio of apples to bananas is ${a}:${b}, and the ratio of bananas to cherries is ${c}:${d}. If there are ${cherries} cherries, how many apples are there?`,
+    apples, [k*a*d, k*b*c, cherries-apples, a*c],
+    `Chain the ratios: apples:bananas:cherries = ${a*c}:${b*c}:${b*d}. Cherries ${cherries} = ${k} × ${b*d}, so apples = ${k} × ${a*c} = ${apples}.`);
+}
+function genMidpoint(){
+  const x1=rnd(1,9), y1=rnd(1,9), x2=x1+2*rnd(1,5), y2=y1+2*rnd(1,5);
+  const mx=(x1+x2)/2, my=(y1+y2)/2;
+  return pickQ(`What is the midpoint of the segment from (${x1}, ${y1}) to (${x2}, ${y2})?`,
+    `(${mx}, ${my})`,
+    [`(${x2-x1}, ${y2-y1})`, `(${mx+1}, ${my})`, `(${mx}, ${my+1})`, `(${x1+x2}, ${y1+y2})`],
+    `Average each coordinate: ((${x1}+${x2})/2, (${y1}+${y2})/2) = (${mx}, ${my}).`);
+}
+function genSuccessivePercent(){
+  const pick=choice([[50, rnd(2,8)*10], [20, rnd(1,5)*25], [25, choice([16,32,48,64,80])]]);
+  const p=pick[0], base=pick[1];
+  const up=base*(1+p/100), fin=up*(1-p/100);
+  return Q(`A price of $${base} is increased by ${p}%, then the new price is decreased by ${p}%. What is the final price?`,
+    fin, [base, up, base-(base-fin), fin-1],
+    `Up ${p}%: $${up}. Down ${p}% of $${up}: $${up*p/100}. Final: $${fin} — not back to $${base}, because the decrease acts on a bigger number.`, money);
+}
+function genUnitsDigit(){
+  const bse=choice([2,3,7,8]), e=rnd(11,39);
+  const cyc={2:[2,4,8,6],3:[3,9,7,1],7:[7,9,3,1],8:[8,4,2,6]}[bse];
+  const ans=cyc[(e-1)%4];
+  return Q(`What is the units digit of ${bse}^${e}?`, ans,
+    [cyc[e%4], cyc[(e+1)%4], cyc[(e+2)%4], bse],
+    `Units digits of powers of ${bse} cycle: ${cyc.join(', ')}, repeating every 4. ${e} = 4×${Math.floor((e-1)/4)} + ${(e-1)%4+1}, so it lands on ${ans}.`);
+}
+function genVennNeither(){
+  const both=rnd(3,8), aOnly=rnd(5,12), bOnly=rnd(4,10), neither=rnd(2,9);
+  const total=both+aOnly+bOnly+neither;
+  return Q(`In a class of ${total} students, ${aOnly+both} play soccer and ${bOnly+both} play chess. ${both} students play both. How many play neither?`,
+    neither, [total-(aOnly+bOnly+both), neither+both, total-both, aOnly+bOnly],
+    `Soccer or chess = ${aOnly+both} + ${bOnly+both} − ${both} = ${aOnly+bOnly+both}. Neither = ${total} − ${aOnly+bOnly+both} = ${neither}.`);
+}
 const STRETCH_GENS = [genRemovedAverage, genPipesTogether, genTwoVarWord, genRectRatioArea, genExponentQuotient];
 
 /* Difficulty tiers — every practice set draws a balanced mix (L1 easier / L2 medium / L3 hard). */
 const L1_GENS = [
   genProportion, genPercentRed, genTriangleArea, genBoxVolume, genRemainder, genMedian,
   genSequence, genMultiStepWord, genFractionOf, genPerimeterRect, genOrderOps, genNegatives, genTimeConvert,
-  genFigRect, genFigShaded, genFigBars
+  genFigRect, genFigShaded, genFigBars,
+  genRoundEstimate, genUnitPrice, genDozenCost, genPerimeterTri, genAvgOfList
 ];
 const L2_GENS = [
   genTwoSideLinear, genSolveExpression, genRatio, genPercentIncrease, genReversePercent,
   genPythagoras, genExponentSolve, genAverageMissing, genConsecutive, genCoordDistance, genRatioShare,
   genFractionAdd, genMode, genAngleTriangle, genDiscount, genSimpleProb, genSlope, genSquareRootEq,
   genWorkBackwards, genCountingPrinciple, genMixedPowers, genConsecutiveEven,
-  genFigRightTri, genFigTriArea, genFigSpinner
+  genFigRightTri, genFigTriArea, genFigSpinner,
+  genTipTotal, genScaleMap, genRectDiagonal, genPercentOfWhat, genProbNot, genDataRange
 ];
 const L3_GENS = [
   genExponentEval, genPercentOfPercent, genCustomOp, genLcm, genAgeProblem,
   genInequalityInt, genPolygonAngles, genAvgSpeed, genExpRules,
-  genSystemEq, genFactoredQuad, genFunctionEval, genTwoEvents, genThreeRatio
+  genSystemEq, genFactoredQuad, genFunctionEval, genTwoEvents, genThreeRatio,
+  genCompoundRatio, genMidpoint, genSuccessivePercent, genUnitsDigit, genVennNeither
 ];
 const QUANT_GENS = [...L1_GENS, ...L2_GENS, ...L3_GENS];
 
@@ -1123,9 +1230,24 @@ const EASY_GENS = [genEzAdd,genEzSub,genEzMul,genEzDiv,genEzHalf,genEzMissing,ge
 
 function isEasy(){ return account && account.diff==='easy'; }
 /* Draw `count` questions from a generator list, cycling a shuffled bag so topics don't repeat early. */
+const RECENT_STEMS = [];
+function unseen(make){
+  let q = make();
+  for (let i=0; i<7 && RECENT_STEMS.includes(q.q); i++) q = make();
+  RECENT_STEMS.push(q.q);
+  if (RECENT_STEMS.length > 120) RECENT_STEMS.shift();
+  return q;
+}
+/* Multiple choice from ready-made distinct strings (coordinates, ratios) */
+function pickQ(q, correct, wrongs, why){
+  const opts = [correct];
+  for (const w of wrongs){ if (opts.length>=5) break; if (w!==correct && !opts.includes(w)) opts.push(w); }
+  shuffle(opts);
+  return { q, choices: opts, answer: opts.indexOf(correct), why };
+}
 function takeFrom(list, count){
   const out=[]; let bag=[];
-  for(let i=0;i<count;i++){ if(!bag.length) bag=shuffle(list.slice()); const g=bag.pop(); const q=g(); q._gen=g; out.push(q); }
+  for(let i=0;i<count;i++){ if(!bag.length) bag=shuffle(list.slice()); const g=bag.pop(); const q=unseen(g); q._gen=g; out.push(q); }
   return out;
 }
 /* Balanced set: standard ≈ 30% easier / 45% medium / 25% hard; easy mode mixes basics with L1. */
@@ -1219,6 +1341,81 @@ function genAnalogy(){
 /* ================= Verbal & Reading pools — SSAT-level ================= */
 const POOL = {
   synonyms: [
+    { q:"ABHOR", choices:["admire","detest","forget","confuse","carry"], answer:1, why:"To abhor is to hate intensely — detest." },
+    { q:"ADEPT", choices:["clumsy","skillful","angry","distant","loud"], answer:1, why:"Adept means highly skilled." },
+    { q:"ADVERSE", choices:["favorable","unfavorable","identical","public","eager"], answer:1, why:"Adverse means harmful or unfavorable." },
+    { q:"AFFABLE", choices:["hostile","friendly","wealthy","dishonest","tired"], answer:1, why:"Affable means warm and friendly." },
+    { q:"AMBIGUOUS", choices:["unclear","enormous","certain","brave","narrow"], answer:0, why:"Ambiguous means open to more than one meaning — unclear." },
+    { q:"ARDUOUS", choices:["effortless","difficult","brief","joyful","silent"], answer:1, why:"Arduous means requiring great effort — difficult." },
+    { q:"AUDACIOUS", choices:["timid","bold","careful","quiet","ordinary"], answer:1, why:"Audacious means daring — bold." },
+    { q:"ADMONISH", choices:["praise","scold","admire","forget","astonish"], answer:1, why:"To admonish is to warn or reprimand — scold." },
+    { q:"BANAL", choices:["original","commonplace","dangerous","brilliant","hidden"], answer:1, why:"Banal means boring from overuse — commonplace." },
+    { q:"BELLIGERENT", choices:["peaceful","hostile","beautiful","loyal","brilliant"], answer:1, why:"Belligerent means aggressive and ready to fight — hostile." },
+    { q:"BREVITY", choices:["shortness","courage","weight","honesty","noise"], answer:0, why:"Brevity means shortness, especially of speech or writing." },
+    { q:"CANDID", choices:["secretive","honest","clever","nervous","famous"], answer:1, why:"Candid means truthful and direct — honest." },
+    { q:"CHRONIC", choices:["sudden","constant","curable","mild","final"], answer:1, why:"Chronic means persisting for a long time — constant." },
+    { q:"COERCE", choices:["persuade gently","force","reward","release","admire"], answer:1, why:"To coerce is to compel by pressure or threats — force." },
+    { q:"CONCISE", choices:["wordy","brief","confusing","polite","slow"], answer:1, why:"Concise means giving much information in few words — brief." },
+    { q:"CORDIAL", choices:["warm","frozen","rude","brief","distant"], answer:0, why:"Cordial means warm and friendly." },
+    { q:"DEARTH", choices:["abundance","scarcity","death","celebration","valley"], answer:1, why:"A dearth is a shortage — scarcity. (Trap: it is not 'death.')" },
+    { q:"STEADFAST", choices:["wavering","unwavering","speedy","stubborn","heavy"], answer:1, why:"Steadfast means firmly loyal and constant — unwavering." },
+    { q:"DISDAIN", choices:["respect","contempt","surprise","patience","delight"], answer:1, why:"Disdain is the feeling that something is beneath you — contempt." },
+    { q:"DOCILE", choices:["stubborn","obedient","fierce","clumsy","proud"], answer:1, why:"Docile means easy to teach or control — obedient." },
+    { q:"ECCENTRIC", choices:["ordinary","peculiar","electric","careful","central"], answer:1, why:"Eccentric means unconventional — peculiar." },
+    { q:"ELATED", choices:["overjoyed","exhausted","late","angry","calm"], answer:0, why:"Elated means extremely happy — overjoyed." },
+    { q:"DILAPIDATED", choices:["brand-new","run-down","enormous","expanded","polished"], answer:1, why:"Dilapidated means falling apart from neglect — run-down." },
+    { q:"ENIGMA", choices:["answer","mystery","insult","celebration","engine"], answer:1, why:"An enigma is a puzzle — a mystery." },
+    { q:"FEASIBLE", choices:["impossible","possible","expensive","invisible","required"], answer:1, why:"Feasible means able to be done — possible." },
+    { q:"EXEMPLARY", choices:["shameful","outstanding","typical","excused","visible"], answer:1, why:"Exemplary means serving as a model of excellence — outstanding." },
+    { q:"FUTILE", choices:["useless","fertile","powerful","upcoming","rare"], answer:0, why:"Futile means producing no result — useless. (Trap: not 'fertile.')" },
+    { q:"GRATUITOUS", choices:["grateful","unnecessary","expensive","generous","pleasant"], answer:1, why:"Gratuitous means uncalled for — unnecessary. (Trap: not 'grateful.')" },
+    { q:"GREGARIOUS", choices:["solitary","sociable","enormous","greedy","cautious"], answer:1, why:"Gregarious means fond of company — sociable." },
+    { q:"FORTITUDE", choices:["weakness","courage","fortress","luck","wealth"], answer:1, why:"Fortitude is strength in facing difficulty — courage. (Trap: not 'fortress.')" },
+    { q:"IMMINENT", choices:["distant","about to happen","famous","impossible","enormous"], answer:1, why:"Imminent means about to happen. (Trap: not 'eminent,' which means famous.)" },
+    { q:"IMPARTIAL", choices:["biased","fair","incomplete","emotional","royal"], answer:1, why:"Impartial means treating all sides equally — fair." },
+    { q:"INDIFFERENT", choices:["unconcerned","unique","angry","similar","curious"], answer:0, why:"Indifferent means having no interest — unconcerned. (Trap: not 'different.')" },
+    { q:"INDUSTRIOUS", choices:["mechanical","hardworking","wealthy","polluted","idle"], answer:1, why:"Industrious means diligent and hardworking. (Trap: not about industry/factories.)" },
+    { q:"INEVITABLE", choices:["avoidable","unavoidable","invisible","unlikely","instant"], answer:1, why:"Inevitable means certain to happen — unavoidable." },
+    { q:"INGENIOUS", choices:["honest","clever","naive","famous","stubborn"], answer:1, why:"Ingenious means brilliantly inventive — clever. (Trap: not 'ingenuous,' which means innocent.)" },
+    { q:"JUBILANT", choices:["mournful","triumphant","jealous","quiet","confused"], answer:1, why:"Jubilant means expressing great joy, especially at success — triumphant." },
+    { q:"KEEN", choices:["dull","sharp","kind","distant","loud"], answer:1, why:"Keen means sharp — of blades, minds, or senses." },
+    { q:"LAMENT", choices:["celebrate","mourn","repair","ignore","decide"], answer:1, why:"To lament is to express grief — mourn." },
+    { q:"LETHARGIC", choices:["energetic","sluggish","deadly","logical","brave"], answer:1, why:"Lethargic means lacking energy — sluggish. (Trap: not 'lethal.')" },
+    { q:"IMPETUOUS", choices:["cautious","impulsive","impressive","slow","kind"], answer:1, why:"Impetuous means acting quickly without thought — impulsive." },
+    { q:"MALICE", choices:["kindness","ill will","sickness","palace","skill"], answer:1, why:"Malice is the desire to harm others — ill will." },
+    { q:"LAVISH", choices:["meager","extravagant","clean","lawful","hidden"], answer:1, why:"Lavish means rich and abundant — extravagant." },
+    { q:"MUNDANE", choices:["extraordinary","ordinary","worldwide","lunar","brief"], answer:1, why:"Mundane means dull and ordinary." },
+    { q:"NONCHALANT", choices:["anxious","casually calm","rude","freezing","brand-new"], answer:1, why:"Nonchalant means coolly unconcerned — casually calm." },
+    { q:"NOVICE", choices:["expert","beginner","author","priest","idea"], answer:1, why:"A novice is someone new to a field — a beginner." },
+    { q:"OBSOLETE", choices:["current","outdated","stubborn","invisible","required"], answer:1, why:"Obsolete means no longer in use — outdated." },
+    { q:"OMINOUS", choices:["reassuring","threatening","all-knowing","enormous","forgetful"], answer:1, why:"Ominous means suggesting something bad will happen — threatening. (Trap: not 'omniscient.')" },
+    { q:"OPAQUE", choices:["transparent","not see-through","shiny","fragile","pale"], answer:1, why:"Opaque means light cannot pass through — not see-through." },
+    { q:"PENSIVE", choices:["thoughtful","expensive","locked-up","cheerful","generous"], answer:0, why:"Pensive means deeply thoughtful." },
+    { q:"PERILOUS", choices:["safe","dangerous","precious","parallel","brief"], answer:1, why:"Perilous means full of danger." },
+    { q:"MOROSE", choices:["cheerful","gloomy","curious","generous","proud"], answer:1, why:"Morose means sullen and gloomy." },
+    { q:"PRAGMATIC", choices:["idealistic","practical","talkative","proud","magnetic"], answer:1, why:"Pragmatic means dealing with things sensibly — practical." },
+    { q:"PROFOUND", choices:["shallow","deep","discovered","loud","common"], answer:1, why:"Profound means very deep — of ideas or feelings." },
+    { q:"OBSCURE", choices:["famous","little-known","dark-colored","rude","careful"], answer:1, why:"Obscure means not well known — little-known." },
+    { q:"QUELL", choices:["ignite","suppress","question","celebrate","measure"], answer:1, why:"To quell is to put an end to — suppress." },
+    { q:"RECLUSIVE", choices:["outgoing","solitary","famous","reckless","included"], answer:1, why:"Reclusive means avoiding the company of others — solitary." },
+    { q:"RELINQUISH", choices:["seize","give up","enjoy","repeat","polish"], answer:1, why:"To relinquish is to let go of — give up." },
+    { q:"PRISTINE", choices:["ruined","spotless","ancient","printed","valuable"], answer:1, why:"Pristine means in perfect, unspoiled condition — spotless." },
+    { q:"REVERE", choices:["despise","deeply respect","reverse","remember","fear"], answer:1, why:"To revere is to feel deep respect for." },
+    { q:"SAGACIOUS", choices:["foolish","wise","salty","aggressive","slow"], answer:1, why:"Sagacious means having keen judgment — wise. (Like Sage!)" },
+    { q:"QUANDARY", choices:["certainty","dilemma","quarry","quantity","celebration"], answer:1, why:"A quandary is a state of uncertainty about what to do — a dilemma." },
+    { q:"SERENE", choices:["turbulent","peaceful","royal","damp","musical"], answer:1, why:"Serene means calm and untroubled — peaceful." },
+    { q:"SKEPTICAL", choices:["trusting","doubtful","frightened","precise","hopeful"], answer:1, why:"Skeptical means inclined to doubt." },
+    { q:"SOLACE", choices:["distress","comfort","sunlight","loneliness","advice"], answer:1, why:"Solace is comfort in sorrow." },
+    { q:"SUBTLE", choices:["obvious","delicate","underground","brief","double"], answer:1, why:"Subtle means so fine it is hard to notice — delicate." },
+    { q:"SUPERFLUOUS", choices:["essential","unnecessary","superb","fluid","strong"], answer:1, why:"Superfluous means more than is needed — unnecessary." },
+    { q:"TENACIOUS", choices:["yielding","persistent","gentle","ten-sided","temporary"], answer:1, why:"Tenacious means holding on firmly — persistent." },
+    { q:"TERSE", choices:["long-winded","curt","tense","polite","smooth"], answer:1, why:"Terse means using very few words — curt." },
+    { q:"TRANQUIL", choices:["chaotic","peaceful","fast-moving","clear","sleepy"], answer:1, why:"Tranquil means free from disturbance — peaceful." },
+    { q:"UBIQUITOUS", choices:["rare","everywhere","unique","enormous","invisible"], answer:1, why:"Ubiquitous means found everywhere." },
+    { q:"VIGILANT", choices:["careless","watchful","violent","energetic","forgiving"], answer:1, why:"Vigilant means keeping careful watch — watchful." },
+    { q:"VIVID", choices:["dull","strikingly bright","alive","angry","huge"], answer:1, why:"Vivid means intensely bright or clear — strikingly bright." },
+    { q:"WARY", choices:["trusting","cautious","exhausted","warm","strange"], answer:1, why:"Wary means on guard — cautious. (Trap: not 'weary,' which means tired.)" },
+    { q:"TREPIDATION", choices:["confidence","dread","excitement","dizziness","anger"], answer:1, why:"Trepidation is trembling fear — dread." },
     { q:"GARRULOUS", choices:["talkative","gloomy","generous","clumsy","shy"], answer:0, why:"Garrulous means excessively talkative." },
     { q:"OBSTINATE", choices:["timid","stubborn","cheerful","brief","polite"], answer:1, why:"Obstinate means stubborn." },
     { q:"EPHEMERAL", choices:["eternal","fleeting","colorful","heavy","ancient"], answer:1, why:"Ephemeral means lasting a very short time — fleeting." },
@@ -1310,6 +1507,11 @@ function topicUnlocked(i){
 function pathComplete(){ return TOPICS.every(t=> topicScore(t.id) >= TOPIC_MASTERY); }
 
 /* Wrong answer -> the exact lesson for that question's topic */
+[['basics',[genRoundEstimate]], ['ratios',[genUnitPrice,genScaleMap,genCompoundRatio]],
+ ['wordproblems',[genDozenCost,genVennNeither]], ['triangles',[genPerimeterTri,genRectDiagonal]],
+ ['averages',[genAvgOfList,genDataRange]], ['percents',[genTipTotal,genPercentOfWhat,genSuccessivePercent]],
+ ['probability',[genProbNot]], ['coordinate',[genMidpoint]], ['patterns',[genUnitsDigit]]
+].forEach(([id,gens])=>{ const t=TOPICS[topicIdxById(id)]; if(t) t.gens.push(...gens); });
 const GEN_TOPIC = new Map();
 TOPICS.forEach((t,i)=> t.gens.forEach(g => GEN_TOPIC.set(g, i)));
 function lessonLinkHTML(q){
@@ -2290,7 +2492,7 @@ function startVerbal(kind){
   loadStudy();
 }
 function setStudySection(sec){ studySection=sec; loadStudy(); }
-function getStudyQuestion(){ const g = pickGen(); const q = g(); q._gen = g; return { q, label:'Math', tier: lastPickTier }; }
+function getStudyQuestion(){ const g = pickGen(); const q = unseen(g); q._gen = g; return { q, label:'Math', tier: lastPickTier }; }
 /* Verbal preview: analogies + reading from the hand-written pool (small on purpose — it's a taste test) */
 function getVerbalQuestion(){
   const kind = verbalKind==='mixed' ? choice(['analogies','reading','synonyms']) : verbalKind;
@@ -2298,9 +2500,9 @@ function getVerbalQuestion(){
     const q = Math.random()<0.12 ? choice(POOL.analogies) : genAnalogy();
     return { q, label:'Analogies', vkind:'analogies' };
   }
-  if (kind==='synonyms') return { q: choice(POOL.synonyms), label:'Synonyms', vkind:'synonyms' };
-  const p = choice(POOL.reading), q = choice(p.questions);
-  return { q, passage:p.passage, label:'Reading', vkind:'reading' };
+  if (kind==='synonyms') return { q: unseen(()=>choice(POOL.synonyms)), label:'Synonyms', vkind:'synonyms' };
+  const q = unseen(()=>{ const p=choice(POOL.reading); const qq=choice(p.questions); qq._passage=p.passage; return qq; });
+  return { q, passage:q._passage, label:'Reading', vkind:'reading' };
 }
 function updateVerbalSkill(kind, ok){
   if (!account || !kind) return;
@@ -3071,7 +3273,7 @@ function getReviewQuestion(){
   return { q, passage:mm.passage, label:'Review · '+account.misses.length+' left', tier:1 };
 }
 function getTopicQuestion(){
-  const g = drawBag(topicGens, 'topic_'+topicTitle); const q = g(); q._gen = g;
+  const g = drawBag(topicGens, 'topic_'+topicTitle); const q = unseen(g); q._gen = g;
   return { q, label: topicTitle, tier: 1 };
 }
 function closeLearn(){
@@ -3279,6 +3481,47 @@ function coachChip(text){
 }
 
 /* ===== Knowledge Map + Diagnostic: what you know, where the gaps are ===== */
+function drawHistChart(id){
+  const c=document.getElementById(id); if(!c || !account) return;
+  const h=(account.hist||[]).slice();
+  const today=dateStr(new Date());
+  const now={ d:today, sk:+(account.skill||2), va:+(account.verbalSkill.analogies||2),
+              vr:+(account.verbalSkill.reading||2), vs:+(account.verbalSkill.synonyms||2),
+              ans:account.stats.answered||0 };
+  if (!h.length || h[h.length-1].d!==today) h.push(now); else h[h.length-1]=now;
+  const W=c.clientWidth||540, H=c.clientHeight||180, dpr=window.devicePixelRatio||1;
+  c.width=W*dpr; c.height=H*dpr;
+  const x=c.getContext('2d'); if(!x) return;
+  x.scale(dpr,dpr); x.clearRect(0,0,W,H);
+  const padL=24,padR=6,padT=8,padB=16, iw=W-padL-padR, ih=H-padT-padB, n=h.length;
+  const X=i=> padL + (n===1 ? iw/2 : i*(iw/(n-1)));
+  const Y=v=> padT + ih - ((Math.min(10,Math.max(1,v))-1)/9)*ih;
+  x.strokeStyle='#e8e0c9'; x.fillStyle='#8a815f'; x.font='10px sans-serif'; x.lineWidth=1;
+  [2,4,6,8,10].forEach(v=>{ x.beginPath(); x.moveTo(padL,Y(v)); x.lineTo(W-padR,Y(v)); x.stroke(); x.fillText(v, 6, Y(v)+3); });
+  const deltas=h.map((p,i)=> i ? Math.max(0,(p.ans||0)-(h[i-1].ans||0)) : 0);
+  const mxD=Math.max(1,...deltas);
+  x.fillStyle='rgba(202,152,39,.28)';
+  deltas.forEach((d,i)=>{ if(!d) return; const bh=(d/mxD)*ih*0.5; x.fillRect(X(i)-3, padT+ih-bh, 6, bh); });
+  const line=(get,color)=>{ x.strokeStyle=color; x.lineWidth=2; x.beginPath();
+    h.forEach((p,i)=>{ const yy=Y(get(p)); i ? x.lineTo(X(i),yy) : x.moveTo(X(i),yy); }); x.stroke();
+    h.forEach((p,i)=>{ x.fillStyle=color; x.beginPath(); x.arc(X(i),Y(get(p)),2.5,0,7); x.fill(); }); };
+  line(p=>((p.sk||2)+(p.va||2)+(p.vr||2)+(p.vs||2))/4, '#2f9150');
+  line(p=>p.sk||2, '#263048');
+  x.fillStyle='#8a815f';
+  x.fillText(h[0].d.slice(5), padL, H-4);
+  if(n>1) x.fillText(h[n-1].d.slice(5), W-padR-32, H-4);
+}
+function chartBlockHTML(cid){
+  const days=(account.hist||[]).length;
+  return `
+    <canvas id="${cid}" style="width:100%;height:180px;display:block"></canvas>
+    <div style="display:flex;gap:14px;font-size:11.5px;color:var(--gray);margin:4px 0 2px">
+      <span><span style="display:inline-block;width:10px;height:3px;background:#2f9150;vertical-align:middle"></span> average skill</span>
+      <span><span style="display:inline-block;width:10px;height:3px;background:#263048;vertical-align:middle"></span> math skill</span>
+      <span><span style="display:inline-block;width:8px;height:8px;background:rgba(202,152,39,.4);vertical-align:middle"></span> questions that day</span>
+    </div>
+    ${days<2?'<p class="section-instr" style="margin-top:4px">The graph fills in as you practice on more days.</p>':''}`;
+}
 function topicVerdict(i){
   const t=TOPICS[i], s=(account.tstats||{})[i], m=Math.min(topicScore(t.id),TOPIC_MASTERY);
   const missCount=(account.misses||[]).filter(mm=>mm.ti===i).length;
@@ -3329,6 +3572,9 @@ function openGaps(){
       ${account.diagAt
         ? `<button class="btn secondary" onclick="startDiag()">Retake the diagnostic</button>`
         : `<button class="btn" onclick="startDiag()">Start the diagnostic (26 questions)</button>`}
+      <div class="mlabel">Everything so far</div>
+      ${chartBlockHTML('gapChart')}
+      ${reportFactsRows(reportFacts())}
       ${section('Gaps to close','var(--red)',groups.gap)}
       ${section('Getting there','var(--gold)',groups.mid)}
       ${section('Strong','var(--green)',groups.strong)}
@@ -3336,6 +3582,7 @@ function openGaps(){
       <div class="mlabel">Verbal</div>
       ${vRow('analogies','Analogies')}${vRow('reading','Reading')}${vRow('synonyms','Synonyms')}
     </div>`;
+  drawHistChart('gapChart');
   window.scrollTo({top:0,behavior:'smooth'});
 }
 /* Diagnostic: 2 questions from every topic, shuffled, no XP — pure measurement. */
@@ -3383,6 +3630,7 @@ function diagAnswer(i){
 
 /* ===== About: version, platform, what's new ===== */
 const CHANGELOG = [
+  ['0.15.0','Progress graph on the Knowledge Map and Parent Report; 16 new question types, 75 new synonyms, and no more repeat questions'],
   ['0.14.2','Family plan priced right: $199, every kid keeps their own 30 Sage chats a day'],
   ['0.14.0','Unlimited Sage plan, About page, family plan covers each member'],
   ['0.13.0','Windows app, Android install page, Solo & Family plans'],
@@ -3663,9 +3911,12 @@ function openReport(){
         : `<p class="section-instr"><b>A parent or guardian must approve AI features first.</b> The write-up is generated by Claude (Anthropic) from the stats below; reports are not stored.</p>
            <button class="btn" onclick="reportConsent()">I'm a parent/guardian — approve</button>`}
       <div id="reportOut"></div>
-      <div class="mlabel" style="margin-top:16px">The numbers</div>
+      <div class="mlabel" style="margin-top:16px">Progress over time</div>
+      ${chartBlockHTML('repChart')}
+      <div class="mlabel" style="margin-top:12px">The numbers</div>
       ${reportFactsRows(reportFacts())}
     </div>`;
+  drawHistChart('repChart');
 }
 function reportConsent(){
   account.coachConsent=true; saveStore();
