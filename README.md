@@ -2,25 +2,28 @@
 
 **SSAT Upper Level math practice — master the math, ace the test.**
 
-## ⬇️ Download for Mac
+## ▶️ Play now — any device
 
-**[Download Quizard beta (latest)](https://github.com/spaceballtwo/quizard/releases/latest/download/Quizard-beta.zip)** — 1.4 MB, free while in beta
+**[play.quizard → spaceballtwo.github.io/quizard](https://spaceballtwo.github.io/quizard/)**
 
-### How to install
-1. Unzip the download and drag **Quizard** into your **Applications** folder
-2. Double-click it — your Mac will block it the first time (normal for apps outside the App Store)
-3. Open **System Settings → Privacy & Security**, scroll down, click **"Open Anyway"**
-4. Done — it opens normally forever after
+- **Windows:** open the link in Edge or Chrome → click the **install icon** in the address bar → Quizard becomes a real app with its own window and icon.
+- **iPhone / iPad:** open the link in Safari → Share → **Add to Home Screen** → full-screen app.
+- **Android:** open the link in Chrome → **Install app**.
+
+Progress saves on your device and backs up to the cloud automatically when you play online.
+
+## ⬇️ Mac app
+
+**[Download Quizard for Mac (latest)](https://github.com/spaceballtwo/quizard/releases/latest/download/Quizard-beta.zip)** — 1.4 MB
+
+1. Unzip and drag **Quizard** into **Applications**
+2. Open it once; then **System Settings → Privacy & Security → "Open Anyway"** (first launch only)
 
 ## What is it?
 
-Endless fresh SSAT-level math questions (never the same set twice), full practice tests, daily challenges, survival mode, ranks & streaks — and **live online races**: same question as your opponent, first correct answer wins the point.
+Four courses of short lessons with drawn diagrams, adaptive drills that get harder as you improve, full timed tests scored with the real SSAT formula (+1 correct, −¼ wrong), miss-review, ranks, streaks — and **live online races**: same question as your opponent, first correct answer wins.
 
-- Balanced difficulty that matches the real test
-- Explanations for every question
-- Progress backs up to the cloud automatically
-- **No ads, no tracking, practice data stays on your device**
-
-*Founded and run by middle schoolers working toward college — not a test-prep giant.*
+- No ads, no tracking — practice data stays on your device
+- *Founded and run by middle schoolers working toward college, not a test-prep giant*
 
 *Not affiliated with or endorsed by SSATB.*
