@@ -1,0 +1,21 @@
+{
+  "name": "Quizard \u2014 SSAT Math",
+  "short_name": "Quizard",
+  "description": "SSAT Upper Level math practice: courses, adaptive drills, full tests, and live online races.",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#1a2136",
+  "theme_color": "#1a2136",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
