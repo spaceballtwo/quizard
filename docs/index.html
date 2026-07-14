@@ -1670,6 +1670,7 @@ function ensureFields(a){
   if(!Array.isArray(a.hist)) a.hist=[];                            // daily progress snapshots — the report's growth data
   if(typeof a.tourDone!=='boolean') a.tourDone=false;
   if(typeof a.premium!=='boolean') a.premium=false;
+  if(typeof a.premiumPlan!=='string') a.premiumPlan='';
 }
 function dateStr(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function markActivity(){
@@ -2776,7 +2777,7 @@ function showLeaderboard(){ oconnect(()=>osend({t:'leaderboard'})); }
 let syncTimer=null;
 function syncPayload(){ const a=account; return { xp:a.xp, rp:a.rp, streak:a.streak, bestStreak:a.bestStreak,
   lastPlayed:a.lastPlayed, achievements:a.achievements, stats:a.stats, bestRun:a.bestRun,
-  lastDaily:a.lastDaily, weekPoints:a.weekPoints, weekId:a.weekId, diff:a.diff, vote:a.vote, skill:a.skill, topics:a.topics, misses:a.misses, verbalSkill:a.verbalSkill, lessonsDone:a.lessonsDone, tstats:a.tstats, diagAt:a.diagAt, hist:a.hist, tourDone:a.tourDone, premium:a.premium }; }
+  lastDaily:a.lastDaily, weekPoints:a.weekPoints, weekId:a.weekId, diff:a.diff, vote:a.vote, skill:a.skill, topics:a.topics, misses:a.misses, verbalSkill:a.verbalSkill, lessonsDone:a.lessonsDone, tstats:a.tstats, diagAt:a.diagAt, hist:a.hist, tourDone:a.tourDone, premium:a.premium, premiumPlan:a.premiumPlan }; }
 function syncUp(){ if(!oMe || !account) return; osend({t:'sync_up', data:syncPayload(), updatedAt:account.updatedAt||Date.now()}); }
 function scheduleSync(){ if(!oMe || !account || !ows || ows.readyState!==1) return; clearTimeout(syncTimer); syncTimer=setTimeout(syncUp, 3000); }
 function applySync(data){ if(!account || !data) return; Object.assign(account, data); ensureFields(account); syncXPFromAccount(); saveStore(); }
@@ -3390,13 +3391,22 @@ function openPremium(){
       ${isP ? `
         <div class="explain ok" style="margin-top:4px"><b>You're Premium.</b> Everything is unlocked for your family — thanks for backing a small team.</div>`
       : `
-        <p class="section-instr">One price, everything included, for the whole test season.</p>
-        <div style="text-align:center;margin:10px 0 14px">
-          <span style="font-size:34px;font-weight:800;color:var(--navy)">$49</span>
-          <span style="color:var(--gray);font-size:13px"> / season</span>
-          <div style="color:var(--gray);font-size:12.5px;margin-top:2px">family subscription — covers up to 6 accounts</div>
+        <p class="section-instr">Everything included on both plans — pick the size that fits.</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0 6px">
+          <div style="border:1.5px solid var(--line);border-radius:12px;padding:14px 10px;text-align:center">
+            <div style="font-weight:700;color:var(--navy)">Solo</div>
+            <div style="margin:6px 0"><span style="font-size:28px;font-weight:800;color:var(--navy)">$75</span><span style="color:var(--gray);font-size:12px"> / 3 months</span></div>
+            <div style="color:var(--gray);font-size:12px;margin-bottom:10px">1 account</div>
+            <button class="btn" style="margin:0" onclick="buyPremium('solo')">Get Solo</button>
+          </div>
+          <div style="border:1.5px solid var(--gold);border-radius:12px;padding:14px 10px;text-align:center;position:relative">
+            <div style="position:absolute;top:-9px;left:50%;transform:translateX(-50%);background:var(--gold);color:#1a2136;font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;white-space:nowrap">BEST VALUE</div>
+            <div style="font-weight:700;color:var(--navy)">Family</div>
+            <div style="margin:6px 0"><span style="font-size:28px;font-weight:800;color:var(--navy)">$129</span><span style="color:var(--gray);font-size:12px"> / 3 months</span></div>
+            <div style="color:var(--gray);font-size:12px;margin-bottom:10px">up to 6 accounts</div>
+            <button class="btn" style="margin:0" onclick="buyPremium('family')">Get Family</button>
+          </div>
         </div>
-        <button class="btn" onclick="buyPremium()">Get Premium — $49</button>
         <p class="section-instr" style="text-align:center;margin-top:6px">Beta preview: no card needed yet — tapping unlocks instantly while we're in beta.</p>`}
       <div class="mlabel">Always free</div>
       ${rowF('Study mode')}${rowF('Daily Challenge')}${rowF('Verbal practice')}
@@ -3411,9 +3421,9 @@ function openPremium(){
     </div>`;
   window.scrollTo({top:0,behavior:'smooth'});
 }
-function buyPremium(){
+function buyPremium(plan){
   if (!account){ showToast('Log into an account first'); return; }
-  account.premium = true; saveStore();
+  account.premium = true; account.premiumPlan = plan||'solo'; saveStore();
   celebrate();
   showToast('Welcome to Premium!');
   openPremium();
@@ -3479,7 +3489,8 @@ function installGate(){
   if (location.protocol!=='https:' || isStandalone()) return;
   const isWin=/Windows/i.test(navigator.userAgent);
   const isIOS=/iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
-  if (!isWin && !isIOS) return;
+  const isAndroid=/Android/i.test(navigator.userAgent);
+  if (!isWin && !isIOS && !isAndroid) return;
   let done=false; try{ done=!!localStorage.getItem('q_ig_done'); }catch(e){}
   if (done) return;
   const g=document.createElement('div');
@@ -3494,6 +3505,15 @@ function installGate(){
       <p style="margin:6px 0">2. Or open the browser menu (&hellip;) and choose <b>Apps &rarr; Install Quizard</b>.</p>
       <p style="margin:6px 0">3. Open Quizard from your Start menu like any other app.</p>
     </div>`;
+  const androidBody=`
+    <p class="section-instr" style="text-align:center">Quizard installs as a real Android app — home-screen icon, full screen, works offline.</p>
+    <button class="btn" id="igBtn" onclick="igInstall()">Install Quizard</button>
+    <div style="text-align:left;font-size:13.5px;margin:14px 0 4px">
+      <b>If the button doesn't do it:</b>
+      <p style="margin:6px 0">1. Open the Chrome menu (the three dots, top right).</p>
+      <p style="margin:6px 0">2. Tap <b>Install app</b> (or <b>Add to Home screen</b>), then confirm.</p>
+      <p style="margin:6px 0">3. Open <b>Quizard</b> from your home screen like any app.</p>
+    </div>`;
   const iosBody=`
     <p class="section-instr" style="text-align:center">Quizard installs on your home screen — full screen, its own icon, works offline.</p>
     <div style="text-align:left;font-size:13.5px;margin:14px 0 4px">
@@ -3503,8 +3523,8 @@ function installGate(){
       <p style="margin:6px 0">4. Open <b>Quizard</b> from your home screen like any app.</p>
     </div>`;
   g.innerHTML=`<div class="card" style="max-width:540px;text-align:center">
-    <h2 style="letter-spacing:1px">${isIOS?'Get Quizard on your iPhone or iPad':'Get Quizard on your PC'}</h2>
-    ${isIOS?iosBody:winBody}
+    <h2 style="letter-spacing:1px">${isIOS?'Get Quizard on your iPhone or iPad':(isAndroid?'Get Quizard on your Android':'Get Quizard on your PC')}</h2>
+    ${isIOS?iosBody:(isAndroid?androidBody:winBody)}
     <button class="btn secondary" onclick="igDismiss()">Keep playing in the browser</button>
   </div>`;
   document.body.appendChild(g);
