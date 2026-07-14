@@ -167,6 +167,31 @@ export class QuizardLobby {
       await this.putUser(conn.user, u);
       this.send(conn, { t: 'vote_counts', counts: await this.voteCounts(), yours: u.vote });
     }
+    else if (m.t === 'family_create'){
+      if (!conn.user) return;
+      const u = await this.getUser(conn.user);
+      if (!u.familyCode){
+        // readable code: no 0/O/1/I confusion
+        const alph = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+        const a = new Uint8Array(6); crypto.getRandomValues(a);
+        u.familyCode = [...a].map(b => alph[b % alph.length]).join('');
+        await this.putUser(conn.user, u);
+        await this.storage.put('fam:' + u.familyCode, { owner: conn.user, members: [] });
+      }
+      this.send(conn, { t: 'family_code', code: u.familyCode });
+    }
+    else if (m.t === 'family_join'){
+      if (!conn.user) return;
+      const code = String(m.code || '').trim().toUpperCase().slice(0, 8);
+      const fam = await this.storage.get('fam:' + code);
+      if (!fam) return this.send(conn, { t: 'family_join', ok: false, msg: "That code doesn't match a family plan" });
+      if (fam.owner !== conn.user && !fam.members.includes(conn.user)){
+        if (fam.members.length >= 5) return this.send(conn, { t: 'family_join', ok: false, msg: 'This family plan is full (6 accounts)' });
+        fam.members.push(conn.user);
+        await this.storage.put('fam:' + code, fam);
+      }
+      this.send(conn, { t: 'family_join', ok: true, code });
+    }
     else if (m.t === 'vote_counts'){
       this.send(conn, { t: 'vote_counts', counts: await this.voteCounts() });
     }
