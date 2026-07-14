@@ -3,3 +3,4 @@ build.noindex/
 accounts.json
 .DS_Store
 *.log
+dist-win/
