@@ -385,7 +385,7 @@
 </div>
 
 <script>
-const APP_VERSION = '0.14.0';
+const APP_VERSION = '0.14.1';
 /* ===== Local accounts: each person has their own on-device SSAT account ===== */
 let store = { accounts: [], currentId: null };
 function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
@@ -3383,6 +3383,7 @@ function diagAnswer(i){
 
 /* ===== About: version, platform, what's new ===== */
 const CHANGELOG = [
+  ['0.14.1','Family plan: Sage chats become a shared family pool'],
   ['0.14.0','Unlimited Sage plan, About page, family plan covers each member'],
   ['0.13.0','Windows app, Android install page, Solo & Family plans'],
   ['0.12.x','Premium storefront, family subscription'],
@@ -3450,7 +3451,7 @@ function openPremium(){
             <div style="position:absolute;top:-9px;left:50%;transform:translateX(-50%);background:var(--gold);color:#1a2136;font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;white-space:nowrap">BEST VALUE</div>
             <div style="font-weight:700;color:var(--navy)">Family</div>
             <div style="margin:6px 0"><span style="font-size:26px;font-weight:800;color:var(--navy)">$129</span><span style="color:var(--gray);font-size:12px"> / 3 mo</span></div>
-            <div style="color:var(--gray);font-size:12px;margin-bottom:10px">up to 6 accounts —<br>each kid gets their own</div>
+            <div style="color:var(--gray);font-size:12px;margin-bottom:10px">up to 6 accounts, each kid their own<br>Sage: 60 chats a day, shared</div>
             <button class="btn" style="margin:0" onclick="buyPremium('family')">Get Family</button>
           </div>
         </div>
@@ -3460,7 +3461,7 @@ function openPremium(){
       <div class="mlabel">Premium</div>
       ${rowP('Full Test','real SSAT rules with a score estimate')}
       ${rowP('Diagnostic & Knowledge Map','what they know, where the gaps are')}
-      ${rowP('Sage, the Coach','AI tutor with parent approval — 30 chats/day, unlimited on the $100 plan')}
+      ${rowP('Sage, the Coach','AI tutor with parent approval — Solo 30 chats/day, Family 60/day shared, Unlimited truly unlimited')}
       ${rowP('Parent Reports','progress, growth, and gaps — written out')}
       ${rowP('Online races','live head-to-head with ratings')}
       ${rowP('Review Misses','every wrong answer waits for revenge')}
