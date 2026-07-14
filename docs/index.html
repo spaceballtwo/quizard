@@ -295,7 +295,7 @@
     <div id="homeMain" class="hidden">
       <div id="levelPanel" class="level-panel"></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
-        <span id="rankLine"></span><span id="streakLine"></span>
+        <span id="rankLine"></span><span id="streakLine"></span><span id="premiumLine"></span>
       </div>
       <div id="nextUp"></div>
       <button class="koji-card" onclick="navTo('coach')">
@@ -373,6 +373,7 @@
   <div id="coachpage" class="hidden"></div>
   <div id="parentreport" class="hidden"></div>
   <div id="gaps" class="hidden"></div>
+  <div id="premium" class="hidden"></div>
 
   <div id="fulltest" class="hidden"></div>
 
@@ -1494,6 +1495,10 @@ function renderHome(){
     renderDiff();
     renderNextUp();
     renderHomeCourses();
+    const pl=document.getElementById('premiumLine');
+    if(pl) pl.innerHTML = account.premium
+      ? `<span class="badge" style="background:linear-gradient(160deg,#e0c169,#ca9827);color:#1a2136;border-color:#a87f1e">${ico('crown',12)} Premium</span>`
+      : `<button class="seg" style="flex:none" onclick="navTo('premium')">${ico('crown',13)} Go Premium</button>`;
     const sBtn=document.getElementById('soundBtn'); if(sBtn) sBtn.innerHTML = soundOn?ico('volume',15)+' Sound: On':ico('mute',15)+' Sound: Off';
     document.querySelectorAll('#homeMain [data-ico]:empty').forEach(el2 => { el2.innerHTML = ico(el2.dataset.ico, +(el2.dataset.sz||24)); });
     setTimeout(maybeTour, 400);
@@ -1664,6 +1669,7 @@ function ensureFields(a){
   if(typeof a.diagAt!=='string') a.diagAt='';
   if(!Array.isArray(a.hist)) a.hist=[];                            // daily progress snapshots — the report's growth data
   if(typeof a.tourDone!=='boolean') a.tourDone=false;
+  if(typeof a.premium!=='boolean') a.premium=false;
 }
 function dateStr(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function markActivity(){
@@ -2770,7 +2776,7 @@ function showLeaderboard(){ oconnect(()=>osend({t:'leaderboard'})); }
 let syncTimer=null;
 function syncPayload(){ const a=account; return { xp:a.xp, rp:a.rp, streak:a.streak, bestStreak:a.bestStreak,
   lastPlayed:a.lastPlayed, achievements:a.achievements, stats:a.stats, bestRun:a.bestRun,
-  lastDaily:a.lastDaily, weekPoints:a.weekPoints, weekId:a.weekId, diff:a.diff, vote:a.vote, skill:a.skill, topics:a.topics, misses:a.misses, verbalSkill:a.verbalSkill, lessonsDone:a.lessonsDone, tstats:a.tstats, diagAt:a.diagAt, hist:a.hist, tourDone:a.tourDone }; }
+  lastDaily:a.lastDaily, weekPoints:a.weekPoints, weekId:a.weekId, diff:a.diff, vote:a.vote, skill:a.skill, topics:a.topics, misses:a.misses, verbalSkill:a.verbalSkill, lessonsDone:a.lessonsDone, tstats:a.tstats, diagAt:a.diagAt, hist:a.hist, tourDone:a.tourDone, premium:a.premium }; }
 function syncUp(){ if(!oMe || !account) return; osend({t:'sync_up', data:syncPayload(), updatedAt:account.updatedAt||Date.now()}); }
 function scheduleSync(){ if(!oMe || !account || !ows || ows.readyState!==1) return; clearTimeout(syncTimer); syncTimer=setTimeout(syncUp, 3000); }
 function applySync(data){ if(!account || !data) return; Object.assign(account, data); ensureFields(account); syncXPFromAccount(); saveStore(); }
@@ -3072,7 +3078,7 @@ function closeLearn(){
 }
 
 /* ================= Sidebar navigation ================= */
-const MODE_DIVS = ['quiz','results','study','clock','versus','survival','daily','compete','achievements','reports','online','learn','vote','fulltest','coachpage','parentreport','gaps'];
+const MODE_DIVS = ['quiz','results','study','clock','versus','survival','daily','compete','achievements','reports','online','learn','vote','fulltest','coachpage','parentreport','gaps','premium'];
 function resetToHome(){
   clearInterval(clockTimer); clearTimeout(clockTimer);
   clearInterval(testTimerId); fullTest=false;
@@ -3091,7 +3097,7 @@ function navTo(mode){
   playSwoosh();
   document.body.classList.remove('snav-open');
   resetToHome();
-  const map = { learn:openLearn, daily:openDaily, practice:start, fulltest:openFullTest, study:openStudy, verbal:openVerbal, review:openReview, coach:openCoachPage, report:openReport, gaps:openGaps,
+  const map = { learn:openLearn, daily:openDaily, practice:start, fulltest:openFullTest, study:openStudy, verbal:openVerbal, review:openReview, coach:openCoachPage, report:openReport, gaps:openGaps, premium:openPremium,
                 clock:openClock, survival:openSurvival, versus:openVersus, online:openOnline,
                 compete:openCompete, achievements:openAchievements, vote:openVote };
   if (mode !== 'home' && map[mode]) map[mode]();
@@ -3126,7 +3132,9 @@ function renderSidebar(){
     ${item('compete','trophy','Rank & League')}
     ${item('achievements','medal','Achievements')}
     ${item('report','paper','Parent Report')}
-    ${item('vote','ballot','Vote')}`;
+    ${item('vote','ballot','Vote')}
+    <div class="sdiv"></div>
+    ${item('premium','crown','Premium')}`;
   highlightNav('home');
 }
 
@@ -3366,6 +3374,50 @@ function diagAnswer(i){
       openGaps(); renderNextUp();
     } else renderDiagQ();
   }, ok?650:1400);
+}
+
+/* ===== Premium: the season pass. Beta preview — the button unlocks instantly, Stripe comes later. ===== */
+function openPremium(){
+  document.getElementById('intro').classList.add('hidden');
+  const el=document.getElementById('premium');
+  el.classList.remove('hidden');
+  const isP = account && account.premium;
+  const rowF=(name)=>`<div class="tier-row"><span>${name}</span><span class="tier-rp" style="color:var(--green)">free</span></div>`;
+  const rowP=(name,desc)=>`<div class="tier-row"><span><b>${name}</b>${desc?`<br><span style="font-weight:400;font-size:12px;color:var(--gray)">${desc}</span>`:''}</span><span class="tier-rp" style="color:var(--gold)">${ico('crown',12)}</span></div>`;
+  el.innerHTML=`
+    <div class="card">
+      <div class="section-title">${ico('crown',17)} Quizard Premium</div>
+      ${isP ? `
+        <div class="explain ok" style="margin-top:4px"><b>You're Premium.</b> Everything is unlocked for your family — thanks for backing a small team.</div>`
+      : `
+        <p class="section-instr">One price, everything included, for the whole test season — per family, not per kid.</p>
+        <div style="text-align:center;margin:10px 0 14px">
+          <span style="font-size:34px;font-weight:800;color:var(--navy)">$49</span>
+          <span style="color:var(--gray);font-size:13px"> / season</span>
+        </div>
+        <button class="btn" onclick="buyPremium()">Get Premium — $49</button>
+        <p class="section-instr" style="text-align:center;margin-top:6px">Beta preview: no card needed yet — tapping unlocks instantly while we're in beta.</p>`}
+      <div class="mlabel">Always free</div>
+      ${rowF('Study mode')}${rowF('Daily Challenge')}${rowF('Verbal practice')}
+      <div class="mlabel">Premium</div>
+      ${rowP('Full Test','real SSAT rules with a score estimate')}
+      ${rowP('Diagnostic & Knowledge Map','what they know, where the gaps are')}
+      ${rowP('Sage, the Coach','AI tutor with parent approval')}
+      ${rowP('Parent Reports','progress, growth, and gaps — written out')}
+      ${rowP('Online races','live head-to-head with ratings')}
+      ${rowP('Review Misses','every wrong answer waits for revenge')}
+      <p class="section-instr" style="margin-top:12px">Founded and run by middle schoolers working toward college — every season pass goes straight into making Quizard better.</p>
+    </div>`;
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function buyPremium(){
+  if (!account){ showToast('Log into an account first'); return; }
+  account.premium = true; saveStore();
+  celebrate();
+  showToast('Welcome to Premium!');
+  openPremium();
+  renderHome();
+  document.getElementById('intro').classList.add('hidden');
 }
 
 /* ===== One-time tour: every account gets walked through the app once ===== */
