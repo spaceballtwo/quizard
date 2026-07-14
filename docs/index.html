@@ -1525,12 +1525,14 @@ function createAccount(){
   store.accounts.push(a); store.currentId=a.id; saveStore();
   setsDone=0; bestScore=-1;
   renderHome();
+  autoOnline();
   showToast(`Welcome, ${name}!`);
 }
 function setCurrent(id){
   store.currentId=id; saveStore();
   setsDone=0; bestScore=-1;
   renderHome();
+  autoOnline();
 }
 function switchAccount(){
   store.currentId=null; account=null; saveStore();
@@ -2621,6 +2623,9 @@ function sanitizeOnlineName(n){
   let s=(n||'').replace(/[^A-Za-z0-9_]/g,'').slice(0,12);
   return s.length>=3 ? s : 'Wizard';
 }
+function autoOnline(){   // every account quietly gets its online identity — token is always there when a feature needs it
+  if (account && (!account.onlineToken || !ows || ows.readyState!==1)) ensureOnlineIdentity();
+}
 function ensureOnlineIdentity(){
   if (!account){ if(onlineScreenVisible()) renderOnlineHome('Log into an account on this device first.'); return; }
   oAuthStage = 0;
@@ -3294,6 +3299,7 @@ document.querySelectorAll('[data-ico]').forEach(el => { el.innerHTML = ico(el.da
 renderSidebar();
 loadStore();
 renderHome();
+autoOnline();
 </script>
 </body>
 </html>
