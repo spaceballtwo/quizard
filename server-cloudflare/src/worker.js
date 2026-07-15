@@ -189,6 +189,9 @@ export class QuizardLobby {
         if (fam.members.length >= 5) return this.send(conn, { t: 'family_join', ok: false, msg: 'This family plan is full (6 accounts)' });
         fam.members.push(conn.user);
         await this.storage.put('fam:' + code, fam);
+        const u = await this.getUser(conn.user);
+        u.famOf = code;
+        await this.putUser(conn.user, u);
       }
       this.send(conn, { t: 'family_join', ok: true, code });
     }
@@ -214,9 +217,22 @@ export class QuizardLobby {
     if (!u.coachConsent) return json({ error: 'consent' }, 403);
     const day = new Date().toISOString().slice(0, 10);
     if (u.tutorDay !== day){ u.tutorDay = day; u.tutorCount = 0; }
-    // Unlimited plan lifts the daily cap (200 is a fair-use ceiling, not a advertised limit)
-    const cap = (u.data && u.data.premiumPlan === 'unlimited') ? 100 : 30;
-    if (u.tutorCount >= cap) return json({ error: 'limit' }, 429);
+    // Caps sized so no plan can lose money even at the ceiling on the worst sales channel.
+    const now = Date.now();
+    if (!u.seasonStart || now - u.seasonStart > 90 * 86400e3){ u.seasonStart = now; u.tutorSeason = 0; }
+    const plan = u.data && u.data.premiumPlan;
+    const daily = plan === 'unlimited' ? 100 : 25;
+    const season = plan === 'unlimited' ? 2500 : 2250;
+    if (u.tutorCount >= daily || (u.tutorSeason || 0) >= season) return json({ error: 'limit' }, 429);
+    // family plans also share a season pool
+    let fam = null, fcode = u.famOf || u.familyCode;
+    if (fcode){
+      fam = await this.storage.get('fam:' + fcode);
+      if (fam){
+        if (!fam.since || now - fam.since > 90 * 86400e3){ fam.since = now; fam.total = 0; }
+        if ((fam.total || 0) >= 9000) return json({ error: 'limit' }, 429);
+      }
+    }
     if (!this.env.ANTHROPIC_API_KEY) return json({ error: 'inactive' }, 503);
 
     const ctx = body.context || {};
@@ -269,8 +285,10 @@ Rules you must follow:
     if (data.stop_reason === 'refusal') return json({ reply: "Let's stick to the math — want me to walk through this problem step by step?" });
     const reply = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
     u.tutorCount++;
+    u.tutorSeason = (u.tutorSeason || 0) + 1;
+    if (fam && fcode){ fam.total = (fam.total || 0) + 1; await this.storage.put('fam:' + fcode, fam); }
     await this.putUser(key, u);
-    const capLeft = ((u.data && u.data.premiumPlan === 'unlimited') ? 100 : 30) - u.tutorCount;
+    const capLeft = daily - u.tutorCount;
     return json({ reply: reply || "Hmm, try asking that another way?", left: capLeft });
   }
 
