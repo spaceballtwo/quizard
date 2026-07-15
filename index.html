@@ -385,7 +385,7 @@
 </div>
 
 <script>
-const APP_VERSION = '0.16.1';
+const APP_VERSION = '0.17.0';
 /* ===== Local accounts: each person has their own on-device SSAT account ===== */
 let store = { accounts: [], currentId: null };
 function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
@@ -1519,11 +1519,14 @@ function lessonLinkHTML(q){
   if (i === undefined) return '';
   return `<div style="margin-top:8px"><button class="seg" style="flex:none" onclick="jumpToLesson(${i})">${ico('bulb',13)} Teach me: ${TOPICS[i].title}</button></div>`;
 }
+function addDays(n){ const d=new Date(); d.setDate(d.getDate()+n); return dateStr(d); }
+/* Spaced repetition: a miss graduates after 3 correct answers spaced 1 then 3 days apart. */
+function dueMisses(){ const t=dateStr(new Date()); return account ? account.misses.filter(m=>!m.due || m.due<=t) : []; }
 function recordMiss(q, passage){
   if (!account || !q) return;
   const ti = (q._ti != null) ? q._ti : ((q._gen != null) ? GEN_TOPIC.get(q._gen) : null);
   if (account.misses.some(mm => mm.q === q.q)) return;
-  account.misses.push({ q:q.q, choices:q.choices, answer:q.answer, why:q.why, draw:q.draw||null, passage:passage||'', ti: ti==null?null:ti });
+  account.misses.push({ q:q.q, choices:q.choices, answer:q.answer, why:q.why, draw:q.draw||null, passage:passage||'', ti: ti==null?null:ti, box:0, due:dateStr(new Date()) });
   if (account.misses.length > 30) account.misses.shift();
 }
 /* Every answered math question feeds the knowledge map, whatever mode it came from. */
@@ -1733,8 +1736,9 @@ function renderNextUp(){
   let mode, title, sub;
   if (!account.diagAt){
     mode='gaps'; title='Find your gaps'; sub='26-question diagnostic maps what you know';
-  } else if (account.misses.length){
-    mode='review'; title='Review your misses'; sub=account.misses.length+' question'+(account.misses.length===1?'':'s')+' waiting for revenge';
+  } else if (dueMisses().length){
+    const d=dueMisses().length;
+    mode='review'; title='Review your misses'; sub=d+' review'+(d===1?'':'s')+' due today · spaced just right';
   } else if (account.lastDaily !== dateStr(new Date())){
     mode='daily'; title="Daily Challenge"; sub="today's 5 questions · bonus XP";
   } else {
@@ -1868,6 +1872,7 @@ function ensureFields(a){
   if(typeof a.skill!=='number') a.skill=2;   // adaptive difficulty, 1 (gentle) to 10 (brutal)
   if(!a.topics || typeof a.topics!=='object') a.topics={};   // topicId -> correct answers in that drill
   if(!Array.isArray(a.misses)) a.misses=[];   // missed questions waiting for revenge
+  a.misses.forEach(m=>{ if(m.box==null) m.box=0; if(!m.due) m.due=dateStr(new Date()); });
   if(!a.verbalSkill || typeof a.verbalSkill!=='object') a.verbalSkill={analogies:2, reading:2, synonyms:2};
   if(!a.lessonsDone || typeof a.lessonsDone!=='object') a.lessonsDone={};
   if(!a.tstats || typeof a.tstats!=='object') a.tstats={};        // per-topic [answered, correct] across every mode
@@ -2512,7 +2517,7 @@ function updateVerbalSkill(kind, ok){
   saveStore();
 }
 function loadStudy(){
-  if (studyMode==='review' && (!account || !account.misses.length)){ openReview(); return; }
+  if (studyMode==='review' && (!account || !reviewQueue().length)){ openReview(); return; }
   studyAnswered=false;
   studyCurrent = studyMode==='verbal' ? getVerbalQuestion() : studyMode==='topic' ? getTopicQuestion() : studyMode==='review' ? getReviewQuestion() : getStudyQuestion();
   renderStudy();
@@ -2553,7 +2558,14 @@ function answerStudy(i){
   if (studyMode==='verbal' && studyCurrent.vkind) updateVerbalSkill(studyCurrent.vkind, ok);
   noteTopicResult(q, ok);
   if (!ok && studyMode!=='review') recordMiss(q, studyCurrent.passage);
-  if (studyMode==='review' && account && account.misses.length){ const mm=account.misses.shift(); if(!ok) account.misses.push(mm); }
+  if (studyMode==='review' && account && studyCurrent._mm){
+    const mm=studyCurrent._mm;
+    if (ok){
+      mm.box=(mm.box||0)+1;
+      if (mm.box>=3){ const ix=account.misses.indexOf(mm); if(ix>=0) account.misses.splice(ix,1); showToast('Beaten for good — that one graduates!'); }
+      else mm.due=addDays([1,3][mm.box-1]);
+    } else { mm.box=0; mm.due=dateStr(new Date()); }
+  }
   recordAnswer(ok); rpForAnswer(ok); updateSkill(ok, studyCurrent.tier); markActivity(); checkAchievements(); saveStore();
   if (ok) playCorrect(); else playWrong();
   answerFX(ok, document.getElementById('sc-'+i));
@@ -3263,6 +3275,21 @@ function practiceTopic(i){
 }
 function openReview(){
   if (premiumGate('Review Misses')) return;
+  reviewEarly=false;
+  if (account && account.misses.length && !dueMisses().length){
+    const next=account.misses.map(m=>m.due).sort()[0];
+    document.getElementById('intro').classList.add('hidden');
+    document.getElementById('study').innerHTML = `
+      <div class="card" style="text-align:center">
+        <div style="color:var(--green)">${ico('star',40)}</div>
+        <div class="section-title" style="justify-content:center">All caught up</div>
+        <p class="section-instr">Spaced repetition at work: ${account.misses.length} question${account.misses.length===1?'':'s'} are scheduled to come back right before you'd forget them. Next review: <b>${next}</b>.</p>
+        <button class="btn" onclick="reviewEarly=true; studyMode='review'; studyTotal=0; studyCorrect=0; loadStudy(); document.getElementById('study').classList.remove('hidden');">Review early anyway</button>
+        <button class="btn secondary" onclick="studyHome()">Back to menu</button>
+      </div>`;
+    document.getElementById('study').classList.remove('hidden');
+    return;
+  }
   if (!account || !account.misses.length){
     document.getElementById('intro').classList.add('hidden');
     document.getElementById('study').innerHTML = `
@@ -3281,10 +3308,13 @@ function openReview(){
   loadStudy();
   document.getElementById('study').classList.remove('hidden');
 }
+let reviewEarly=false;
+function reviewQueue(){ return reviewEarly ? account.misses : dueMisses(); }
 function getReviewQuestion(){
-  const mm = account.misses[0];
+  const list = reviewQueue();
+  const mm = list[0];
   const q = { q:mm.q, choices:mm.choices, answer:mm.answer, why:mm.why, draw:mm.draw, _ti:mm.ti };
-  return { q, passage:mm.passage, label:'Review · '+account.misses.length+' left', tier:1 };
+  return { q, passage:mm.passage, label:'Review · '+list.length+' due', tier:1, _mm:mm };
 }
 function getTopicQuestion(){
   const g = drawBag(topicGens, 'topic_'+topicTitle); const q = unseen(g); q._gen = g;
@@ -3649,6 +3679,7 @@ function diagAnswer(i){
 
 /* ===== About: version, platform, what's new ===== */
 const CHANGELOG = [
+  ['0.17.0','Review Misses is now spaced repetition: beat a question 3 times over growing gaps and it graduates'],
   ['0.16.1','Pricing math sealed: no plan can lose money at any usage level'],
   ['0.16.0','Premium features actually lock now; family plans share with a code on any device; family price covers its costs'],
   ['0.15.0','Progress graph on the Knowledge Map and Parent Report; 16 new question types, 75 new synonyms, and no more repeat questions'],
