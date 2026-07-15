@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="320" viewBox="0 0 320 320">
+  <defs>
+    <linearGradient id="hatg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#e8c977"/><stop offset="0.55" stop-color="#ca9827"/><stop offset="1" stop-color="#a87f1e"/>
+    </linearGradient>
+    <linearGradient id="bandg" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#1a2136"/><stop offset="1" stop-color="#2c3a5c"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(6,20)">
+    <path d="M258 30 l6 16 16 6 -16 6 -6 16 -6 -16 -16 -6 16 -6 Z" fill="#ca9827"/>
+    <path d="M22 96 l4 11 11 4 -11 4 -4 11 -4 -11 -11 -4 11 -4 Z" fill="#ca9827" opacity="0.8"/>
+    <path d="M276 148 l3.5 9 9 3.5 -9 3.5 -3.5 9 -3.5 -9 -9 -3.5 9 -3.5 Z" fill="#ca9827" opacity="0.65"/>
+    <path d="M164 22 C150 78 96 170 42 232 C120 208 212 208 268 224 C236 170 196 96 186 30 C182 14 168 12 164 22 Z" fill="url(#hatg)"/>
+    <path d="M84 186 C136 168 204 170 246 186 C250 196 252 202 256 212 C196 194 116 194 66 214 C72 204 78 196 84 186 Z" fill="url(#bandg)"/>
+    <path d="M163 178 l7 14 15 2 -11 11 3 15 -14 -7 -14 7 3 -15 -11 -11 15 -2 Z" fill="#f6eed3"/>
+    <path d="M20 240 C120 206 220 208 296 236 C308 242 306 254 292 256 C196 232 112 234 26 258 C10 260 8 246 20 240 Z" fill="url(#hatg)"/>
+    <path d="M164 22 C168 40 178 52 196 58 C186 66 172 64 164 54 C160 42 160 30 164 22 Z" fill="#a87f1e" opacity="0.85"/>
+  </g>
+</svg>
