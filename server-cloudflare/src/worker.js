@@ -301,7 +301,9 @@ Rules you must follow:
     if (!u.coachConsent) return json({ error: 'consent' }, 403);
     const day = new Date().toISOString().slice(0, 10);
     if (u.reportDay !== day){ u.reportDay = day; u.reportCount = 0; }
-    if (u.reportCount >= 5) return json({ error: 'limit' }, 429);
+    const rnow = Date.now();
+    if (!u.reportSeasonStart || rnow - u.reportSeasonStart > 90 * 86400e3){ u.reportSeasonStart = rnow; u.reportSeason = 0; }
+    if (u.reportCount >= 5 || (u.reportSeason || 0) >= 100) return json({ error: 'limit' }, 429);
     if (!this.env.ANTHROPIC_API_KEY) return json({ error: 'inactive' }, 503);
     const facts = JSON.stringify(body.facts || {}).slice(0, 4000);
 
@@ -325,6 +327,7 @@ Warm and professional, like a good tutor's note home. Refer to the student as "y
     const data = await resp.json();
     const reply = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
     u.reportCount++;
+    u.reportSeason = (u.reportSeason || 0) + 1;
     await this.putUser(key, u);
     return json({ reply });
   }
