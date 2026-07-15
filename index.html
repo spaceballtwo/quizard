@@ -385,7 +385,7 @@
 </div>
 
 <script>
-const APP_VERSION = '0.16.0';
+const APP_VERSION = '0.16.1';
 /* ===== Local accounts: each person has their own on-device SSAT account ===== */
 let store = { accounts: [], currentId: null };
 function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
@@ -3649,6 +3649,7 @@ function diagAnswer(i){
 
 /* ===== About: version, platform, what's new ===== */
 const CHANGELOG = [
+  ['0.16.1','Pricing math sealed: no plan can lose money at any usage level'],
   ['0.16.0','Premium features actually lock now; family plans share with a code on any device; family price covers its costs'],
   ['0.15.0','Progress graph on the Knowledge Map and Parent Report; 16 new question types, 75 new synonyms, and no more repeat questions'],
   ['0.14.2','Family plan priced right: $199, every kid keeps their own 30 Sage chats a day'],
@@ -3718,7 +3719,7 @@ function openPremium(){
           <div style="border:1.5px solid var(--line);border-radius:12px;padding:14px 10px;text-align:center">
             <div style="font-weight:700;color:var(--navy)">Solo</div>
             <div style="margin:6px 0"><span style="font-size:26px;font-weight:800;color:var(--navy)">$75</span><span style="color:var(--gray);font-size:12px"> / 3 mo</span></div>
-            <div style="color:var(--gray);font-size:12px;margin-bottom:10px">1 account<br>Sage: 30 chats a day</div>
+            <div style="color:var(--gray);font-size:12px;margin-bottom:10px">1 account<br>Sage: 25 chats a day</div>
             <button class="btn" style="margin:0" onclick="buyPremium('solo')">Get Solo</button>
           </div>
           <div style="border:1.5px solid var(--line);border-radius:12px;padding:14px 10px;text-align:center">
@@ -3731,7 +3732,7 @@ function openPremium(){
             <div style="position:absolute;top:-9px;left:50%;transform:translateX(-50%);background:var(--gold);color:#1a2136;font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;white-space:nowrap">BEST VALUE</div>
             <div style="font-weight:700;color:var(--navy)">Family</div>
             <div style="margin:6px 0"><span style="font-size:26px;font-weight:800;color:var(--navy)">$299</span><span style="color:var(--gray);font-size:12px"> / 3 mo</span></div>
-            <div style="color:var(--gray);font-size:12px;margin-bottom:10px">up to 6 accounts, each kid their own<br>Sage: 30 chats a day each</div>
+            <div style="color:var(--gray);font-size:12px;margin-bottom:10px">up to 6 accounts, each kid their own<br>Sage: 25 chats a day each</div>
             <button class="btn" style="margin:0" onclick="buyPremium('family')">Get Family</button>
           </div>
         </div>
@@ -3746,7 +3747,7 @@ function openPremium(){
       <div class="mlabel">Premium</div>
       ${rowP('Full Test','real SSAT rules with a score estimate')}
       ${rowP('Diagnostic & Knowledge Map','what they know, where the gaps are')}
-      ${rowP('Sage, the Coach','AI tutor with parent approval — 30 chats/day per kid, unlimited on the $100 plan')}
+      ${rowP('Sage, the Coach','AI tutor with parent approval — 25 chats/day per kid, unlimited on the $100 plan')}
       ${rowP('Parent Reports','progress, growth, and gaps — written out')}
       ${rowP('Online races','live head-to-head with ratings')}
       ${rowP('Review Misses','every wrong answer waits for revenge')}
