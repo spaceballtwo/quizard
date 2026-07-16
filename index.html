@@ -423,7 +423,7 @@
 </div>
 
 <script>
-const APP_VERSION = '0.19.4';
+const APP_VERSION = '0.19.5';
 /* ===== Local accounts: each person has their own on-device SSAT account ===== */
 let store = { accounts: [], currentId: null };
 function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
@@ -2464,7 +2464,7 @@ function startFullTest(){
 function fmtTime(s){ return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); }
 function estScaled(raw){ return Math.round(500 + Math.max(0, raw)/FT_N*300); }
 
-function renderTestResults(correct, wrongChosen, blanks){
+function renderTestResults(correct, wrongChosen, blanks, perSection){
   clearInterval(testTimerId);
   const raw = correct - 0.25*wrongChosen;
   const est = estScaled(raw);
@@ -2474,14 +2474,19 @@ function renderTestResults(correct, wrongChosen, blanks){
   const res=document.getElementById('results');
   res.innerHTML=`
     <div class="card">
-      <div class="score-ring"><div class="score-big">&asymp; ${est}</div><div class="score-sub">estimated SSAT quant score (500–800 scale)</div></div>
+      <div class="score-ring"><div class="score-big">&asymp; ${est}</div><div class="score-sub">estimated SSAT score (500–800 scale)</div></div>
       ${best?`<div class="verdict v-strong">★ New personal best!</div>`:''}
       <div class="stats">
         <div class="stat"><b>${correct}</b><span>correct</span></div>
         <div class="stat"><b>${wrongChosen}</b><span>wrong</span></div>
         <div class="stat"><b>${blanks}</b><span>blank</span></div>
       </div>
-      <p style="text-align:center;color:var(--gray);font-size:13.5px">Raw score: ${correct} − ¼&times;${wrongChosen} = <b>${raw.toFixed(2).replace(/\.?0+$/,'')}</b> of ${FT_N} &middot; time used ${fmtTime(used)}</p>
+      <div style="font-weight:700;color:var(--navy);margin:14px 0 4px">By section</div>
+      ${(perSection||[]).map(s=>{ const pct=Math.round((s.got/s.total)*100);
+        return `<div class="bar-row"><div class="bar-label">${s.name}</div>
+          <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+          <div style="width:38px;text-align:right">${s.got}/${s.total}</div></div>`; }).join('')}
+      <p style="text-align:center;color:var(--gray);font-size:13.5px;margin-top:10px">Raw score: ${correct} − ¼&times;${wrongChosen} = <b>${raw.toFixed(2).replace(/\.?0+$/,'')}</b> of ${FT_N} &middot; time used ${fmtTime(used)}</p>
       <p style="color:var(--gray);font-size:12.5px;text-align:center">Rough estimate — the real test scales scores against everyone who took it. Treat &plusmn;30 as the honest range.</p>
       <p style="color:var(--gray);font-size:13.5px;margin-top:10px">Scroll up to review — explanations show under every question you missed, with a lesson link.</p>
       <button class="btn" onclick="closeFullTestToIntro()">Take another test &rarr;</button>
@@ -2766,7 +2771,7 @@ function grade(force){
   awardRP(correct*rpS.gain - wrongChosen*rpS.loss);   // scaled by tier; blanks are neutral
   if (leveled) showToast(`Level up! You reached Level ${level}`);
   if (leveled || correct===TOTAL) celebrate(); else playCorrect();
-  if (fullTest){ fullTest=false; renderTestResults(correct, wrongChosen, blanks); }
+  if (fullTest){ fullTest=false; renderTestResults(correct, wrongChosen, blanks, perSection); }
   else renderResults(correct, perSection, {gained, bonus});
 }
 
@@ -3817,6 +3822,7 @@ function diagAnswer(i){
 
 /* ===== About: version, platform, what's new ===== */
 const CHANGELOG = [
+  ['0.19.5','Unlimited lifts every limit; Full Test results score each section separately'],
   ['0.19.4','Every skill shown on its own: Math, Analogies, Reading, Synonyms — on home and in every drill header'],
   ['0.19.3','Answer redaction: even if Sage slips, the app blanks the answer out of its reply before you see it'],
   ['0.19.2','Sage keeps the answer secret until you commit — hints and method only'],
@@ -3998,7 +4004,7 @@ function openPremium(){
           <div style="border:1.5px solid var(--line);border-radius:12px;padding:14px 10px;text-align:center">
             <div style="font-weight:700;color:var(--navy)">Unlimited</div>
             <div style="margin:6px 0"><span style="font-size:26px;font-weight:800;color:var(--navy)">$100</span><span style="color:var(--gray);font-size:12px"> / 3 mo</span></div>
-            <div style="color:var(--gray);font-size:12px;margin-bottom:10px">1 account<br><b>unlimited Sage</b></div>
+            <div style="color:var(--gray);font-size:12px;margin-bottom:10px">1 account<br><b>unlimited everything</b> — Sage, reports, all of it</div>
             <button class="btn" style="margin:0" onclick="buyPremium('unlimited')">Get Unlimited</button>
           </div>
           <div style="border:1.5px solid var(--gold);border-radius:12px;padding:14px 10px;text-align:center;position:relative">
