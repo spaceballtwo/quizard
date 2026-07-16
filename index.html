@@ -261,7 +261,7 @@
 <canvas id="confetti" style="position:fixed; inset:0; width:100%; height:100%; pointer-events:none; z-index:60"></canvas>
 <div id="flash"></div>
 
-<button class="coach-fab" onclick="coachOpenSmart()" title="Ask Sage"><span data-ico="chat" data-sz="26" style="display:flex"></span></button>
+<button class="coach-fab" onclick="coachOpenSmart()" title="Explain this to me"><span data-ico="chat" data-sz="26" style="display:flex"></span></button>
 <button class="scratch-fab" onclick="toggleScratch()" title="Scratch paper"><span data-ico="quill" data-sz="22" style="display:flex"></span></button>
 <div id="coachPanel" class="hidden"></div>
 
@@ -316,7 +316,7 @@
     <path d="M30 242 C124 210 216 212 288 238" stroke="#f0d489" stroke-width="3" fill="none" opacity="0.6" stroke-linecap="round"/></g>
 </svg>
   <h1 style="letter-spacing:1px">Quizard</h1>
-  <div class="badge" style="margin:8px 0 0">SSAT MATH · UPPER LEVEL · APPLYING TO GRADES 9–12</div>
+  <div class="badge" style="margin:8px 0 0">SSAT MATH + VERBAL · UPPER LEVEL · APPLYING TO GRADES 9–12</div>
   <p style="margin-top:8px">Master the math, ace the test</p>
   <div class="badge" style="margin:12px 0 0">FOUNDERS SCORED TOP 2% IN AMERICA · MATH OLYMPIAD</div>
 </header>
@@ -420,7 +420,7 @@
 </div>
 
 <script>
-const APP_VERSION = '0.18.1';
+const APP_VERSION = '0.19.0';
 /* ===== Local accounts: each person has their own on-device SSAT account ===== */
 let store = { accounts: [], currentId: null };
 function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
@@ -2032,7 +2032,7 @@ function beginClock(){
 }
 function nextClockQuestion(){
   clockAnswered=false;
-  clockCurrent=getStudyQuestion();
+  clockCurrent=getStudyQuestion(true);
   const q=clockCurrent.q;
   const choices=q.choices.map((c,i)=>`<label class="choice" id="cc-${i}" onclick="answerClock(${i})"><span>${String.fromCharCode(65+i)}. ${c}</span></label>`).join('');
   document.getElementById('clock').innerHTML=`
@@ -2055,6 +2055,7 @@ function answerClock(i){
   const lab=document.getElementById('cc-'+i); if(lab) lab.classList.add(ok?'correct':'wrong');
   if(!ok){ const r=document.getElementById('cc-'+right); if(r) r.classList.add('correct'); }
   recordAnswer(ok); rpForAnswer(ok); updateSkill(ok, clockCurrent.tier); noteTopicResult(clockCurrent.q, ok);
+  if (clockCurrent.vkind) updateVerbalSkill(clockCurrent.vkind, ok);
   if(!ok) recordMiss(clockCurrent.q, clockCurrent.passage);
   if(ok) playCorrect(); else playWrong();
   answerFX(ok, lab);
@@ -2289,7 +2290,7 @@ function openSurvival(){
   survNext();
 }
 function survNext(){
-  survAnswered=false; survCurrent=getStudyQuestion();
+  survAnswered=false; survCurrent=getStudyQuestion(true);
   const q=survCurrent.q;
   const choices=q.choices.map((c,i)=>`<label class="choice" id="sv-${i}" onclick="survAnswer(${i})"><span>${String.fromCharCode(65+i)}. ${c}</span></label>`).join('');
   document.getElementById('survival').innerHTML=`
@@ -2305,6 +2306,7 @@ function survAnswer(i){
   const lab=document.getElementById('sv-'+i); if(lab) lab.classList.add(ok?'correct':'wrong');
   if(!ok){ const r=document.getElementById('sv-'+right); if(r) r.classList.add('correct'); }
   recordAnswer(ok); rpForAnswer(ok); updateSkill(ok, survCurrent.tier); noteTopicResult(survCurrent.q, ok);
+  if (survCurrent.vkind) updateVerbalSkill(survCurrent.vkind, ok);
   if(!ok) recordMiss(survCurrent.q, survCurrent.passage);
   answerFX(ok, lab);
   if(ok){ survScore++; playCorrect(); addXP(10); } else { survLives--; playWrong(); }
@@ -2349,7 +2351,10 @@ function openDaily(){
       </div>`;
     return;
   }
-  dailyQs = withSeed(dateSeed(), ()=> Array.from({length:5}, ()=>{ const g=statelessPick(); const q=g(); q._gen=g; return { q, label:'Math' }; }));
+  dailyQs = withSeed(dateSeed(), ()=> Array.from({length:5}, ()=>{
+    if (Math.random()<0.3){ const v=vShortQ(); return { q:v.q, label:v.label, vkind:v.vkind }; }
+    const g=statelessPick(); const q=g(); q._gen=g; return { q, label:'Math' };
+  }));
   dailyIdx=0; dailyCorrect=0;
   dailyShow();
 }
@@ -2370,6 +2375,7 @@ function dailyAnswer(i){
   const lab=document.getElementById('dl-'+i); if(lab) lab.classList.add(ok?'correct':'wrong');
   if(!ok){ const r=document.getElementById('dl-'+right); if(r) r.classList.add('correct'); }
   recordAnswer(ok); rpForAnswer(ok); noteTopicResult(item.q, ok);
+  if (item.vkind) updateVerbalSkill(item.vkind, ok);
   if(!ok) recordMiss(item.q, item.passage);
   answerFX(ok, lab);
   if(ok){ dailyCorrect++; playCorrect(); addXP(10); } else playWrong();
@@ -2434,7 +2440,7 @@ function startFullTest(){
   const bar=document.createElement('div');
   bar.className='card';
   bar.style.cssText='position:sticky;top:8px;z-index:20;padding:10px 16px;display:flex;justify-content:space-between;align-items:center';
-  bar.innerHTML=`<span style="font-weight:700;color:var(--navy)">Quantitative &middot; ${FT_N} questions</span><span class="clock-time" id="ftTime">30:00</span>`;
+  bar.innerHTML=`<span style="font-weight:700;color:var(--navy)">Quant + Verbal &middot; ${FT_N} questions</span><span class="clock-time" id="ftTime">30:00</span>`;
   form.prepend(bar);
   clearInterval(testTimerId);
   testTimerId=setInterval(()=>{
@@ -2483,18 +2489,28 @@ function closeFullTestToIntro(){
 /* ================= Set builder ================= */
 let QUIZ = [], qIndexMap = [], TOTAL = 0, setsDone = 0, bestScore = -1;
 
+function drawVerbalSet(nAna, nSyn){
+  const out=[];
+  for (let i=0;i<nAna;i++) out.push(unseen(()=>{ const q=Math.random()<0.12?choice(POOL.analogies):genAnalogy(); return q; }));
+  for (let i=0;i<nSyn;i++) out.push(unseen(()=>choice(POOL.synonyms)));
+  return shuffle(out);
+}
 function buildSet(n){
   n = n || 14;
-  let qs;
+  let qs, verb;
   if (fullTest){
-    // real-test difficulty: the actual UL quant section is stingy — 20/44/36, hard-leaning
-    const n1=Math.round(n*0.2), n3=Math.round(n*0.36), n2=n-n1-n3;
+    // real-test difficulty on the quant side: hard-leaning 20/44/36 over 15 Qs, plus 10 verbal
+    const nq = n-10, n1=Math.round(nq*0.2), n3=Math.round(nq*0.36), n2=nq-n1-n3;
     qs = shuffle(takeFrom(L1_GENS,n1).concat(takeFrom(L2_GENS,n2), takeFrom(L3_GENS,n3)));
+    verb = drawVerbalSet(6, 4);
   } else {
-    qs = genQuant(n);
+    qs = genQuant(n-5);
+    verb = drawVerbalSet(3, 2);
   }
+  const wrongCost = fullTest ? " Wrong answers cost ¼ point; blanks cost nothing." : "";
   QUIZ = [
-    { section:"Quantitative (Math)", instr: fullTest ? "Choose the best answer. Wrong answers cost ¼ point; blanks cost nothing." : "Choose the best answer. No calculator.", questions: qs }
+    { section:"Quantitative (Math)", instr: (fullTest ? "Choose the best answer." : "Choose the best answer. No calculator.") + wrongCost, questions: qs },
+    { section:"Verbal", instr: "Synonyms: pick the closest meaning. Analogies: pick the pair with the same relationship." + wrongCost, questions: verb }
   ];
   TOTAL = QUIZ.reduce((s,sec)=>s+sec.questions.length,0);
   qIndexMap = [];
@@ -2535,14 +2551,30 @@ function startVerbal(kind){
   loadStudy();
 }
 function setStudySection(sec){ studySection=sec; loadStudy(); }
-function getStudyQuestion(){
-  const gaps=gapTopics(), unk=unknownTopics(), r=Math.random();
-  if (gaps.length && r<0.25){
+function vShortQ(){
+  if (Math.random()<0.6){
+    const q = Math.random()<0.12 ? choice(POOL.analogies) : genAnalogy();
+    return { q, vkind:'analogies', label:'Verbal · Analogies' };
+  }
+  return { q: choice(POOL.synonyms), vkind:'synonyms', label:'Verbal · Synonyms' };
+}
+function getStudyQuestion(shortOnly){
+  // merged serving: gap-fixing first, then ~40% verbal, probes, then leveled math
+  const gaps=gapTopics(), unk=unknownTopics();
+  if (gaps.length && Math.random()<0.2){
     const ti=choice(gaps.slice(0,3));
     const g=drawBag(TOPICS[ti].gens,'gapfix_'+TOPICS[ti].id); const q=unseen(g); q._gen=g;
     return { q, label:'Math · closing a gap: '+TOPICS[ti].title, tier:1 };
   }
-  if (unk.length && r<0.35){
+  if (Math.random()<0.45){
+    if (!shortOnly && Math.random()<0.35){
+      const q=unseen(()=>{ const p=choice(POOL.reading); const qq=choice(p.questions); qq._passage=p.passage; return qq; });
+      return { q, passage:q._passage, vkind:'reading', label:'Verbal · Reading' };
+    }
+    const q=unseen(()=>{ const v=vShortQ(); v.q._vk=v.vkind; v.q._lab=v.label; return v.q; });
+    return { q, vkind:q._vk, label:q._lab };
+  }
+  if (unk.length && Math.random()<0.15){
     const ti=choice(unk);
     const g=drawBag(TOPICS[ti].gens,'probe_'+TOPICS[ti].id); const q=unseen(g); q._gen=g;
     return { q, label:'Math', tier:1 };
@@ -2605,7 +2637,7 @@ function answerStudy(i){
   let leveled=false;
   if (ok){ studyCorrect++; leveled = addXP(10); }
   if (ok && studyMode==='topic' && account){ account.topics[topicId] = topicScore(topicId) + 1; }
-  if (studyMode==='verbal' && studyCurrent.vkind) updateVerbalSkill(studyCurrent.vkind, ok);
+  if (studyCurrent.vkind) updateVerbalSkill(studyCurrent.vkind, ok);
   noteTopicResult(q, ok);
   if (!ok && studyMode!=='review') recordMiss(q, studyCurrent.passage);
   if (studyMode==='review' && account && studyCurrent._mm){
@@ -3052,7 +3084,7 @@ function scheduleSync(){ if(!oMe || !account || !ows || ows.readyState!==1) retu
 function applySync(data){ if(!account || !data) return; Object.assign(account, data); ensureFields(account); syncXPFromAccount(); saveStore(); }
 
 /* Both players generate the identical question from the server's seed. */
-function genRaceQuestion(seed){ return withSeed(seed, ()=> raceChoice()()); }
+function genRaceQuestion(seed){ return withSeed(seed, ()=>{ if (Math.random()<0.3) return vShortQ().q; return raceChoice()(); }); }
 
 function renderRace(){
   const q=oRaceQ;
@@ -3493,9 +3525,34 @@ function coachOpenGeneral(){
   if (!account.coachConsent){ renderCoachConsent(); return; }
   renderCoach();
 }
-function coachOpenSmart(){
+function screenQ(){
+  const vis = id => { const e=document.getElementById(id); return e && !e.classList.contains('hidden'); };
+  if (vis('study') && studyCurrent && studyCurrent.q) return { q:studyCurrent.q, passage:studyCurrent.passage };
+  if (vis('clock') && clockCurrent && clockCurrent.q) return { q:clockCurrent.q, passage:clockCurrent.passage };
+  if (vis('survival') && survCurrent && survCurrent.q) return { q:survCurrent.q, passage:survCurrent.passage };
+  if (vis('focus') && focusCurrent) return { q:focusCurrent };
+  if (vis('daily') && dailyAnswered && dailyQs.length && dailyQs[dailyIdx]) return { q:dailyQs[dailyIdx].q, passage:dailyQs[dailyIdx].passage };   // after answering — the Daily's bonus XP stays earned
+  return null;
+}
+function coachOpenSmart(){   // the corner button: "explain THIS to me"
   if (!account){ showToast('Log into an account first'); return; }
   if (premiumGate('Sage')) return;
+  const cur = screenQ();
+  if (cur && cur.q && cur.q.choices){
+    const q = cur.q;
+    coachCtx = {
+      q: q.q + (cur.passage ? '\n\nPassage: ' + String(cur.passage).slice(0,700) : ''),
+      choices: q.choices.map((c,i)=>String.fromCharCode(65+i)+'. '+c).join('  '),
+      correct: String.fromCharCode(65+q.answer)+'. '+q.choices[q.answer],
+      chosen: 'has not answered yet',
+      live: true
+    };
+    coachMsgs = [];
+    if (!account.onlineToken || !ows || ows.readyState!==1) ensureOnlineIdentity();
+    if (!account.coachConsent){ renderCoachConsent(); return; }
+    renderCoach();
+    return;
+  }
   if (coachCtx && !coachCtx.general){ coachOpen(); return; }   // a freshly-missed question is loaded
   coachOpenGeneral();
 }
@@ -3534,13 +3591,15 @@ function renderCoach(){
   p.innerHTML=`
     <div class="coach-head"><span style="display:flex;align-items:center;gap:8px"><span class="coach-ava">${ico('chat',16)}</span><span>Sage<br><span style="font-weight:400;font-size:10.5px;opacity:.75">your Coach &middot; study wizard</span></span></span><button onclick="coachClose()">close</button></div>
     <div class="coach-msgs" id="coachMsgs">
-      <div class="cmsg coach">${coachCtx && coachCtx.general ? "Hi! I can teach you any topic, quiz you, or look at your progress and tell you exactly what to work on next. What do you want to do?" : "I saw that one! Want a hint, or should I walk you through it? You can also just ask me anything about this problem."}</div>
+      <div class="cmsg coach">${coachCtx && coachCtx.general ? "Hi! I can teach you any topic, quiz you, or look at your progress and tell you exactly what to work on next. What do you want to do?" : (coachCtx && coachCtx.live ? "This one's on your screen right now. Want me to explain it — or just a nudge so you can crack it yourself?" : "I saw that one! Want a hint, or should I walk you through it? You can also just ask me anything about this problem.")}</div>
       ${msgs}
       ${coachBusy?'<div class="cmsg coach">thinking&hellip;</div>':''}
     </div>
     <div class="chiprow">${(coachCtx && coachCtx.general
       ? ['What should I work on?','Teach me something new','Quiz me']
-      : ['Give me a hint','Why is my answer wrong?','Walk me through it']
+      : (coachCtx && coachCtx.live
+        ? ['Explain this to me','Give me a hint','Walk me through it']
+        : ['Give me a hint','Why is my answer wrong?','Walk me through it'])
     ).map(c=>`<button class="chip" onclick="coachChip('${c.replace(/'/g,"\\'")}')">${c}</button>`).join('')}</div>
     <div class="coach-in">
       <input id="coachInput" maxlength="300" placeholder="${coachCtx && coachCtx.general ? 'Ask me anything about SSAT math&hellip;' : 'Ask about this problem&hellip;'}" onkeydown="if(event.key==='Enter')coachSend()" />
@@ -3742,6 +3801,7 @@ function diagAnswer(i){
 
 /* ===== About: version, platform, what's new ===== */
 const CHANGELOG = [
+  ['0.19.0','Math and verbal merged everywhere; the corner Sage button now explains the question on your screen'],
   ['0.18.1','New logo — the hat got an upgrade'],
   ['0.18.0','Focus Sprint: 25 minutes aimed at your weakest topic; study mode now hunts and fixes gaps on its own'],
   ['0.17.0','Review Misses is now spaced repetition: beat a question 3 times over growing gaps and it graduates'],
@@ -3826,7 +3886,7 @@ function nextFocusQuestion(){
     const g=drawBag(TOPICS[focusTarget].gens,'fs_'+TOPICS[focusTarget].id); q=unseen(g); q._gen=g;
     label='Gap: '+TOPICS[focusTarget].title;
   } else {
-    const s=getStudyQuestion(); q=s.q; label=s.label.replace('Math','Mixed');
+    const s=getStudyQuestion(true); q=s.q; label=s.label.replace('Math','Mixed'); q._vkind=s.vkind;
   }
   focusCurrent=q;
   const el=document.getElementById('focus');
@@ -3849,6 +3909,7 @@ function focusAnswer(i){
   const q=focusCurrent, ok=(i===q.answer);
   q.choices.forEach((c,idx)=>{ const l=document.getElementById('fc-'+idx); if(l){ l.classList.add('locked'); l.onclick=null; if(idx===q.answer) l.classList.add('correct'); else if(idx===i) l.classList.add('wrong'); } });
   recordAnswer(ok); rpForAnswer(ok); updateSkill(ok, 1); noteTopicResult(q, ok);
+  if (q._vkind) updateVerbalSkill(q._vkind, ok);
   if (!ok) recordMiss(q, '');
   answerFX(ok, document.getElementById('fc-'+i), ok?'+10 XP':'');
   if (ok){ focusScore++; focusXP+=10; addXP(10); playCorrect(); } else playWrong();
