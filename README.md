@@ -1,4 +1,5 @@
-# Quizard 🧙
+<p align="center"><img src="brand/quizard-logo.png" width="620" alt="Quizard — master the math, ace the test"></p>
+
 
 **SSAT Upper Level math practice — master the math, ace the test.**
 
