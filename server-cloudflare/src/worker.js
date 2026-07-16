@@ -221,7 +221,7 @@ export class QuizardLobby {
     const now = Date.now();
     if (!u.seasonStart || now - u.seasonStart > 90 * 86400e3){ u.seasonStart = now; u.tutorSeason = 0; }
     const plan = u.data && u.data.premiumPlan;
-    const daily = plan === 'unlimited' ? 100 : 25;
+    const daily = plan === 'unlimited' ? 150 : 25;
     const season = plan === 'unlimited' ? 2500 : 2250;
     if (u.tutorCount >= daily || (u.tutorSeason || 0) >= season) return json({ error: 'limit' }, 429);
     // family plans also share a season pool
@@ -304,7 +304,10 @@ ${ctx.live ? `- THE STUDENT HAS NOT ANSWERED YET, so these rules override everyt
     if (u.reportDay !== day){ u.reportDay = day; u.reportCount = 0; }
     const rnow = Date.now();
     if (!u.reportSeasonStart || rnow - u.reportSeasonStart > 90 * 86400e3){ u.reportSeasonStart = rnow; u.reportSeason = 0; }
-    if (u.reportCount >= 5 || (u.reportSeason || 0) >= 100) return json({ error: 'limit' }, 429);
+    const rplan = u.data && u.data.premiumPlan;
+    const rDaily = rplan === 'unlimited' ? 10 : 5;
+    const rSeasonCap = rplan === 'unlimited' ? 300 : 100;
+    if (u.reportCount >= rDaily || (u.reportSeason || 0) >= rSeasonCap) return json({ error: 'limit' }, 429);
     if (!this.env.ANTHROPIC_API_KEY) return json({ error: 'inactive' }, 503);
     const facts = JSON.stringify(body.facts || {}).slice(0, 4000);
 
