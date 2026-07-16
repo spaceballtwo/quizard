@@ -14,6 +14,13 @@
     --gold: #ca9827; --gold-soft: #eacd7f;
     --serif: 'Iowan Old Style', Palatino, Georgia, 'Times New Roman', serif;
   }
+  body.midnight {
+    --navy: #e8e0c9; --navy-dark: #10182b; --bg: #141a2b; --card: #1e2740;
+    --gray: #a99e7f; --line: #34405f; --gold: #d9ac3a; --gold-soft: #eacd7f;
+  }
+  body.midnight .hero, body.midnight .choice, body.midnight input, body.midnight .seg { color: #e8e0c9; }
+  body.midnight .choice, body.midnight input, body.midnight .tier-row { background: #232d4a; }
+  body.midnight .chip, body.midnight .cmsg.coach { background:#2a3452; color:#e8e0c9; }
   * { box-sizing: border-box; }
   body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
          background:var(--bg); color:#2e2815; line-height:1.55; }
@@ -423,10 +430,12 @@
 </div>
 
 <script>
-const APP_VERSION = '0.19.6';
+const APP_VERSION = '0.20.0';
 /* ===== Local accounts: each person has their own on-device SSAT account ===== */
 let store = { accounts: [], currentId: null };
 function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
+function isUnlimited(){ return !!(account && account.premiumPlan==='unlimited'); }
+function applyTheme(){ document.body.classList.toggle('midnight', !!(account && account.theme==='midnight' && isUnlimited())); }
 let account = null;   // the currently logged-in account
 
 /* ================= Small helpers ================= */
@@ -1747,6 +1756,7 @@ function renderHome(){
       sl.innerHTML = chip('Math',account.skill) + chip('Analogies',account.verbalSkill.analogies)
         + chip('Reading',account.verbalSkill.reading) + chip('Synonyms',account.verbalSkill.synonyms);
     }
+    applyTheme();
     const pl=document.getElementById('premiumLine');
     if(pl) pl.innerHTML = isPremium()
       ? `<span class="badge" style="background:linear-gradient(160deg,#e0c169,#ca9827);color:#1a2136;border-color:#a87f1e">${ico('crown',12)} Premium</span>`
@@ -3089,7 +3099,7 @@ function showLeaderboard(){ oconnect(()=>osend({t:'leaderboard'})); }
 let syncTimer=null;
 function syncPayload(){ const a=account; return { xp:a.xp, rp:a.rp, streak:a.streak, bestStreak:a.bestStreak,
   lastPlayed:a.lastPlayed, achievements:a.achievements, stats:a.stats, bestRun:a.bestRun,
-  lastDaily:a.lastDaily, weekPoints:a.weekPoints, weekId:a.weekId, diff:a.diff, vote:a.vote, skill:a.skill, topics:a.topics, misses:a.misses, verbalSkill:a.verbalSkill, lessonsDone:a.lessonsDone, tstats:a.tstats, diagAt:a.diagAt, hist:a.hist, tourDone:a.tourDone, premium:a.premium, premiumPlan:a.premiumPlan, familyCode:a.familyCode||'' }; }
+  lastDaily:a.lastDaily, weekPoints:a.weekPoints, weekId:a.weekId, diff:a.diff, vote:a.vote, skill:a.skill, topics:a.topics, misses:a.misses, verbalSkill:a.verbalSkill, lessonsDone:a.lessonsDone, tstats:a.tstats, diagAt:a.diagAt, hist:a.hist, tourDone:a.tourDone, premium:a.premium, premiumPlan:a.premiumPlan, familyCode:a.familyCode||'', theme:a.theme||'' }; }
 function syncUp(){ if(!oMe || !account) return; osend({t:'sync_up', data:syncPayload(), updatedAt:account.updatedAt||Date.now()}); }
 function scheduleSync(){ if(!oMe || !account || !ows || ows.readyState!==1) return; clearTimeout(syncTimer); syncTimer=setTimeout(syncUp, 3000); }
 function applySync(data){ if(!account || !data) return; Object.assign(account, data); ensureFields(account); syncXPFromAccount(); saveStore(); }
@@ -3190,7 +3200,7 @@ function onlineMsg(m){
       </div>`;
   }
   else if (m.t==='leaderboard'){
-    const rows=(m.top||[]).map((u,i)=>`<div class="tier-row ${oMe&&u.name===oMe.name?'tier-on':''}"><span>${i+1}. ${esc(u.name)}</span><span class="tier-rp">${u.rating!=null?u.rating:'&mdash;'} &middot; ${u.wins}W&ndash;${u.losses}L</span></div>`).join('');
+    const rows=(m.top||[]).map((u,i)=>`<div class="tier-row ${oMe&&u.name===oMe.name?'tier-on':''}"><span>${i+1}. ${u.flair?ico('crown',12)+' ':''}${esc(u.name)}</span><span class="tier-rp">${u.rating!=null?u.rating:'&mdash;'} &middot; ${u.wins}W&ndash;${u.losses}L</span></div>`).join('');
     document.getElementById('online').innerHTML=`
       <div class="card">
         <div class="section-title">${ico('trophy',17)} Leaderboard</div>
@@ -3607,7 +3617,7 @@ function renderCoach(){
       ${coachBusy?'<div class="cmsg coach">thinking&hellip;</div>':''}
     </div>
     <div class="chiprow">${(coachCtx && coachCtx.general
-      ? ['What should I work on?','Teach me something new','Quiz me']
+      ? (isUnlimited() ? ['Plan my week','What should I work on?','Quiz me'] : ['What should I work on?','Teach me something new','Quiz me'])
       : (coachCtx && coachCtx.live
         ? ['Explain this to me','Give me a hint','Walk me through it']
         : ['Give me a hint','Why is my answer wrong?','Walk me through it'])
@@ -3822,6 +3832,7 @@ function diagAnswer(i){
 
 /* ===== About: version, platform, what's new ===== */
 const CHANGELOG = [
+  ['0.20.0','Unlimited perks: Midnight theme, gold crown online, and Sage weekly study plans'],
   ['0.19.6','Share your family plan by email, message, or copy — one tap from the Premium page'],
   ['0.19.5','Unlimited lifts every limit; Full Test results score each section separately'],
   ['0.19.4','Every skill shown on its own: Math, Analogies, Reading, Synonyms — on home and in every drill header'],
@@ -3989,6 +4000,13 @@ function openPremium(){
       <div class="section-title">${ico('crown',17)} Quizard Premium</div>
       ${isP ? `
         <div class="explain ok" style="margin-top:4px"><b>You're Premium.</b> Everything is unlocked — thanks for backing a small team.</div>
+        ${isUnlimited() ? `
+          <div class="mlabel">Unlimited perks</div>
+          <div class="tier-row"><span><b>Midnight theme</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">the academy after dark — exclusive to Unlimited</span></span>
+            <button class="seg" style="flex:none" onclick="toggleMidnight()">${account.theme==='midnight'?'Turn off':'Turn on'}</button></div>
+          <div class="tier-row"><span><b>Gold crown online</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">shows by your name in races and on the leaderboard</span></span><span class="tier-rp">${ico('crown',14)}</span></div>
+          <div class="tier-row"><span><b>Weekly plans from Sage</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">"Plan my week" — a day-by-day plan built from your numbers</span></span>
+            <button class="seg" style="flex:none" onclick="navTo('coach')">Open Sage</button></div>` : ``}
         ${account.premiumPlan==='family' ? `
           <div class="mlabel">Share with your family</div>
           <p class="section-instr">Your plan covers up to 6 accounts on any device. Family members open Premium on their device and enter this code:</p>
@@ -4010,7 +4028,7 @@ function openPremium(){
           <div style="border:1.5px solid var(--line);border-radius:12px;padding:14px 10px;text-align:center">
             <div style="font-weight:700;color:var(--navy)">Unlimited</div>
             <div style="margin:6px 0"><span style="font-size:26px;font-weight:800;color:var(--navy)">$100</span><span style="color:var(--gray);font-size:12px"> / 3 mo</span></div>
-            <div style="color:var(--gray);font-size:12px;margin-bottom:10px">1 account<br><b>unlimited everything</b> — Sage, reports, all of it</div>
+            <div style="color:var(--gray);font-size:12px;margin-bottom:10px">1 account<br><b>unlimited everything</b> + Midnight theme,<br>gold crown online, weekly Sage plans</div>
             <button class="btn" style="margin:0" onclick="buyPremium('unlimited')">Get Unlimited</button>
           </div>
           <div style="border:1.5px solid var(--gold);border-radius:12px;padding:14px 10px;text-align:center;position:relative">
@@ -4057,6 +4075,11 @@ function shareFamily(){
   if (!account || !account.familyCode){ showToast('Your family code is still being minted — one second'); osend({t:'family_create'}); return; }
   if (navigator.share){ navigator.share({ title:'Join our Quizard family plan', text: familyInviteText() }).catch(()=>{}); }
   else shareFamilyEmail();
+}
+function toggleMidnight(){
+  if (!isUnlimited()){ showToast('Midnight is an Unlimited perk'); return; }
+  account.theme = account.theme==='midnight' ? '' : 'midnight';
+  saveStore(); applyTheme(); openPremium();
 }
 function copyFamilyCode(){
   if (!account || !account.familyCode){ showToast('Your family code is still being minted — one second'); osend({t:'family_create'}); return; }
