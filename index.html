@@ -330,6 +330,9 @@
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
         <span id="rankLine"></span><span id="streakLine"></span><span id="premiumLine"></span>
       </div>
+      <div id="skillsLine" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:-4px 0 12px"></div>
+      <div style="display:none">
+      </div>
       <div id="nextUp"></div>
       <button class="koji-card" onclick="navTo('coach')">
         <span class="coach-ava" style="width:46px;height:46px"><span data-ico="chat" data-sz="22" style="display:flex"></span></span>
@@ -420,7 +423,7 @@
 </div>
 
 <script>
-const APP_VERSION = '0.19.3';
+const APP_VERSION = '0.19.4';
 /* ===== Local accounts: each person has their own on-device SSAT account ===== */
 let store = { accounts: [], currentId: null };
 function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
@@ -1738,6 +1741,12 @@ function renderHome(){
     renderDiff();
     renderNextUp();
     renderHomeCourses();
+    const sl=document.getElementById('skillsLine');
+    if (sl){
+      const chip=(name,v)=>`<span class="badge" title="${name} skill, 1–10">${name} ${(v||2).toFixed(1)}</span>`;
+      sl.innerHTML = chip('Math',account.skill) + chip('Analogies',account.verbalSkill.analogies)
+        + chip('Reading',account.verbalSkill.reading) + chip('Synonyms',account.verbalSkill.synonyms);
+    }
     const pl=document.getElementById('premiumLine');
     if(pl) pl.innerHTML = isPremium()
       ? `<span class="badge" style="background:linear-gradient(160deg,#e0c169,#ca9827);color:#1a2136;border-color:#a87f1e">${ico('crown',12)} Premium</span>`
@@ -2606,7 +2615,7 @@ function renderStudy(){
   const choices=q.choices.map((c,i)=>`<label class="choice" id="sc-${i}" onclick="answerStudy(${i})"><span>${String.fromCharCode(65+i)}. ${c}</span></label>`).join('');
   document.getElementById('study').innerHTML=`
     <div class="card">
-      <div class="study-head"><span>${studyCurrent.label}${studyMode==='topic'?` · ${Math.min(topicScore(topicId),TOPIC_MASTERY)}/${TOPIC_MASTERY} mastered`:``}${studyMode==='verbal'&&studyCurrent.vkind&&account?` · Skill ${(account.verbalSkill[studyCurrent.vkind]||2).toFixed(1)}`:``} · <span id="studyLvl">★ Lvl ${level}</span></span> <span class="study-score">${studyCorrect}/${studyTotal} correct</span></div>
+      <div class="study-head"><span>${studyCurrent.label}${studyMode==='topic'?` · ${Math.min(topicScore(topicId),TOPIC_MASTERY)}/${TOPIC_MASTERY} mastered`:``}${account&&studyCurrent.vkind?` · Skill ${(account.verbalSkill[studyCurrent.vkind]||2).toFixed(1)}`:(account&&studyMode!=='topic'?` · Skill ${(account.skill||2).toFixed(1)}`:``)} · <span id="studyLvl">★ Lvl ${level}</span></span> <span class="study-score">${studyCorrect}/${studyTotal} correct</span></div>
       ${studyCurrent.passage?`<div class="passage">${studyCurrent.passage}</div>`:''}
       <div class="q-stem">${q.q}</div>
       ${figHTML(q)}
@@ -3808,6 +3817,7 @@ function diagAnswer(i){
 
 /* ===== About: version, platform, what's new ===== */
 const CHANGELOG = [
+  ['0.19.4','Every skill shown on its own: Math, Analogies, Reading, Synonyms — on home and in every drill header'],
   ['0.19.3','Answer redaction: even if Sage slips, the app blanks the answer out of its reply before you see it'],
   ['0.19.2','Sage keeps the answer secret until you commit — hints and method only'],
   ['0.19.1','Questions say what they are: Analogies, Synonyms, Reading — own sections on every test'],
