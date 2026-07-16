@@ -201,7 +201,7 @@ export class QuizardLobby {
     else if (m.t === 'leaderboard'){
       const users = await this.storage.list({ prefix: 'u:' });
       const top = [...users.values()].sort((a, b) => b.rating - a.rating).slice(0, 10)
-        .map(u => ({ name: u.name, rating: u.showRating === false ? null : u.rating, wins: u.wins, losses: u.losses }));
+        .map(u => ({ name: u.name, rating: u.showRating === false ? null : u.rating, wins: u.wins, losses: u.losses, flair: !!(u.data && u.data.premiumPlan === 'unlimited') }));
       this.send(conn, { t: 'leaderboard', top });
     }
   }
@@ -252,6 +252,7 @@ ${scrub(ctx.progress).slice(0, 900)}
 What you can do:
 - Teach any SSAT-level math concept with a short, clear explanation and one worked example.
 - Quiz the student conversationally if they ask.
+- If asked for a weekly plan, lay out a simple day-by-day 7-day plan using the topic names and their numbers (weakest topics get the most days).
 - Recommend what to work on next, using the course and mastery data above — name the specific topic (e.g. "the Percents lesson in Foundations") and say why, using their numbers.
 
 Rules you must follow:
@@ -347,8 +348,8 @@ Warm and professional, like a good tutor's note home. Refer to the student as "y
     const match = { id: this.nextMatchId++, players: [a, b], score: [0, 0], round: 0, answered: new Set(), roundWon: false, done: false, timer: null };
     a.match = b.match = match;
     const ua = await this.getUser(a.user), ub = await this.getUser(b.user);
-    this.send(a, { t: 'match_start', opp: { name: ub.name, rating: this.visibleRating(ub) }, winPoints: WIN_POINTS });
-    this.send(b, { t: 'match_start', opp: { name: ua.name, rating: this.visibleRating(ua) }, winPoints: WIN_POINTS });
+    this.send(a, { t: 'match_start', opp: { name: ub.name, rating: this.visibleRating(ub), flair: !!(ub.data && ub.data.premiumPlan === 'unlimited') }, winPoints: WIN_POINTS });
+    this.send(b, { t: 'match_start', opp: { name: ua.name, rating: this.visibleRating(ua), flair: !!(ua.data && ua.data.premiumPlan === 'unlimited') }, winPoints: WIN_POINTS });
     setTimeout(() => this.nextRound(match), 2500);
   }
 
