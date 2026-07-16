@@ -420,7 +420,7 @@
 </div>
 
 <script>
-const APP_VERSION = '0.19.0';
+const APP_VERSION = '0.19.1';
 /* ===== Local accounts: each person has their own on-device SSAT account ===== */
 let store = { accounts: [], currentId: null };
 function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
@@ -2489,28 +2489,25 @@ function closeFullTestToIntro(){
 /* ================= Set builder ================= */
 let QUIZ = [], qIndexMap = [], TOTAL = 0, setsDone = 0, bestScore = -1;
 
-function drawVerbalSet(nAna, nSyn){
-  const out=[];
-  for (let i=0;i<nAna;i++) out.push(unseen(()=>{ const q=Math.random()<0.12?choice(POOL.analogies):genAnalogy(); return q; }));
-  for (let i=0;i<nSyn;i++) out.push(unseen(()=>choice(POOL.synonyms)));
-  return shuffle(out);
-}
+function drawAnalogies(n){ const out=[]; for (let i=0;i<n;i++) out.push(unseen(()=>Math.random()<0.12?choice(POOL.analogies):genAnalogy())); return out; }
+function drawSynonyms(n){ const out=[]; for (let i=0;i<n;i++) out.push(unseen(()=>choice(POOL.synonyms))); return out; }
 function buildSet(n){
   n = n || 14;
-  let qs, verb;
+  let qs, ana, syn;
   if (fullTest){
-    // real-test difficulty on the quant side: hard-leaning 20/44/36 over 15 Qs, plus 10 verbal
+    // real-test difficulty on the quant side: hard-leaning 20/44/36 over 15 Qs, plus 6 analogies + 4 synonyms
     const nq = n-10, n1=Math.round(nq*0.2), n3=Math.round(nq*0.36), n2=nq-n1-n3;
     qs = shuffle(takeFrom(L1_GENS,n1).concat(takeFrom(L2_GENS,n2), takeFrom(L3_GENS,n3)));
-    verb = drawVerbalSet(6, 4);
+    ana = drawAnalogies(6); syn = drawSynonyms(4);
   } else {
     qs = genQuant(n-5);
-    verb = drawVerbalSet(3, 2);
+    ana = drawAnalogies(3); syn = drawSynonyms(2);
   }
   const wrongCost = fullTest ? " Wrong answers cost ¼ point; blanks cost nothing." : "";
   QUIZ = [
     { section:"Quantitative (Math)", instr: (fullTest ? "Choose the best answer." : "Choose the best answer. No calculator.") + wrongCost, questions: qs },
-    { section:"Verbal", instr: "Synonyms: pick the closest meaning. Analogies: pick the pair with the same relationship." + wrongCost, questions: verb }
+    { section:"Analogies", instr: "Pick the pair with the same relationship as the first pair." + wrongCost, questions: ana },
+    { section:"Synonyms", instr: "Pick the word closest in meaning to the word in capitals." + wrongCost, questions: syn }
   ];
   TOTAL = QUIZ.reduce((s,sec)=>s+sec.questions.length,0);
   qIndexMap = [];
@@ -2554,9 +2551,9 @@ function setStudySection(sec){ studySection=sec; loadStudy(); }
 function vShortQ(){
   if (Math.random()<0.6){
     const q = Math.random()<0.12 ? choice(POOL.analogies) : genAnalogy();
-    return { q, vkind:'analogies', label:'Verbal · Analogies' };
+    return { q, vkind:'analogies', label:'Analogies' };
   }
-  return { q: choice(POOL.synonyms), vkind:'synonyms', label:'Verbal · Synonyms' };
+  return { q: choice(POOL.synonyms), vkind:'synonyms', label:'Synonyms' };
 }
 function getStudyQuestion(shortOnly){
   // merged serving: gap-fixing first, then ~40% verbal, probes, then leveled math
@@ -2569,7 +2566,7 @@ function getStudyQuestion(shortOnly){
   if (Math.random()<0.45){
     if (!shortOnly && Math.random()<0.35){
       const q=unseen(()=>{ const p=choice(POOL.reading); const qq=choice(p.questions); qq._passage=p.passage; return qq; });
-      return { q, passage:q._passage, vkind:'reading', label:'Verbal · Reading' };
+      return { q, passage:q._passage, vkind:'reading', label:'Reading' };
     }
     const q=unseen(()=>{ const v=vShortQ(); v.q._vk=v.vkind; v.q._lab=v.label; return v.q; });
     return { q, vkind:q._vk, label:q._lab };
@@ -3801,6 +3798,7 @@ function diagAnswer(i){
 
 /* ===== About: version, platform, what's new ===== */
 const CHANGELOG = [
+  ['0.19.1','Questions say what they are: Analogies, Synonyms, Reading — own sections on every test'],
   ['0.19.0','Math and verbal merged everywhere; the corner Sage button now explains the question on your screen'],
   ['0.18.1','New logo — the hat got an upgrade'],
   ['0.18.0','Focus Sprint: 25 minutes aimed at your weakest topic; study mode now hunts and fixes gaps on its own'],
