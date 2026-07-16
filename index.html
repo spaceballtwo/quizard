@@ -420,7 +420,7 @@
 </div>
 
 <script>
-const APP_VERSION = '0.19.2';
+const APP_VERSION = '0.19.3';
 /* ===== Local accounts: each person has their own on-device SSAT account ===== */
 let store = { accounts: [], currentId: null };
 function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
@@ -3482,7 +3482,7 @@ function renderSidebar(){
 }
 
 /* ================= Coach: open-ended AI tutor, anchored to the missed question ================= */
-let coachCtx=null, coachMsgs=[], coachBusy=false, coachTarget='panel';
+let coachCtx=null, coachMsgs=[], coachBusy=false, coachTarget='panel', coachLiveAns=null;
 function coachHost(){
   if (coachTarget==='page'){ const d=document.getElementById('coachDock'); if (d) return d; coachTarget='panel'; }
   return document.getElementById('coachPanel');
@@ -3515,6 +3515,7 @@ function coachProgressCtx(){
     '. Courses: '+courses+'. Mastery: '+t+'. Recent miss topics: '+(Object.entries(missCounts).map(([k,v])=>k+' x'+v).join(', ')||'none')+'.' };
 }
 function coachOpenGeneral(){
+  coachLiveAns=null;
   if (!account){ showToast('Log into an account first'); return; }
   if (premiumGate('Sage')) return;
   if (!account.onlineToken || !ows || ows.readyState!==1) ensureOnlineIdentity();   // coach needs your online identity; connect quietly
@@ -3542,6 +3543,7 @@ function coachOpenSmart(){   // the corner button: "explain THIS to me"
       choices: q.choices.map((c,i)=>String.fromCharCode(65+i)+'. '+c).join('  '),
       live: true    // no correct answer sent — Sage can't spoil what it was never told
     };
+    coachLiveAns = String(q.choices[q.answer]);   // client-only: powers the redaction net below
     coachMsgs = [];
     if (!account.onlineToken || !ows || ows.readyState!==1) ensureOnlineIdentity();
     if (!account.coachConsent){ renderCoachConsent(); return; }
@@ -3604,6 +3606,7 @@ function renderCoach(){
   const inp=document.getElementById('coachInput'); if(inp && !coachBusy) inp.focus();
 }
 function coachSetContext(q, chosenIdx){
+  coachLiveAns=null;   // question was answered — full explanations allowed again
   coachCtx = {
     q: q.q,
     choices: q.choices.map((c,i)=>String.fromCharCode(65+i)+'. '+c).join('  '),
@@ -3625,7 +3628,16 @@ function coachSend(){
   }).then(r=>r.json().then(d=>({s:r.status, d})))
     .then(({s,d})=>{
       coachBusy=false;
-      if (d.reply){ coachMsgs.push({role:'assistant', content:d.reply}); playCoachChime(); }
+      if (d.reply){
+        if (coachCtx && coachCtx.live && coachLiveAns){
+          const escd = coachLiveAns.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+          const re = new RegExp('(^|[^0-9A-Za-z])'+escd+'(?![0-9A-Za-z])','gi');
+          if (re.test(d.reply)){
+            d.reply = d.reply.replace(re, '$1▢') + "\n\nI keep the final answer covered until you lock one in — that part's yours!";
+          }
+        }
+        coachMsgs.push({role:'assistant', content:d.reply}); playCoachChime();
+      }
       else if (d.error==='inactive') coachMsgs.push({role:'assistant', content:'The Coach is not switched on yet — soon!'});
       else if (d.error==='limit') coachMsgs.push({role:'assistant', content:"That's all my energy for today — I reset tomorrow. Try the Teach me lesson meanwhile!"});
       else if (d.error==='consent'){ account.coachConsent=false; saveStore(); renderCoachConsent(); return; }
@@ -3796,6 +3808,7 @@ function diagAnswer(i){
 
 /* ===== About: version, platform, what's new ===== */
 const CHANGELOG = [
+  ['0.19.3','Answer redaction: even if Sage slips, the app blanks the answer out of its reply before you see it'],
   ['0.19.2','Sage keeps the answer secret until you commit — hints and method only'],
   ['0.19.1','Questions say what they are: Analogies, Synonyms, Reading — own sections on every test'],
   ['0.19.0','Math and verbal merged everywhere; the corner Sage button now explains the question on your screen'],
