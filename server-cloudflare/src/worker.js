@@ -72,6 +72,23 @@ export class QuizardLobby {
     if (conn.match) this.forfeit(conn.match, conn);
   }
 
+  // Quizard's own spend fence: the console limit belongs to another project and
+  // Anthropic has no per-key caps, so the app cuts itself off. ~2c/chat means
+  // 150/day ≈ $3 and 2000/month ≈ $40 absolute worst — raise these as we grow.
+  static GLOBAL_DAY_CALLS = 150;
+  static GLOBAL_MONTH_CALLS = 2000;
+  async globalBudgetOk(){
+    const day = new Date().toISOString().slice(0, 10);
+    const month = day.slice(0, 7);
+    let g = await this.storage.get('gspend') || {};
+    if (g.day !== day){ g.day = day; g.dayCount = 0; }
+    if (g.month !== month){ g.month = month; g.monthCount = 0; }
+    if (g.dayCount >= QuizardLobby.GLOBAL_DAY_CALLS || g.monthCount >= QuizardLobby.GLOBAL_MONTH_CALLS) return false;
+    g.dayCount++; g.monthCount++;
+    await this.storage.put('gspend', g);
+    return true;
+  }
+
   async getUser(key){ return await this.storage.get('u:' + key); }
   async putUser(key, u){ await this.storage.put('u:' + key, u); }
 
@@ -234,6 +251,7 @@ export class QuizardLobby {
       }
     }
     if (!this.env.ANTHROPIC_API_KEY) return json({ error: 'inactive' }, 503);
+    if (!await this.globalBudgetOk()) return json({ error: 'limit' }, 429);
 
     const ctx = body.context || {};
     // scrub anything contact-shaped; cap sizes; the coach never needs it
@@ -310,6 +328,7 @@ ${ctx.live ? `- THE STUDENT HAS NOT ANSWERED YET, so these rules override everyt
     const rSeasonCap = rplan === 'unlimited' ? 300 : 100;
     if (u.reportCount >= rDaily || (u.reportSeason || 0) >= rSeasonCap) return json({ error: 'limit' }, 429);
     if (!this.env.ANTHROPIC_API_KEY) return json({ error: 'inactive' }, 503);
+    if (!await this.globalBudgetOk()) return json({ error: 'limit' }, 429);
     const facts = JSON.stringify(body.facts || {}).slice(0, 4000);
 
     const system = `You write a short progress report for the PARENT of a student using Quizard, an SSAT math and verbal prep app.
