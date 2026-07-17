@@ -72,11 +72,12 @@ export class QuizardLobby {
     if (conn.match) this.forfeit(conn.match, conn);
   }
 
-  // Quizard's own spend fence: the console limit belongs to another project and
-  // Anthropic has no per-key caps, so the app cuts itself off. ~2c/chat means
-  // 150/day ≈ $3 and 2000/month ≈ $40 absolute worst — raise these as we grow.
-  static GLOBAL_DAY_CALLS = 150;
-  static GLOBAL_MONTH_CALLS = 2000;
+  // Spend limits are PER ACCOUNT (each user's own daily + season allowance, above).
+  // This global fence sits far beyond what real users can collectively reach —
+  // it exists only to stop bot floods / mass fake accounts, never to make one
+  // kid pay for another kid's usage. ~2c/call: 600/day ≈ $12, 6000/mo ≈ $120 absolute worst.
+  static GLOBAL_DAY_CALLS = 600;
+  static GLOBAL_MONTH_CALLS = 6000;
   async globalBudgetOk(){
     const day = new Date().toISOString().slice(0, 10);
     const month = day.slice(0, 7);
