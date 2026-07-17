@@ -430,12 +430,13 @@
 </div>
 
 <script>
-const APP_VERSION = '0.20.1';
+const APP_VERSION = '0.20.2';
 /* ===== Local accounts: each person has their own on-device SSAT account ===== */
 let store = { accounts: [], currentId: null };
 function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
 function isUnlimited(){ return !!(account && account.premiumPlan==='unlimited'); }
-function hasMidnight(){ return isUnlimited() || !!(account && (account.premiumPlan==='family' || account.premiumPlan==='family-member' || (account.premium===false && store.familyPremium) || (store.familyPremium && isPremium()))); }
+function hasPerks(){ return isUnlimited() || !!(account && (account.premiumPlan==='family' || account.premiumPlan==='family-member' || store.familyPremium)); }
+function hasMidnight(){ return hasPerks(); }
 function applyTheme(){ document.body.classList.toggle('midnight', !!(account && account.theme==='midnight' && hasMidnight())); }
 let account = null;   // the currently logged-in account
 
@@ -3618,7 +3619,7 @@ function renderCoach(){
       ${coachBusy?'<div class="cmsg coach">thinking&hellip;</div>':''}
     </div>
     <div class="chiprow">${(coachCtx && coachCtx.general
-      ? (isUnlimited() ? ['Plan my week','What should I work on?','Quiz me'] : ['What should I work on?','Teach me something new','Quiz me'])
+      ? (hasPerks() ? ['Plan my week','What should I work on?','Quiz me'] : ['What should I work on?','Teach me something new','Quiz me'])
       : (coachCtx && coachCtx.live
         ? ['Explain this to me','Give me a hint','Walk me through it']
         : ['Give me a hint','Why is my answer wrong?','Walk me through it'])
@@ -3833,6 +3834,7 @@ function diagAnswer(i){
 
 /* ===== About: version, platform, what's new ===== */
 const CHANGELOG = [
+  ['0.20.2','Family outranks everything: all perks (crown, weekly plans, Midnight) included for the whole family'],
   ['0.20.1','Midnight theme now included with Family plans too'],
   ['0.20.0','Unlimited perks: Midnight theme, gold crown online, and Sage weekly study plans'],
   ['0.19.6','Share your family plan by email, message, or copy — one tap from the Premium page'],
@@ -4002,13 +4004,9 @@ function openPremium(){
       <div class="section-title">${ico('crown',17)} Quizard Premium</div>
       ${isP ? `
         <div class="explain ok" style="margin-top:4px"><b>You're Premium.</b> Everything is unlocked — thanks for backing a small team.</div>
-        ${!isUnlimited() && hasMidnight() ? `
-          <div class="mlabel">Family perk</div>
-          <div class="tier-row"><span><b>Midnight theme</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">the academy after dark — included with Family</span></span>
-            <button class="seg" style="flex:none" onclick="toggleMidnight()">${account.theme==='midnight'?'Turn off':'Turn on'}</button></div>` : ``}
-        ${isUnlimited() ? `
-          <div class="mlabel">Unlimited perks</div>
-          <div class="tier-row"><span><b>Midnight theme</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">the academy after dark — exclusive to Unlimited</span></span>
+        ${hasPerks() ? `
+          <div class="mlabel">${isUnlimited()?'Unlimited perks':'Family perks'}</div>
+          <div class="tier-row"><span><b>Midnight theme</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">the academy after dark</span></span>
             <button class="seg" style="flex:none" onclick="toggleMidnight()">${account.theme==='midnight'?'Turn off':'Turn on'}</button></div>
           <div class="tier-row"><span><b>Gold crown online</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">shows by your name in races and on the leaderboard</span></span><span class="tier-rp">${ico('crown',14)}</span></div>
           <div class="tier-row"><span><b>Weekly plans from Sage</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">"Plan my week" — a day-by-day plan built from your numbers</span></span>
@@ -4034,14 +4032,14 @@ function openPremium(){
           <div style="border:1.5px solid var(--line);border-radius:12px;padding:14px 10px;text-align:center">
             <div style="font-weight:700;color:var(--navy)">Unlimited</div>
             <div style="margin:6px 0"><span style="font-size:26px;font-weight:800;color:var(--navy)">$100</span><span style="color:var(--gray);font-size:12px"> / 3 mo</span></div>
-            <div style="color:var(--gray);font-size:12px;margin-bottom:10px">1 account<br><b>unlimited everything</b> + Midnight theme,<br>gold crown online, weekly Sage plans</div>
+            <div style="color:var(--gray);font-size:12px;margin-bottom:10px">1 account<br><b>unlimited everything</b><br>+ all perks</div>
             <button class="btn" style="margin:0" onclick="buyPremium('unlimited')">Get Unlimited</button>
           </div>
           <div style="border:1.5px solid var(--gold);border-radius:12px;padding:14px 10px;text-align:center;position:relative">
             <div style="position:absolute;top:-9px;left:50%;transform:translateX(-50%);background:var(--gold);color:#1a2136;font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;white-space:nowrap">BEST VALUE</div>
             <div style="font-weight:700;color:var(--navy)">Family</div>
             <div style="margin:6px 0"><span style="font-size:26px;font-weight:800;color:var(--navy)">$299</span><span style="color:var(--gray);font-size:12px"> / 3 mo</span></div>
-            <div style="color:var(--gray);font-size:12px;margin-bottom:10px">up to 6 accounts, each kid their own<br>Sage 25/day each · Midnight theme</div>
+            <div style="color:var(--gray);font-size:12px;margin-bottom:10px">up to 6 accounts, each kid their own<br>all perks: crown, Midnight, weekly plans</div>
             <button class="btn" style="margin:0" onclick="buyPremium('family')">Get Family</button>
           </div>
         </div>
