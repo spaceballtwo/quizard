@@ -223,16 +223,20 @@ export class QuizardLobby {
     const plan = u.data && u.data.premiumPlan;
     const daily = plan === 'unlimited' ? 150 : 25;
     const season = plan === 'unlimited' ? 2500 : 2250;
-    if (u.tutorCount >= daily || (u.tutorSeason || 0) >= season) return json({ error: 'limit' }, 429);
-    // family plans also share a season pool
+    // Past the season allowance Sage SLOWS instead of going dark — never a dead
+    // month for a paying kid, and the ceilings stay profitable (see prooftest).
+    const over = (u.tutorSeason || 0) >= season;
+    let effDaily = over ? (plan === 'unlimited' ? 10 : 5) : daily;
+    // family plans also share a season pool; an empty pool slows everyone to a trickle
     let fam = null, fcode = u.famOf || u.familyCode;
     if (fcode){
       fam = await this.storage.get('fam:' + fcode);
       if (fam){
         if (!fam.since || now - fam.since > 90 * 86400e3){ fam.since = now; fam.total = 0; }
-        if ((fam.total || 0) >= 9000) return json({ error: 'limit' }, 429);
+        if ((fam.total || 0) >= 9000) effDaily = Math.min(effDaily, 5);
       }
     }
+    if (u.tutorCount >= effDaily) return json({ error: 'limit' }, 429);
     if (!this.env.ANTHROPIC_API_KEY) return json({ error: 'inactive' }, 503);
 
     const ctx = body.context || {};
@@ -308,7 +312,8 @@ ${ctx.live ? `- THE STUDENT HAS NOT ANSWERED YET, so these rules override everyt
     const rplan = u.data && u.data.premiumPlan;
     const rDaily = rplan === 'unlimited' ? 10 : 5;
     const rSeasonCap = rplan === 'unlimited' ? 300 : 100;
-    if (u.reportCount >= rDaily || (u.reportSeason || 0) >= rSeasonCap) return json({ error: 'limit' }, 429);
+    const rEff = (u.reportSeason || 0) >= rSeasonCap ? 1 : rDaily;   // past the season cap: one a day, never zero
+    if (u.reportCount >= rEff) return json({ error: 'limit' }, 429);
     if (!this.env.ANTHROPIC_API_KEY) return json({ error: 'inactive' }, 503);
     const facts = JSON.stringify(body.facts || {}).slice(0, 4000);
 
