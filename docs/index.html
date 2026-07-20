@@ -435,7 +435,7 @@
 </div>
 
 <script>
-const APP_VERSION = '0.21.1';
+const APP_VERSION = '0.21.2';
 /* ===== Local accounts: each person has their own on-device SSAT account ===== */
 let store = { accounts: [], currentId: null };
 function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
@@ -2462,6 +2462,7 @@ function closeFullTest(){
 }
 function startFullTest(){
   fullTest=true; applyAssessmentUI();
+  osend({t:'assess_start', mins:35});
   const el=document.getElementById('fulltest'); el.classList.add('hidden'); el.innerHTML='';
   newSet(FT_N);
   testSecs=FT_SECS; testStartAt=Date.now();
@@ -2791,7 +2792,7 @@ function grade(force){
   awardRP(correct*rpS.gain - wrongChosen*rpS.loss);   // scaled by tier; blanks are neutral
   if (leveled) showToast(`Level up! You reached Level ${level}`);
   if (leveled || correct===TOTAL) celebrate(); else playCorrect();
-  if (fullTest){ fullTest=false; applyAssessmentUI(); renderTestResults(correct, wrongChosen, blanks, perSection); }
+  if (fullTest){ fullTest=false; applyAssessmentUI(); osend({t:'assess_end'}); renderTestResults(correct, wrongChosen, blanks, perSection); }
   else renderResults(correct, perSection, {gained, bonus});
 }
 
@@ -3146,7 +3147,7 @@ function raceAnswer(i){
   lockRaceChoices();
   answerFX(ok, lab, '+1');
   if (ok) playCorrect(); else playWrong();
-  osend({t:'answer', n:oRound, correct:ok});
+  osend({t:'answer', n:oRound, correct:ok, key:oRaceQ.answer});
   const bar=document.getElementById('raceStatus');
   if (bar) bar.textContent = ok ? 'Correct — checking who was first…' : 'Locked out this round — waiting for your opponent…';
 }
@@ -3454,6 +3455,7 @@ function closeLearn(){
 /* ================= Sidebar navigation ================= */
 const MODE_DIVS = ['quiz','results','study','clock','versus','survival','daily','compete','achievements','reports','online','learn','vote','fulltest','coachpage','parentreport','gaps','premium','about','focus'];
 function resetToHome(){
+  const wasAssessing = fullTest || diagActive;
   clearInterval(clockTimer); clearTimeout(clockTimer);
   clearInterval(testTimerId); fullTest=false;
   clearInterval(focusTimer);
@@ -3464,6 +3466,7 @@ function resetToHome(){
   document.getElementById('backBtn').classList.add('hidden');
   document.getElementById('formError').classList.add('hidden');
   coachClose();
+  if (wasAssessing) osend({t:'assess_end'});
   diagActive=false; applyAssessmentUI();
   renderHome();
   document.getElementById('intro').classList.remove('hidden');
@@ -3675,6 +3678,7 @@ function coachSend(){
       }
       else if (d.error==='inactive') coachMsgs.push({role:'assistant', content:'The Coach is not switched on yet — soon!'});
       else if (d.error==='limit') coachMsgs.push({role:'assistant', content:"That's all my energy for today — I reset tomorrow. Try the Teach me lesson meanwhile!"});
+      else if (d.error==='assessment') coachMsgs.push({role:'assistant', content:"You're in the middle of a test — I sit those out, even over here. Finish up and I'm all yours!"});
       else if (d.error==='consent'){ account.coachConsent=false; saveStore(); renderCoachConsent(); return; }
       else if (d.error==='auth'){
         coachMsgs.pop();   // don't double-send their question on retry
@@ -3805,6 +3809,7 @@ function applyAssessmentUI(){ document.body.classList.toggle('assessing', assess
 function startDiag(){
   if (!account){ showToast('Log into an account first'); return; }
   diagActive=true; applyAssessmentUI();
+  osend({t:'assess_start', mins:20});
   diagQs=[];
   TOPICS.forEach((t,i)=>{ for(let k=0;k<2;k++){ const g=drawBag(t.gens,'dg_'+t.id); const q=g(); q._gen=g; q._ti=i; diagQs.push(q); } });
   shuffle(diagQs); diagIdx=0; diagAnswered=false;
@@ -3838,6 +3843,7 @@ function diagAnswer(i){
     diagAnswered=false; diagIdx++;
     if (diagIdx>=diagQs.length){
       diagActive=false; applyAssessmentUI();
+      osend({t:'assess_end'});
       account.diagAt=dateStr(new Date()); saveStore();
       celebrate(); showToast('Diagnostic complete — here is your map');
       openGaps(); renderNextUp();
@@ -3847,6 +3853,7 @@ function diagAnswer(i){
 
 /* ===== About: version, platform, what's new ===== */
 const CHANGELOG = [
+  ['0.21.2','Spoof-proofing: server-enforced test locks (even second devices) and race answer verification'],
   ['0.21.1','Sage sits out during the diagnostic, Full Test, and races — assessments measure YOU'],
   ['0.21.0','Free gets more: 3 Sage chats a day + the Knowledge Map. Unlimited gets Deep Explanations and the Daybreak theme'],
   ['0.20.3','Family plan is $349'],
