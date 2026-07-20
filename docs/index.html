@@ -21,6 +21,10 @@
   body.midnight .hero, body.midnight .choice, body.midnight input, body.midnight .seg { color: #e8e0c9; }
   body.midnight .choice, body.midnight input, body.midnight .tier-row { background: #232d4a; }
   body.midnight .chip, body.midnight .cmsg.coach { background:#2a3452; color:#e8e0c9; }
+  body.daybreak {
+    --bg: #eef3fa; --card: #fbfdff; --line: #d7e1f0; --gray: #67718a;
+    --gold: #b8860b; --gold-soft: #d9b45a;
+  }
   * { box-sizing: border-box; }
   body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
          background:var(--bg); color:#2e2815; line-height:1.55; }
@@ -430,14 +434,17 @@
 </div>
 
 <script>
-const APP_VERSION = '0.20.3';
+const APP_VERSION = '0.21.0';
 /* ===== Local accounts: each person has their own on-device SSAT account ===== */
 let store = { accounts: [], currentId: null };
 function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
 function isUnlimited(){ return !!(account && account.premiumPlan==='unlimited'); }
 function hasPerks(){ return isUnlimited() || !!(account && (account.premiumPlan==='family' || account.premiumPlan==='family-member' || store.familyPremium)); }
 function hasMidnight(){ return hasPerks(); }
-function applyTheme(){ document.body.classList.toggle('midnight', !!(account && account.theme==='midnight' && hasMidnight())); }
+function applyTheme(){
+  document.body.classList.toggle('midnight', !!(account && account.theme==='midnight' && hasMidnight()));
+  document.body.classList.toggle('daybreak', !!(account && account.theme==='daybreak' && isUnlimited()));
+}
 let account = null;   // the currently logged-in account
 
 /* ================= Small helpers ================= */
@@ -3515,7 +3522,6 @@ function coachHost(){
 }
 function openCoachPage(){
   if (!account){ showToast('Log into an account first'); return; }
-  if (premiumGate('Sage')) return;
   document.getElementById('intro').classList.add('hidden');
   const el=document.getElementById('coachpage');
   el.classList.remove('hidden');
@@ -3543,7 +3549,6 @@ function coachProgressCtx(){
 function coachOpenGeneral(){
   coachLiveAns=null;
   if (!account){ showToast('Log into an account first'); return; }
-  if (premiumGate('Sage')) return;
   if (!account.onlineToken || !ows || ows.readyState!==1) ensureOnlineIdentity();   // coach needs your online identity; connect quietly
   coachCtx = coachProgressCtx(); coachMsgs = [];
   if (!account.coachConsent){ renderCoachConsent(); return; }
@@ -3560,7 +3565,6 @@ function screenQ(){
 }
 function coachOpenSmart(){   // the corner button: "explain THIS to me"
   if (!account){ showToast('Log into an account first'); return; }
-  if (premiumGate('Sage')) return;
   const cur = screenQ();
   if (cur && cur.q && cur.q.choices){
     const q = cur.q;
@@ -3581,7 +3585,6 @@ function coachOpenSmart(){   // the corner button: "explain THIS to me"
 }
 function coachOpen(){
   if (!account){ showToast('Log into an account first'); return; }
-  if (premiumGate('Sage')) return;
   if (!coachCtx){ showToast('Miss a question first — the Coach helps with the problem on screen'); return; }
   if (!account.onlineToken || !ows || ows.readyState!==1) ensureOnlineIdentity();
   if (!account.coachConsent){ renderCoachConsent(); return; }
@@ -3752,7 +3755,6 @@ function gapRowHTML(i, v){
 }
 function openGaps(){
   if (!account){ showToast('Log into an account first'); return; }
-  if (premiumGate('The Knowledge Map')) return;
   document.getElementById('intro').classList.add('hidden');
   const el=document.getElementById('gaps');
   el.classList.remove('hidden');
@@ -3834,6 +3836,7 @@ function diagAnswer(i){
 
 /* ===== About: version, platform, what's new ===== */
 const CHANGELOG = [
+  ['0.21.0','Free gets more: 3 Sage chats a day + the Knowledge Map. Unlimited gets Deep Explanations and the Daybreak theme'],
   ['0.20.3','Family plan is $349'],
   ['0.20.2','Family outranks everything: all perks (crown, weekly plans, Midnight) included for the whole family'],
   ['0.20.1','Midnight theme now included with Family plans too'],
@@ -4011,7 +4014,11 @@ function openPremium(){
             <button class="seg" style="flex:none" onclick="toggleMidnight()">${account.theme==='midnight'?'Turn off':'Turn on'}</button></div>
           <div class="tier-row"><span><b>Gold crown online</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">shows by your name in races and on the leaderboard</span></span><span class="tier-rp">${ico('crown',14)}</span></div>
           <div class="tier-row"><span><b>Weekly plans from Sage</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">"Plan my week" — a day-by-day plan built from your numbers</span></span>
-            <button class="seg" style="flex:none" onclick="navTo('coach')">Open Sage</button></div>` : ``}
+            <button class="seg" style="flex:none" onclick="navTo('coach')">Open Sage</button></div>
+          ${isUnlimited() ? `
+          <div class="tier-row"><span><b>Deep Explanations</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">Sage thinks harder and answers longer — the why, not just the how</span></span><span class="tier-rp">${ico('bulb',14)}</span></div>
+          <div class="tier-row"><span><b>Daybreak theme</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">cool morning light — Unlimited only</span></span>
+            <button class="seg" style="flex:none" onclick="toggleDaybreak()">${account.theme==='daybreak'?'Turn off':'Turn on'}</button></div>` : ``}` : ``}
         ${account.premiumPlan==='family' ? `
           <div class="mlabel">Share with your family</div>
           <p class="section-instr">Your plan covers up to 6 accounts on any device. Family members open Premium on their device and enter this code:</p>
@@ -4033,7 +4040,7 @@ function openPremium(){
           <div style="border:1.5px solid var(--line);border-radius:12px;padding:14px 10px;text-align:center">
             <div style="font-weight:700;color:var(--navy)">Unlimited</div>
             <div style="margin:6px 0"><span style="font-size:26px;font-weight:800;color:var(--navy)">$100</span><span style="color:var(--gray);font-size:12px"> / 3 mo</span></div>
-            <div style="color:var(--gray);font-size:12px;margin-bottom:10px">1 account<br><b>unlimited everything</b><br>+ all perks</div>
+            <div style="color:var(--gray);font-size:12px;margin-bottom:10px">1 account<br><b>unlimited everything</b><br>+ all perks + Deep Explanations</div>
             <button class="btn" style="margin:0" onclick="buyPremium('unlimited')">Get Unlimited</button>
           </div>
           <div style="border:1.5px solid var(--gold);border-radius:12px;padding:14px 10px;text-align:center;position:relative">
@@ -4051,11 +4058,10 @@ function openPremium(){
           <button class="btn" style="width:auto;padding:9px 16px;margin:0" onclick="joinFamily()">Join</button>
         </div>`}
       <div class="mlabel">Always free</div>
-      ${rowF('Study mode')}${rowF('Daily Challenge')}${rowF('Verbal practice')}
+      ${rowF('Study mode')}${rowF('Daily Challenge')}${rowF('Verbal practice')}${rowF('Diagnostic & Knowledge Map')}${rowF('Sage — 3 chats a day')}
       <div class="mlabel">Premium</div>
       ${rowP('Full Test','real SSAT rules with a score estimate')}
-      ${rowP('Diagnostic & Knowledge Map','what they know, where the gaps are')}
-      ${rowP('Sage, the Coach','AI tutor with parent approval — 25 chats/day per kid, unlimited on the $100 plan')}
+      ${rowP('Sage, full strength','25 chats/day per kid — unlimited with Deep Explanations on the $100 plan')}
       ${rowP('Parent Reports','progress, growth, and gaps — written out')}
       ${rowP('Online races','live head-to-head with ratings')}
       ${rowP('Review Misses','every wrong answer waits for revenge')}
@@ -4084,6 +4090,11 @@ function shareFamily(){
 function toggleMidnight(){
   if (!hasMidnight()){ showToast('Midnight comes with Family and Unlimited plans'); return; }
   account.theme = account.theme==='midnight' ? '' : 'midnight';
+  saveStore(); applyTheme(); openPremium();
+}
+function toggleDaybreak(){
+  if (!isUnlimited()){ showToast('Daybreak is an Unlimited perk'); return; }
+  account.theme = account.theme==='daybreak' ? '' : 'daybreak';
   saveStore(); applyTheme(); openPremium();
 }
 function copyFamilyCode(){
