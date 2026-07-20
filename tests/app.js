@@ -1,0 +1,3955 @@
+
+const APP_VERSION = '0.21.2';
+/* ===== Local accounts: each person has their own on-device SSAT account ===== */
+let store = { accounts: [], currentId: null };
+function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
+function isUnlimited(){ return !!(account && account.premiumPlan==='unlimited'); }
+function hasPerks(){ return isUnlimited() || !!(account && (account.premiumPlan==='family' || account.premiumPlan==='family-member' || store.familyPremium)); }
+function hasMidnight(){ return hasPerks(); }
+function applyTheme(){
+  document.body.classList.toggle('midnight', !!(account && account.theme==='midnight' && hasMidnight()));
+  document.body.classList.toggle('daybreak', !!(account && account.theme==='daybreak' && isUnlimited()));
+}
+let account = null;   // the currently logged-in account
+
+/* ================= Small helpers ================= */
+function rnd(min,max){ return Math.floor(Math.random()*(max-min+1))+min; }
+function choice(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+function pick(arr,n){ return shuffle(arr.slice()).slice(0,n); }
+
+/* ===== Icon set: hand-drawn line glyphs (stroke = currentColor, so they inherit text color) ===== */
+const ICONS = {
+  calendar:'<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/>',
+  menu:'<path d="M4 7h16M4 12h16M4 17h16"/>',
+  paper:'<rect x="5" y="3.5" width="14" height="17" rx="2"/><path d="M8.5 8.5h7M8.5 12h7M8.5 15.5h4.5"/>',
+  book:'<path d="M4 5.5C6.5 4.8 9.5 5 12 6.8c2.5-1.8 5.5-2 8-1.3v12.7c-2.5-.7-5.5-.5-8 1.3-2.5-1.8-5.5-2-8-1.3Z"/><path d="M12 6.8v12.7"/>',
+  hourglass:'<path d="M7 4h10M7 20h10M8.5 4v2.3c0 2.6 3.5 3.6 3.5 5.7s-3.5 3.1-3.5 5.7V20M15.5 4v2.3c0 2.6-3.5 3.6-3.5 5.7s3.5 3.1 3.5 5.7V20"/>',
+  sword:'<path d="M19.5 4.5l-10 10M6.8 11.8l5.4 5.4M9.8 17.6l-4 4M4.4 16.2l3.4 3.4"/>',
+  swords:'<path d="M4.5 4.5l15 15M19.5 4.5l-15 15M8.3 13.7l2 2M15.7 13.7l-2 2"/>',
+  trophy:'<path d="M8 5h8v4.5a4 4 0 0 1-8 0Z"/><path d="M8 6.5H5.2A2.8 2.8 0 0 0 8 9.4M16 6.5h2.8A2.8 2.8 0 0 1 16 9.4M12 13.5v3M9 16.5h6M9.5 20h5"/>',
+  medal:'<circle cx="12" cy="9" r="4.5"/><path d="M9.7 12.8L8 20l4-2.2L16 20l-1.7-7.2"/>',
+  flame:'<path d="M12 4c2.5 3 5 5.5 5 9a5 5 0 0 1-10 0c0-3.5 2.5-6 5-9Z"/><path d="M12 12.5c1.1 1.1 1.8 1.9 1.8 3A1.8 1.8 0 0 1 12 17.2"/>',
+  star:'<path d="M12 3.8l2.4 4.9 5.4.8-3.9 3.8.9 5.4L12 16.1l-4.8 2.6.9-5.4-3.9-3.8 5.4-.8Z"/>',
+  flag:'<path d="M6 21V4.5"/><path d="M6 5.2c4-2 8 1.8 12 0v8.6c-4 1.8-8-2-12 0"/>',
+  quill:'<path d="M19.5 4.5c-6.5.3-10.8 4.2-12.3 10.2L6.2 19.8l1.8-.6.6-2.4c5 .3 9-3.6 10.9-12.3Z"/><path d="M7 17C10 11.5 13.5 8 17 6.3"/>',
+  volume:'<path d="M4.5 9.5v5H8l4.5 4v-13L8 9.5Z"/><path d="M15.5 9.7a3.6 3.6 0 0 1 0 4.6M18 8a7 7 0 0 1 0 8"/>',
+  mute:'<path d="M4.5 9.5v5H8l4.5 4v-13L8 9.5Z"/><path d="M16 10l4 4M20 10l-4 4"/>',
+  person:'<circle cx="12" cy="8" r="3.5"/><path d="M5.5 19.5a6.5 5.8 0 0 1 13 0"/>',
+  shield:'<path d="M12 3.5l7 2.4v5.6c0 4.4-2.9 7.4-7 9-4.1-1.6-7-4.6-7-9V5.9Z"/>',
+  crown:'<path d="M5.5 17h13M5.5 17L4 9l4.5 3L12 6.5 15.5 12 20 9l-1.5 8"/>',
+  lock:'<rect x="6" y="10.5" width="12" height="9" rx="2"/><path d="M9 10.5V8a3 3 0 0 1 6 0v2.5"/>',
+  bulb:'<path d="M9.5 17.5h5M10.2 20.5h3.6M12 3.5a5.8 5.8 0 0 0-3.3 10.5c.7.5 1 1.3 1 2.1v.4h4.6v-.4c0-.8.3-1.6 1-2.1A5.8 5.8 0 0 0 12 3.5Z"/>',
+  home:'<path d="M4 11.5 12 4.5l8 7"/><path d="M6.5 10.2V19.5h11v-9.3"/>',
+  refresh:'<path d="M20 12a8 8 0 1 1-2.4-5.7M20 3.5V8h-4.5"/>',
+  chat:'<path d="M4.5 5h15v10.5h-8.5L7 19v-3.5H4.5Z"/><path d="M8 9h8M8 12h5"/>',
+  heart:'<path d="M12 19.8s-6.8-4.4-8.8-8.6C2 8.5 3.8 5.5 7 5.5c2 0 3.2 1.1 4 2.4.8-1.3 2-2.4 4-2.4 3.2 0 5 3 3.8 5.7-2 4.2-6.8 8.6-6.8 8.6Z"/>',
+  globe:'<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c3.2 2.7 3.2 14.3 0 17-3.2-2.7-3.2-14.3 0-17Z"/>',
+  alpha:'<path d="M5.5 19L11.5 5h1L18.5 19M8 14.5h8"/>',
+  ballot:'<rect x="4.5" y="4.5" width="15" height="15" rx="2"/><path d="M8.5 12.2l2.4 2.4 4.8-5.2"/>'
+};
+function ico(name, size, filled){
+  const s = size || 18;
+  return `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24" fill="${filled?'currentColor':'none'}" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]||''}</svg>`;
+}
+function heartsHTML(lives){
+  return Array.from({length:3},(_,i)=> i<lives
+    ? `<span style="color:var(--red)">${ico('heart',19,true)}</span>`
+    : `<span style="color:#cbc2a8">${ico('heart',19)}</span>`).join('');
+}
+
+/* ===== Figures: canvas-drawn diagrams attached to questions via q.draw ===== */
+function figHTML(q){
+  return (q && q.draw) ? `<div style="text-align:center;margin:8px 0"><canvas class="fig" width="280" height="170" data-fig='${JSON.stringify(q.draw)}'></canvas></div>` : '';
+}
+function drawFigs(){
+  document.querySelectorAll('canvas.fig:not([data-drawn])').forEach(c=>{
+    c.setAttribute('data-drawn','1');
+    let s; try{ s=JSON.parse(c.getAttribute('data-fig')); }catch(e){ return; }
+    const ctx=c.getContext('2d'); if(!ctx) return;
+    ctx.clearRect(0,0,c.width,c.height);
+    ctx.strokeStyle='#263048'; ctx.fillStyle='#263048'; ctx.lineWidth=2;
+    ctx.font='13px Georgia, serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    if (FIGS[s.t]) FIGS[s.t](ctx, s, c.width, c.height);
+  });
+}
+const FIGS = {
+  rt(ctx,s,W,H){
+    const x=80, y=H-30, legW=W-170, legH=H-58;
+    ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+legW,y); ctx.lineTo(x,y-legH); ctx.closePath(); ctx.stroke();
+    ctx.strokeRect(x, y-13, 13, 13);
+    ctx.fillText(s.b, x+legW/2, y+14);
+    ctx.fillText(s.a, x-16, y-legH/2);
+    ctx.fillText('?', x+legW/2+16, y-legH/2-12);
+  },
+  tri(ctx,s,W,H){
+    const x=55, y=H-32, w=W-130, apX=x+w*0.42, apY=26;
+    ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+w,y); ctx.lineTo(apX,apY); ctx.closePath(); ctx.stroke();
+    ctx.setLineDash([4,4]); ctx.beginPath(); ctx.moveTo(apX,apY); ctx.lineTo(apX,y); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillText('base = '+s.b, x+w/2, y+15);
+    ctx.fillText('h = '+s.h, apX+30, (apY+y)/2);
+  },
+  rect(ctx,s,W,H){
+    const x=70, y=26, w=W-150, h=H-66;
+    ctx.strokeRect(x,y,w,h);
+    ctx.fillText(s.w, x+w/2, y+h+15);
+    ctx.fillText(s.h, x-18, y+h/2);
+  },
+  pie(ctx,s,W,H){
+    const cx=W/2, cy=H/2, r=Math.min(W,H)/2-12;
+    for(let i=0;i<s.n;i++){
+      const a0=-Math.PI/2 + i*2*Math.PI/s.n, a1=a0 + 2*Math.PI/s.n;
+      ctx.beginPath(); ctx.moveTo(cx,cy); ctx.arc(cx,cy,r,a0,a1); ctx.closePath();
+      if(i<s.k){ ctx.fillStyle='rgba(202,152,39,.55)'; ctx.fill(); ctx.fillStyle='#263048'; }
+      ctx.stroke();
+    }
+  },
+  spin(ctx,s,W,H){
+    FIGS.pie(ctx,s,W,H);
+    const cx=W/2, cy=H/2;
+    ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx+Math.min(W,H)/2-26, cy-10); ctx.stroke(); ctx.lineWidth=2;
+    ctx.beginPath(); ctx.arc(cx,cy,4,0,7); ctx.fill();
+  },
+  bars(ctx,s,W,H){
+    const n=s.v.length, max=Math.max(...s.v), gap=(W-90)/n, bw=gap*0.55;
+    ctx.strokeStyle='#7a7057'; ctx.beginPath(); ctx.moveTo(42,H-26); ctx.lineTo(W-24,H-26); ctx.stroke(); ctx.strokeStyle='#263048';
+    s.v.forEach((v,i)=>{
+      const bh=(H-62)*v/max, x=54+i*gap, y=H-26-bh;
+      ctx.fillStyle='rgba(38,48,72,.75)'; ctx.fillRect(x,y,bw,bh);
+      ctx.fillStyle='#263048';
+      ctx.fillText(v, x+bw/2, y-9);
+      ctx.fillText(s.l[i], x+bw/2, H-13);
+    });
+  }
+};
+
+/* Build a 4-option multiple choice from a correct value + suggested distractors. */
+function makeMC(correct, distractors, fmt){
+  fmt = fmt || (v => String(v));
+  const seen = new Set([correct]);
+  const opts = [correct];
+  for (const d of distractors){
+    if (opts.length >= 5) break;                 // real SSAT = 5 choices (A–E)
+    if (d > 0 && !seen.has(d)){ seen.add(d); opts.push(d); }
+  }
+  let off = 1;
+  while (opts.length < 5 && off <= 80){
+    for (const cand of [correct+off, correct-off]){
+      if (opts.length >= 5) break;
+      if (cand > 0 && !seen.has(cand)){ seen.add(cand); opts.push(cand); }
+    }
+    off++;
+  }
+  shuffle(opts);
+  return { choices: opts.map(fmt), answer: opts.indexOf(correct) };
+}
+function Q(q, correct, distractors, why, fmt){
+  const mc = makeMC(correct, distractors, fmt);
+  return { q, choices: mc.choices, answer: mc.answer, why };
+}
+const money = v => `$${v}`;
+const mph   = v => `${v} mph`;
+const pct   = v => `${v}%`;
+function gcd(a,b){ return b ? gcd(b, a % b) : a; }
+/* Like Q(), but for string answers (fractions etc.) — pass extra distractor candidates.
+   Dedupes by numeric VALUE, so "3/6" and "1/2" can never both appear as choices. */
+function fval(s){ const m=String(s).match(/^(\d+)\/(\d+)$/); return m ? (+m[1]/+m[2]) : parseFloat(s); }
+function QS(q, correct, distractors, why){
+  const seenV = [fval(correct)];
+  const opts = [correct];
+  for (const d of distractors){
+    if (opts.length >= 5) break;
+    const s = String(d), v = fval(s);
+    if (!s || isNaN(v) || seenV.some(x => Math.abs(x-v) < 1e-9)) continue;
+    seenV.push(v); opts.push(s);
+  }
+  shuffle(opts);
+  return { q, choices: opts, answer: opts.indexOf(correct), why };
+}
+const frac = (n,d)=>{ const g=gcd(n,d); return (d/g)===1 ? String(n/g) : `${n/g}/${d/g}`; };
+
+/* ================= Quantitative GENERATORS — SSAT Upper-Level difficulty ================= */
+function genTwoSideLinear(){
+  const a=rnd(4,9), c=rnd(2,a-1), x=rnd(2,9), b=rnd(1,9), d=(a-c)*x+b;
+  return Q(`If ${a}x + ${b} = ${c}x + ${d}, what is the value of x?`, x,
+    [x+1, x-1, d-b, d+b],
+    `Subtract ${c}x from both sides: ${a-c}x + ${b} = ${d}; ${a-c}x = ${d-b}; x = ${x}.`);
+}
+function genSolveExpression(){
+  const a=rnd(2,6), x=rnd(2,9), b=rnd(1,10), c=a*x+b, m=rnd(2,5), k=rnd(1,9), ans=m*x+k;
+  return Q(`If ${a}x + ${b} = ${c}, what is the value of ${m}x + ${k}?`, ans,
+    [x, m*x, ans+m, ans-1],
+    `First solve: ${a}x = ${c-b}, so x = ${x}. Then ${m}x + ${k} = ${m*x} + ${k} = ${ans}.`);
+}
+function genRatio(){
+  const [p,q] = choice([[2,3],[3,5],[3,4],[2,5],[4,5],[5,6],[3,7],[2,7],[4,7]]);
+  const pair = choice([["boys","girls"],["cats","dogs"],["apples","oranges"],["red marbles","blue marbles"],["pencils","pens"],["tulips","roses"],["home fans","away fans"],["fiction books","nonfiction books"]]);
+  const k = rnd(3,9), known = p*k, ans = q*k;
+  const stem = choice([
+    `The ratio of ${pair[0]} to ${pair[1]} is ${p}:${q}. If there are ${known} ${pair[0]}, how many ${pair[1]} are there?`,
+    `In a room, for every ${p} ${pair[0]} there are ${q} ${pair[1]}. If there are ${known} ${pair[0]}, how many ${pair[1]} are there?`,
+    `A club has ${pair[0]} and ${pair[1]} in the ratio ${p}:${q}. There are ${known} ${pair[0]}. How many ${pair[1]} are in the club?`
+  ]);
+  return Q(stem, ans,
+    [known, (p+q)*k, ans+q, ans-q],
+    `Each unit = ${known} ÷ ${p} = ${k}; ${pair[1]} = ${q} × ${k} = ${ans}.`);
+}
+function genProportion(){
+  const item=choice(['notebooks','pens','stickers','trading cards','granola bars','erasers','key chains']);
+  const n1=rnd(2,5), per=rnd(2,9), cost1=n1*per, n2=rnd(6,12);
+  const stem = choice([
+    `If ${n1} ${item} cost $${cost1}, how much do ${n2} ${item} cost at the same rate?`,
+    `A store sells ${n1} ${item} for $${cost1}. At that price, what would ${n2} ${item} cost?`,
+    `${n1} ${item} cost $${cost1} altogether. What is the cost of ${n2} ${item}?`
+  ]);
+  return Q(stem, n2*per,
+    [n2*per+per, n2*per-per, cost1+n2, per],
+    `Each one costs $${cost1} ÷ ${n1} = $${per}; ${n2} × $${per} = $${n2*per}.`, money);
+}
+function genPercentIncrease(){
+  const a=20*rnd(1,6), p=choice([10,20,25,50]), b=a*(100+p)/100;
+  return Q(`A price increases from $${a} to $${b}. What is the percent increase?`, p,
+    [p+5, p-5, p*2, b-a],
+    `Increase = $${b} − $${a} = $${b-a}; percent = ${b-a} ÷ ${a} × 100 = ${p}%.`, pct);
+}
+function genReversePercent(){
+  const ans=20*rnd(2,8), p=choice([10,20,25,50]), part=ans*p/100;
+  return Q(`${p}% of a number is ${part}. What is the number?`, ans,
+    [part, part*2, ans+10, ans-10],
+    `The number = ${part} ÷ ${p}% = ${part} ÷ ${p/100} = ${ans}.`);
+}
+function genPythagoras(){
+  const t = choice([[3,4,5],[6,8,10],[5,12,13],[8,15,17],[9,12,15],[7,24,25],[20,21,29]]);
+  return Q(`A right triangle has legs of length ${t[0]} and ${t[1]}. What is the length of the hypotenuse?`, t[2],
+    [t[0]+t[1], t[2]+1, t[2]-1, t[2]+2],
+    `${t[0]}² + ${t[1]}² = ${t[0]*t[0]} + ${t[1]*t[1]} = ${t[2]*t[2]}, so the hypotenuse = ${t[2]}.`);
+}
+function genExponentSolve(){
+  const b=choice([2,3,5]), e=rnd(2,4), val=Math.pow(b,e);
+  return Q(`If ${b}^x = ${val}, what is the value of x?`, e,
+    [e+1, e-1, val/b, b],
+    `${b}^${e} = ${val}, so x = ${e}.`);
+}
+function genExponentEval(){
+  const [b1,e1,b2,e2] = choice([[2,4,3,2],[3,3,2,3],[2,5,4,2],[3,2,2,2],[4,2,2,3],[5,2,3,2],[2,4,2,2],[3,3,3,2]]);
+  const v1=Math.pow(b1,e1), v2=Math.pow(b2,e2), ans=v1-v2;
+  return Q(`What is ${b1}^${e1} − ${b2}^${e2}?`, ans,
+    [v1+v2, ans+5, ans-5, ans+10],
+    `${b1}^${e1} = ${v1} and ${b2}^${e2} = ${v2}; ${v1} − ${v2} = ${ans}.`);
+}
+function genPercentRed(){
+  const [holder,thing]=choice([['jar','marbles'],['bag','candies'],['box','beads'],['bin','buttons']]);
+  const total=choice([10,20,25,50]), r=rnd(1,total-1), ans=r*100/total;
+  return Q(`A ${holder} holds ${r} red ${thing} and ${total-r} blue ${thing}. What percent of the ${thing} are red?`, ans,
+    [(total-r)*100/total, ans+10, ans-10, r],
+    `${r} of ${total} ${thing} are red; ${r} ÷ ${total} × 100 = ${ans}%.`, pct);
+}
+function genAverageMissing(){
+  let m,a,b,c,x;
+  do { m=rnd(8,20); a=rnd(2,25); b=rnd(2,25); c=rnd(2,25); x=4*m-(a+b+c); }
+  while (x<1 || x>60);
+  return Q(`The average of four numbers is ${m}. Three of them are ${a}, ${b}, and ${c}. What is the fourth number?`, x,
+    [x+1, x-1, m, x+2],
+    `The four numbers total 4 × ${m} = ${4*m}; ${a} + ${b} + ${c} = ${a+b+c}, so the fourth = ${x}.`);
+}
+function genConsecutive(){
+  const mid=rnd(4,30), s=3*mid;
+  return Q(`The sum of three consecutive integers is ${s}. What is the largest of the three?`, mid+1,
+    [mid, mid-1, mid+2, s],
+    `The middle integer is ${s} ÷ 3 = ${mid}; the integers are ${mid-1}, ${mid}, ${mid+1}, so the largest is ${mid+1}.`);
+}
+function genTriangleArea(){
+  let b,h;
+  do { b=rnd(3,16); h=rnd(3,16); } while ((b*h)%2!==0);
+  const ans=b*h/2;
+  return Q(`A triangle has a base of ${b} and a height of ${h}. What is its area?`, ans,
+    [b*h, ans+b, ans+h, b+h],
+    `Area = ½ × base × height = ½ × ${b} × ${h} = ${ans}.`);
+}
+function genBoxVolume(){
+  const l=rnd(2,8), w=rnd(2,8), h=rnd(2,6), ans=l*w*h;
+  return Q(`A rectangular box measures ${l} by ${w} by ${h}. What is its volume?`, ans,
+    [l+w+h, l*w, 2*(l*w+w*h+l*h), ans+10],
+    `Volume = length × width × height = ${l} × ${w} × ${h} = ${ans}.`);
+}
+function genPercentOfPercent(){
+  const p1=choice([5,10,20,25,50]), p2=choice([20,40,60,80]), n=100*rnd(1,4);
+  const step=p2/100*n, ans=p1/100*step;
+  return Q(`What is ${p1}% of ${p2}% of ${n}?`, ans,
+    [p1/100*n, step, ans+5, ans*2],
+    `${p2}% of ${n} = ${step}; then ${p1}% of ${step} = ${ans}.`);
+}
+function genRemainder(){
+  const dvsr=rnd(3,9), quot=rnd(3,12), rem=rnd(1,dvsr-1), num=dvsr*quot+rem;
+  return Q(`What is the remainder when ${num} is divided by ${dvsr}?`, rem,
+    [rem+1, rem-1, quot, dvsr-rem],
+    `${num} = ${dvsr} × ${quot} + ${rem}, so the remainder is ${rem}.`);
+}
+/* ---- additional standard SSAT topics ---- */
+function genMedian(){
+  const arr=[]; while(arr.length<5){ const v=rnd(2,30); if(!arr.includes(v)) arr.push(v); }
+  const sorted=arr.slice().sort((a,b)=>a-b), med=sorted[2];
+  return Q(`What is the median of ${arr.join(', ')}?`, med,
+    [Math.round(arr.reduce((s,x)=>s+x,0)/5), sorted[1], sorted[3], sorted[0]],
+    `In order: ${sorted.join(', ')}. The middle value (median) is ${med}.`);
+}
+function genSequence(){
+  const a=rnd(1,9), d=rnd(2,6), next=a+4*d;
+  const stem = choice([
+    `What number comes next: ${a}, ${a+d}, ${a+2*d}, ${a+3*d}, ___?`,
+    `A pattern goes ${a}, ${a+d}, ${a+2*d}, ${a+3*d}, … What is the next term?`,
+    `The sequence ${a}, ${a+d}, ${a+2*d}, ${a+3*d} continues the same way. What is the fifth number?`
+  ]);
+  return Q(stem, next,
+    [next+d, next-d, next+1, a+5*d],
+    `Each term increases by ${d}, so ${a+3*d} + ${d} = ${next}.`);
+}
+function genCoordDistance(){
+  const t=choice([[3,4,5],[6,8,10],[5,12,13],[8,15,17],[9,12,15]]);
+  return Q(`On a coordinate grid, what is the distance from (0, 0) to (${t[0]}, ${t[1]})?`, t[2],
+    [t[0]+t[1], t[2]+1, t[2]-1, t[2]+2],
+    `Distance = √(${t[0]}² + ${t[1]}²) = √${t[0]*t[0]+t[1]*t[1]} = ${t[2]}.`);
+}
+function genMultiStepWord(){
+  const name=choice(['Maya','Leo','Aria','Noah','Zoe','Priya','Marcus','Elena','Jaden','Sofia']);
+  const it=choice([['notebooks','a pen'],['markers','an eraser'],['apples','a drink'],['comic books','a poster'],['packs of cards','a binder'],['snacks','a water bottle']]);
+  const n=rnd(2,5), price=rnd(2,6), extra=rnd(2,5), total=n*price+extra;
+  return Q(`${name} buys ${n} ${it[0]} at $${price} each and ${it[1]} for $${extra}. How much is spent in total?`, total,
+    [n*price, total+extra, n*(price+extra), total-extra],
+    `${n} × $${price} = $${n*price}; plus $${extra} = $${total}.`, money);
+}
+function genRatioShare(){
+  const [p,q]=choice([[2,3],[3,5],[1,4],[3,4],[2,5]]); const unit=rnd(4,12);
+  const total=(p+q)*unit, larger=Math.max(p,q)*unit;
+  return Q(`$${total} is shared in the ratio ${p}:${q}. What is the larger share?`, larger,
+    [Math.min(p,q)*unit, larger+unit, larger-unit, total],
+    `Total parts = ${p+q}; each part = $${total} ÷ ${p+q} = $${unit}; larger share = ${Math.max(p,q)} × $${unit} = $${larger}.`, money);
+}
+
+/* ---- more topics: fractions, geometry, probability, data, number theory ---- */
+function genFractionOf(){
+  const den=choice([3,4,5,6,8]), num=rnd(1,den-1), k=rnd(2,6), whole=den*k, ans=num*k;
+  return Q(`What is ${num}/${den} of ${whole}?`, ans,
+    [k, num*den, ans+k, whole-ans],
+    `${whole} ÷ ${den} = ${k}; ${num} × ${k} = ${ans}.`);
+}
+function genPerimeterRect(){
+  const l=rnd(4,15), w=rnd(2,l-1), ans=2*(l+w);
+  return Q(`A rectangle is ${l} units long and ${w} units wide. What is its perimeter?`, ans,
+    [l*w, l+w, 2*l+w, ans+2],
+    `Perimeter = 2 × (${l} + ${w}) = ${ans}.`);
+}
+function genOrderOps(){
+  const a=rnd(2,9), b=rnd(2,9), c=rnd(2,9), prod=b*c, d=rnd(1,Math.min(9,a+prod-1)), ans=a+prod-d;
+  return Q(`What is ${a} + ${b} × ${c} − ${d}?`, ans,
+    [(a+b)*c-d, a+b*(c-d), ans+d, ans-1],
+    `Multiply first: ${b} × ${c} = ${prod}; then ${a} + ${prod} − ${d} = ${ans}.`);
+}
+function genNegatives(){
+  const a=rnd(3,12), rise=rnd(a+2,a+15), ans=rise-a;
+  return Q(`The temperature was −${a}°F at dawn and rose ${rise}°F by noon. What was the temperature at noon?`, ans,
+    [rise+a, ans+2, ans-2, a],
+    `−${a} + ${rise} = ${ans}°F.`);
+}
+function genTimeConvert(){
+  const halves=choice([3,4,5,6,7]), h=halves/2, ans=halves*30;
+  const label = h%1 ? (Math.floor(h)+'½') : String(h);
+  return Q(`How many minutes are in ${label} hours?`, ans,
+    [Math.round(h*100), ans+30, ans-30, ans+15],
+    `${label} hours × 60 minutes = ${ans} minutes.`);
+}
+function genFractionAdd(){
+  const [d1,d2]=choice([[2,3],[3,4],[2,5],[3,5],[4,5],[2,7],[3,8]]);
+  const n1=rnd(1,d1-1), n2=rnd(1,d2-1);
+  const den=d1*d2/gcd(d1,d2), num=n1*(den/d1)+n2*(den/d2);
+  const g=gcd(num,den), cn=num/g, cd=den/g;
+  const correct = frac(num,den);
+  return QS(`What is ${n1}/${d1} + ${n2}/${d2}?`, correct,
+    [`${n1+n2}/${d1+d2}`, frac(cn+1,cd), `${cn}/${cd+1}`, frac(Math.max(1,cn-1),cd), frac(n1*n2,d1*d2), `${cn}/${cd*2}`, `${cn+2}/${cd}`],
+    `Common denominator ${den}: ${n1*(den/d1)}/${den} + ${n2*(den/d2)}/${den} = ${num}/${den}${g>1?` = ${correct}`:''}.`);
+}
+function genMode(){
+  const m=rnd(2,15); let a,b,c;
+  do{ a=rnd(2,20); }while(a===m);
+  do{ b=rnd(2,20); }while(b===m||b===a);
+  do{ c=rnd(2,20); }while(c===m||c===a||c===b);
+  const arr=shuffle([m,m,m,a,b,c]), sorted=arr.slice().sort((x,y)=>x-y);
+  return Q(`What is the mode of ${arr.join(', ')}?`, m,
+    [Math.round(arr.reduce((s,x)=>s+x,0)/6), Math.round((sorted[2]+sorted[3])/2), sorted[5], sorted[0]],
+    `The mode is the value that appears most often — ${m} appears three times.`);
+}
+function genAngleTriangle(){
+  const a=rnd(25,80), b=rnd(25,Math.min(80,150-a)), ans=180-a-b;
+  return Q(`Two angles of a triangle measure ${a}° and ${b}°. What is the measure of the third angle?`, ans,
+    [180-a, 180-b, a+b, ans+10],
+    `The angles of a triangle sum to 180°: 180 − ${a} − ${b} = ${ans}°.`);
+}
+function genDiscount(){
+  const item=choice(['jacket','backpack','skateboard','pair of sneakers','video game','hoodie','baseball glove']);
+  const price=10*rnd(3,12), p=choice([10,20,30,40,50]), off=price*p/100, ans=price-off;
+  const stem = choice([
+    `A ${item} costs $${price}. It goes on sale for ${p}% off. What is the sale price?`,
+    `A ${item} normally sells for $${price}. This week it is marked down ${p}%. What does it cost now?`,
+    `A store cuts the price of a $${price} ${item} by ${p}%. What is the new price?`
+  ]);
+  return Q(stem, ans,
+    [off, price-p, ans-10, price],
+    `Discount = ${p}% of $${price} = $${off}; sale price = $${price} − $${off} = $${ans}.`, money);
+}
+function genSimpleProb(){
+  const r=rnd(2,6), b=rnd(2,6), g=rnd(1,4), total=r+b+g;
+  return QS(`A bag holds ${r} red, ${b} blue, and ${g} green marbles. If one marble is drawn at random, what is the probability it is red?`,
+    frac(r,total),
+    [frac(b,total), frac(r,b+g), `${r}/${total+1}`, `1/${r}`, frac(g,total), frac(total-r,total), `${r}/${total+2}`, `${r}/${total*2}`],
+    `${r} red out of ${total} total marbles = ${r}/${total}${gcd(r,total)>1?` = ${frac(r,total)}`:''}.`);
+}
+function genSlope(){
+  const x1=rnd(0,5), y1=rnd(0,5), m=rnd(1,4), dx=rnd(1,4), x2=x1+dx, y2=y1+m*dx;
+  return Q(`What is the slope of the line through (${x1}, ${y1}) and (${x2}, ${y2})?`, m,
+    [dx, y2-y1, m+1, m-1],
+    `Slope = rise ÷ run = (${y2} − ${y1}) ÷ (${x2} − ${x1}) = ${y2-y1} ÷ ${dx} = ${m}.`);
+}
+function genSquareRootEq(){
+  const x=rnd(5,15), v=x*x;
+  return Q(`If x² = ${v} and x > 0, what is x?`, x,
+    [Math.floor(v/2), x+1, x-1, 2*x],
+    `√${v} = ${x} because ${x} × ${x} = ${v}.`);
+}
+function genCustomOp(){
+  const sym=choice(['◆','★','▲']), c1=rnd(2,4), c2=rnd(2,4), x=rnd(2,9), y=rnd(2,9), ans=c1*x+c2*y;
+  return Q(`If a ${sym} b = ${c1}a + ${c2}b, what is ${x} ${sym} ${y}?`, ans,
+    [c2*x+c1*y, x+y, ans+1, ans-2],
+    `Substitute a = ${x}, b = ${y}: ${c1}(${x}) + ${c2}(${y}) = ${c1*x} + ${c2*y} = ${ans}.`);
+}
+function genLcm(){
+  const [a,b]=choice([[4,6],[6,8],[4,10],[6,9],[8,12],[5,7],[6,10],[3,8]]);
+  const l=a*b/gcd(a,b);
+  return Q(`What is the least common multiple of ${a} and ${b}?`, l,
+    [a*b, gcd(a,b), a+b, l*2],
+    `List multiples: ${a}, ${2*a}, …, and ${b}, ${2*b}, …; the smallest number in both lists is ${l}.`);
+}
+function genAgeProblem(){
+  const [who,rel]=choice([['Jake','his sister'],['Mia','her brother'],['Eli','his cousin'],['Nora','her cousin'],['Ben','his cousin'],['Ava','her brother'],['Theo','his sister']]);
+  const mult=choice([2,3,4]), young=rnd(3,12), sum=young*(mult+1), ans=young*mult;
+  const stem = choice([
+    `${who} is ${mult} times as old as ${rel}. Together their ages add up to ${sum}. How old is ${who}?`,
+    `The ages of ${who} and ${rel} total ${sum}, and ${who} is ${mult} times older. What is ${who}'s age?`
+  ]);
+  return Q(stem, ans,
+    [young, sum, ans+mult, ans-1],
+    `Their ages are ${mult} parts + 1 part = ${mult+1} parts; each part = ${sum} ÷ ${mult+1} = ${young}. ${who} = ${mult} × ${young} = ${ans}.`);
+}
+function genInequalityInt(){
+  const a=rnd(2,5), b=rnd(1,9), x0=rnd(3,9), r=rnd(1,a-1), c=b+a*x0+r;
+  const bound=((c-b)/a).toFixed(2).replace(/\.?0+$/,'');
+  return Q(`What is the largest integer value of x for which ${a}x + ${b} < ${c}?`, x0,
+    [x0+1, x0-1, c-b, x0+2],
+    `${a}x < ${c} − ${b} = ${c-b}; x < ${c-b} ÷ ${a} = ${bound}, so the largest integer is ${x0}.`);
+}
+function genPolygonAngles(){
+  const [n,name]=choice([[5,'pentagon'],[6,'hexagon'],[8,'octagon'],[10,'decagon']]);
+  const ans=(n-2)*180;
+  return Q(`What is the sum of the interior angles of a ${name} (${n} sides)?`, ans,
+    [n*180, ans-180, ans+180, 360],
+    `Sum of interior angles = (n − 2) × 180° = (${n} − 2) × 180° = ${ans}°.`);
+}
+function genAvgSpeed(){
+  const t1=rnd(1,3), t2=rnd(1,3), avg=choice([30,40,45,50,60]), k=choice([5,10])*(Math.random()<0.5?-1:1);
+  let d1=avg*t1+k, d2=avg*t2-k;
+  if(d1<=0||d2<=0){ d1=avg*t1; d2=avg*t2; }
+  return Q(`A car travels ${d1} miles in ${t1} hour${t1>1?'s':''}, then ${d2} more miles in ${t2} hour${t2>1?'s':''}. What is its average speed for the whole trip?`, avg,
+    [avg+5, avg-5, Math.round(d1/t1), Math.round(d2/t2)],
+    `Average speed = total distance ÷ total time = ${d1+d2} ÷ ${t1+t2} = ${avg} mph.`, mph);
+}
+function genExpRules(){
+  const b=choice([2,3,5,10]), e1=rnd(2,4), e2=rnd(2,4), ans=e1+e2;
+  return Q(`If ${b}^${e1} × ${b}^${e2} = ${b}^x, what is the value of x?`, ans,
+    [e1*e2, ans+1, ans-1, Math.max(1,Math.abs(e1-e2))],
+    `When multiplying powers with the same base, add the exponents: x = ${e1} + ${e2} = ${ans}.`);
+}
+
+/* ---- harder topics: systems, quadratics, functions, compound probability ---- */
+function genSystemEq(){
+  const x=rnd(5,15), y=rnd(2,x-1), S=x+y, D=x-y;
+  return Q(`If x + y = ${S} and x − y = ${D}, what is the value of x?`, x,
+    [y, S-D, x+1, x-1],
+    `Add the two equations: 2x = ${S} + ${D} = ${S+D}, so x = ${x}.`);
+}
+function genFactoredQuad(){
+  const a=rnd(2,7), b=rnd(2,7);
+  return Q(`If (x − ${a})(x + ${b}) = 0, what is the positive value of x?`, a,
+    [b, a+b, Math.abs(a-b)||a+1, a+1],
+    `A product is zero when either factor is zero: x = ${a} or x = −${b}. The positive one is ${a}.`);
+}
+function genFunctionEval(){
+  const a=rnd(2,4), b=rnd(1,9), n=rnd(2,5), ans=a*n*n+b;
+  return Q(`If f(x) = ${a}x² + ${b}, what is f(${n})?`, ans,
+    [(a*n)*(a*n)+b, a*n+b, a*n*n-b, ans+a],
+    `Square first, then multiply: f(${n}) = ${a} × ${n*n} + ${b} = ${ans}.`);
+}
+function genTwoEvents(){
+  const sc = choice([
+    {q:'A fair coin is flipped twice. What is the probability of getting heads both times?', n:1, d:4,
+     why:'Each flip is 1/2, and independent events multiply: 1/2 × 1/2 = 1/4.'},
+    {q:'A fair coin is flipped three times. What is the probability of getting heads all three times?', n:1, d:8,
+     why:'1/2 × 1/2 × 1/2 = 1/8.'},
+    {q:'A fair six-sided die is rolled twice. What is the probability of rolling a 6 both times?', n:1, d:36,
+     why:'Each roll is 1/6, and independent events multiply: 1/6 × 1/6 = 1/36.'},
+    {q:'A fair coin is flipped and a fair six-sided die is rolled. What is the probability of heads AND a 6?', n:1, d:12,
+     why:'1/2 × 1/6 = 1/12.'},
+    {q:'A fair six-sided die is rolled twice. What is the probability both rolls are even?', n:1, d:4,
+     why:'Even is 3 of 6 = 1/2 each roll; 1/2 × 1/2 = 1/4.'}
+  ]);
+  return QS(sc.q, frac(sc.n, sc.d),
+    [`1/${sc.d/2}`, `1/${sc.d*2}`, `2/${sc.d}`, `1/${sc.d-1}`, `1/${sc.d+2}`], sc.why);
+}
+function genThreeRatio(){
+  const parts=choice([[1,2,3],[2,3,5],[1,3,4],[2,3,4],[1,2,5]]);
+  const unit=rnd(3,10), sum=parts[0]+parts[1]+parts[2], total=sum*unit, ans=Math.max(...parts)*unit;
+  return Q(`$${total} is split among three people in the ratio ${parts.join(':')}. What is the largest share?`, ans,
+    [Math.min(...parts)*unit, parts[1]*unit, total, ans+unit],
+    `Total parts = ${sum}; each part = $${total} ÷ ${sum} = $${unit}; largest = ${Math.max(...parts)} × $${unit} = $${ans}.`, money);
+}
+/* ---- more medium topics ---- */
+function genWorkBackwards(){
+  const n=rnd(3,12), a=rnd(2,5), b=rnd(1,a*n-1), c=a*n-b;
+  const stem = choice([
+    `I multiply a number by ${a}, then subtract ${b}, and get ${c}. What is the number?`,
+    `A number is multiplied by ${a}; after subtracting ${b} the result is ${c}. Find the number.`,
+    `When ${b} is subtracted from ${a} times a number, the result is ${c}. What is the number?`
+  ]);
+  return Q(stem, n,
+    [c+b, n+1, n-1, a*n],
+    `Work backwards: add ${b} back (${c} + ${b} = ${c+b}), then divide by ${a}: ${n}.`);
+}
+function genCountingPrinciple(){
+  const s=rnd(2,5), p=rnd(2,4), sh=rnd(2,3), ans=s*p*sh;
+  return Q(`A closet has ${s} shirts, ${p} pairs of pants, and ${sh} pairs of shoes. How many different outfits (one of each) are possible?`, ans,
+    [s+p+sh, s*p, ans+s, ans-s],
+    `Multiply the choices: ${s} × ${p} × ${sh} = ${ans}.`);
+}
+function genMixedPowers(){
+  const a=rnd(2,9), b=rnd(2,5), c=rnd(1,b*b), ans=1+b*b-c;
+  return Q(`What is ${a}⁰ + ${b}² − ${c}?`, ans,
+    [a+b*b-c, b*b-c, ans+1, ans-1],
+    `Anything to the power 0 equals 1: 1 + ${b*b} − ${c} = ${ans}.`);
+}
+function genConsecutiveEven(){
+  const mid=2*rnd(3,15), s=3*mid;
+  return Q(`The sum of three consecutive even integers is ${s}. What is the largest of the three?`, mid+2,
+    [mid, mid-2, mid+4, Math.round(s/3)+1],
+    `The middle one is ${s} ÷ 3 = ${mid}; the integers are ${mid-2}, ${mid}, ${mid+2} — the largest is ${mid+2}.`);
+}
+
+/* ---- figure questions: the real SSAT shows diagrams ---- */
+function genFigRightTri(){
+  const t = choice([[3,4,5],[6,8,10],[5,12,13],[9,12,15],[8,15,17]]);
+  const q = Q(`In the right triangle shown, what is the length of the side marked "?"`, t[2],
+    [t[0]+t[1], t[2]+1, t[2]-1, t[2]+2],
+    `a² + b² = c²: ${t[0]*t[0]} + ${t[1]*t[1]} = ${t[2]*t[2]}, so the missing side is ${t[2]}.`);
+  q.draw = {t:'rt', a:t[0], b:t[1]}; return q;
+}
+function genFigTriArea(){
+  let b,h; do{ b=rnd(4,14); h=rnd(4,12); }while((b*h)%2!==0);
+  const q = Q(`What is the area of the triangle shown?`, b*h/2,
+    [b*h, b*h/2+b, b+h, b*h/2+2],
+    `Area = ½ × base × height = ½ × ${b} × ${h} = ${b*h/2}.`);
+  q.draw = {t:'tri', b, h}; return q;
+}
+function genFigRect(){
+  const w=rnd(4,14), h=rnd(3,10);
+  const q = Math.random()<0.5
+    ? Q(`What is the area of the rectangle shown?`, w*h, [2*(w+h), w+h, w*h+w, w*h-h], `Area = ${w} × ${h} = ${w*h}.`)
+    : Q(`What is the perimeter of the rectangle shown?`, 2*(w+h), [w*h, w+h, 2*(w+h)+2, 2*(w+h)-2], `Perimeter = 2 × (${w} + ${h}) = ${2*(w+h)}.`);
+  q.draw = {t:'rect', w, h}; return q;
+}
+function genFigShaded(){
+  const n=choice([4,5,6,8,10]), k=rnd(1,n-1);
+  const q = QS(`What fraction of the circle shown is shaded?`, frac(k,n),
+    [`${k}/${n+1}`, frac(n-k,n), `${k+1}/${n}`, `1/${k}`, `${k}/${n*2}`],
+    `${k} of ${n} equal parts are shaded: ${k}/${n}${gcd(k,n)>1?` = ${frac(k,n)}`:''}.`);
+  q.draw = {t:'pie', n, k}; return q;
+}
+function genFigSpinner(){
+  const n=choice([4,5,6,8]), k=rnd(1,n-1);
+  const q = QS(`The spinner shown has ${n} equal sections and ${k} of them are gold. What is the probability the spinner lands on gold?`, frac(k,n),
+    [frac(n-k,n), `${k}/${n+1}`, `1/${k}`, `${k}/${n*2}`, `${k+1}/${n}`],
+    `${k} gold sections out of ${n} equal sections: ${frac(k,n)}.`);
+  q.draw = {t:'spin', n, k}; return q;
+}
+function genFigBars(){
+  const l=['Mon','Tue','Wed','Thu'];
+  let v, mi, ni;
+  do {
+    v = l.map(()=>rnd(2,12));
+    mi = v.indexOf(Math.max(...v)); ni = v.indexOf(Math.min(...v));
+  } while (v[mi] === v[ni]);
+  const q = Q(`The chart shows how many pages Jo read each day. How many more pages were read on ${l[mi]} than on ${l[ni]}?`, v[mi]-v[ni],
+    [v[mi]+v[ni], v[mi], v[ni], v[mi]-v[ni]+1],
+    `${l[mi]}: ${v[mi]} pages; ${l[ni]}: ${v[ni]} pages; ${v[mi]} − ${v[ni]} = ${v[mi]-v[ni]}.`);
+  q.draw = {t:'bars', l, v}; return q;
+}
+
+/* ---- STRETCH tier: a notch above the real test; adaptive modes only, high skill only ---- */
+function genRemovedAverage(){
+  let A,B,removed;
+  do { A=rnd(8,20); B=rnd(6,20); removed=4*A-3*B; } while (removed<1 || removed>60 || A===B);
+  return Q(`The average of four numbers is ${A}. When one number is removed, the average of the remaining three is ${B}. What number was removed?`, removed,
+    [A-B, 4*A-4*B, removed+1, removed-1],
+    `The four total 4 × ${A} = ${4*A}; the three total 3 × ${B} = ${3*B}; removed = ${4*A} − ${3*B} = ${removed}.`);
+}
+function genPipesTogether(){
+  const [a,b,t] = choice([[3,6,2],[4,12,3],[6,12,4],[5,20,4],[10,15,6],[6,3,2],[12,4,3]]);
+  return Q(`One hose fills a pool in ${a} hours. A second hose fills it in ${b} hours. Working together, how many hours do they take?`, t,
+    [Math.round((a+b)/2), a+b, Math.min(a,b), t+1],
+    `In one hour they fill 1/${a} + 1/${b} of the pool = 1/${t}, so together they take ${t} hours.`);
+}
+function genTwoVarWord(){
+  const pen=rnd(3,9), pencil=rnd(1,pen-1);
+  const c1=3*pencil+2*pen, c2=pencil+pen;
+  return Q(`Three pencils and two pens cost $${c1}. One pencil and one pen cost $${c2}. What does one pen cost?`, pen,
+    [pencil, c2, pen+1, pen-1],
+    `Two (pencil + pen) pairs cost 2 × $${c2} = $${2*c2}; subtracting from $${c1} leaves one pencil = $${c1-2*c2}, so a pen = $${c2} − $${c1-2*c2} = $${pen}.`, money);
+}
+function genRectRatioArea(){
+  const w=rnd(2,6), k=choice([2,3,4]), l=k*w, area=l*w, perim=2*(l+w);
+  return Q(`A rectangle's length is ${k} times its width, and its area is ${area}. What is its perimeter?`, perim,
+    [area, l+w, perim+2, 2*l+w],
+    `If width = w, then ${k}w × w = ${area}, so w = ${w} and length = ${l}. Perimeter = 2 × (${l} + ${w}) = ${perim}.`);
+}
+function genExponentQuotient(){
+  const b=choice([2,3,5]), e1=rnd(3,5), e2=rnd(2,e1+2), e3=rnd(1, e1+e2-1), ans=e1+e2-e3;
+  return Q(`If (${b}^${e1} × ${b}^${e2}) ÷ ${b}^${e3} = ${b}^x, what is x?`, ans,
+    [e1+e2+e3, e1*e2-e3, ans+1, ans-1],
+    `Multiplying adds exponents (${e1}+${e2}=${e1+e2}); dividing subtracts: ${e1+e2} − ${e3} = ${ans}.`);
+}
+/* ===== v0.15.0: wider bank — new generators in every tier ===== */
+function genRoundEstimate(){
+  const a=rnd(31,89), b=rnd(11,29), exact=a*b, correct=Math.round(exact/100)*100;
+  return Q(`Which is the best estimate of ${a} × ${b}, rounded to the nearest hundred?`, correct,
+    [correct+100, correct-100, correct+200, Math.round(exact/10)*10],
+    `${a} × ${b} = ${exact}, which rounds to ${correct}.`);
+}
+function genUnitPrice(){
+  const unit=rnd(2,9)*25, n=rnd(3,8), m=rnd(9,15);
+  const total=(n*unit)/100, ans=(m*unit)/100;
+  return Q(`${n} pencils cost $${total.toFixed(2)}. At the same price, how much do ${m} pencils cost?`,
+    ans, [ans+1, ans-1, ans*2, total+(m-n)],
+    `One pencil costs $${(unit/100).toFixed(2)}; ${m} × $${(unit/100).toFixed(2)} = $${ans.toFixed(2)}.`,
+    v=>`$${(+v).toFixed(2)}`);
+}
+function genDozenCost(){
+  const price=rnd(2,6), dozens=rnd(3,7), n=dozens*12, ans=dozens*price;
+  return Q(`Eggs cost $${price} per dozen. How much do ${n} eggs cost?`, ans,
+    [ans+price, ans-price, n*price, ans+1], `${n} eggs = ${dozens} dozen; ${dozens} × $${price} = $${ans}.`, money);
+}
+function genPerimeterTri(){
+  const a=rnd(5,14), b=rnd(6,15), c=rnd(Math.abs(a-b)+2, a+b-1), p=a+b+c;
+  return Q(`A triangle has sides of length ${a}, ${b}, and ${c}. What is its perimeter?`, p,
+    [p+2, p-2, a*b, p+c], `Perimeter = ${a} + ${b} + ${c} = ${p}.`);
+}
+function genAvgOfList(){
+  const avg=rnd(6,15), s=rnd(0,2);
+  const vals=[avg-3-s, avg-1, avg+1, avg+3+s];
+  return Q(`What is the average (mean) of ${vals.join(', ')}?`, avg,
+    [avg+1, avg-1, avg+2, vals[3]], `The sum is ${4*avg}; ${4*avg} ÷ 4 = ${avg}.`);
+}
+function genTipTotal(){
+  const bill=rnd(2,5)*20, tp=choice([10,15,20]), tip=bill*tp/100, total=bill+tip;
+  return Q(`A dinner bill is $${bill}. With a ${tp}% tip, what is the total paid?`, total,
+    [bill+tp, tip, total+5, total-5], `Tip = ${tp}% of $${bill} = $${tip}; total = $${bill} + $${tip} = $${total}.`, money);
+}
+function genScaleMap(){
+  const per=rnd(3,9), inches=rnd(3,8), miles=per*inches;
+  return Q(`On a map, 1 inch represents ${per} miles. Two towns are ${inches} inches apart on the map. How many miles apart are they?`,
+    miles, [miles+per, miles-per, per+inches, inches*10], `${inches} × ${per} = ${miles} miles.`);
+}
+function genRectDiagonal(){
+  const t=choice([[3,4,5],[6,8,10],[5,12,13],[9,12,15],[8,15,17]]);
+  return Q(`A rectangle is ${t[0]} units by ${t[1]} units. How long is its diagonal?`, t[2],
+    [t[0]+t[1], t[2]+1, t[2]-1, t[1]+2],
+    `The diagonal makes a right triangle: ${t[0]}² + ${t[1]}² = ${t[0]*t[0]+t[1]*t[1]} = ${t[2]}².`);
+}
+function genPercentOfWhat(){
+  const whole=rnd(2,8)*20, p=choice([20,25,30,40,60,75]), part=whole*p/100;
+  return Q(`${part} is ${p}% of what number?`, whole,
+    [part+p, whole+10, whole-10, part*2], `If ${p}% of n is ${part}, then n = ${part} ÷ ${(p/100)} = ${whole}.`);
+}
+function genProbNot(){
+  const r=rnd(2,5), b=rnd(3,6), g=rnd(2,5), tot=r+b+g, not=b+g;
+  const fr=(x,y)=>{ const d=gcd(x,y); return (x/d)+'/'+(y/d); };
+  return QS(`A bag has ${r} red, ${b} blue, and ${g} green marbles. One is drawn at random. What is the probability it is NOT red?`,
+    fr(not,tot), [fr(r,tot), fr(b,tot), fr(g,tot), fr(not-1,tot), fr(r+1,tot), '1/2', fr(not,not+1)],
+    `${not} of the ${tot} marbles are not red → ${fr(not,tot)}.`);
+}
+function genDataRange(){
+  const vals=Array.from({length:5},()=>rnd(3,40));
+  const mx=Math.max(...vals), mn=Math.min(...vals), range=mx-mn;
+  if (range===0) return genDataRange();
+  return Q(`What is the range of this data set: ${vals.join(', ')}?`, range,
+    [mx, mn, mx+mn, Math.round(vals.reduce((a,c)=>a+c,0)/5)], `Range = greatest − least = ${mx} − ${mn} = ${range}.`);
+}
+function genCompoundRatio(){
+  const a=rnd(2,4), b=rnd(3,5), c=rnd(2,4), d=rnd(3,5), k=rnd(2,4);
+  const cherries=k*b*d, apples=k*a*c;
+  return Q(`In a fruit bowl the ratio of apples to bananas is ${a}:${b}, and the ratio of bananas to cherries is ${c}:${d}. If there are ${cherries} cherries, how many apples are there?`,
+    apples, [k*a*d, k*b*c, cherries-apples, a*c],
+    `Chain the ratios: apples:bananas:cherries = ${a*c}:${b*c}:${b*d}. Cherries ${cherries} = ${k} × ${b*d}, so apples = ${k} × ${a*c} = ${apples}.`);
+}
+function genMidpoint(){
+  const x1=rnd(1,9), y1=rnd(1,9), x2=x1+2*rnd(1,5), y2=y1+2*rnd(1,5);
+  const mx=(x1+x2)/2, my=(y1+y2)/2;
+  return pickQ(`What is the midpoint of the segment from (${x1}, ${y1}) to (${x2}, ${y2})?`,
+    `(${mx}, ${my})`,
+    [`(${x2-x1}, ${y2-y1})`, `(${mx+1}, ${my})`, `(${mx}, ${my+1})`, `(${x1+x2}, ${y1+y2})`],
+    `Average each coordinate: ((${x1}+${x2})/2, (${y1}+${y2})/2) = (${mx}, ${my}).`);
+}
+function genSuccessivePercent(){
+  const pick=choice([[50, rnd(2,8)*10], [20, rnd(1,5)*25], [25, choice([16,32,48,64,80])]]);
+  const p=pick[0], base=pick[1];
+  const up=base*(1+p/100), fin=up*(1-p/100);
+  return Q(`A price of $${base} is increased by ${p}%, then the new price is decreased by ${p}%. What is the final price?`,
+    fin, [base, up, base-(base-fin), fin-1],
+    `Up ${p}%: $${up}. Down ${p}% of $${up}: $${up*p/100}. Final: $${fin} — not back to $${base}, because the decrease acts on a bigger number.`, money);
+}
+function genUnitsDigit(){
+  const bse=choice([2,3,7,8]), e=rnd(11,39);
+  const cyc={2:[2,4,8,6],3:[3,9,7,1],7:[7,9,3,1],8:[8,4,2,6]}[bse];
+  const ans=cyc[(e-1)%4];
+  return Q(`What is the units digit of ${bse}^${e}?`, ans,
+    [cyc[e%4], cyc[(e+1)%4], cyc[(e+2)%4], bse],
+    `Units digits of powers of ${bse} cycle: ${cyc.join(', ')}, repeating every 4. ${e} = 4×${Math.floor((e-1)/4)} + ${(e-1)%4+1}, so it lands on ${ans}.`);
+}
+function genVennNeither(){
+  const both=rnd(3,8), aOnly=rnd(5,12), bOnly=rnd(4,10), neither=rnd(2,9);
+  const total=both+aOnly+bOnly+neither;
+  return Q(`In a class of ${total} students, ${aOnly+both} play soccer and ${bOnly+both} play chess. ${both} students play both. How many play neither?`,
+    neither, [total-(aOnly+bOnly+both), neither+both, total-both, aOnly+bOnly],
+    `Soccer or chess = ${aOnly+both} + ${bOnly+both} − ${both} = ${aOnly+bOnly+both}. Neither = ${total} − ${aOnly+bOnly+both} = ${neither}.`);
+}
+const STRETCH_GENS = [genRemovedAverage, genPipesTogether, genTwoVarWord, genRectRatioArea, genExponentQuotient];
+
+/* Difficulty tiers — every practice set draws a balanced mix (L1 easier / L2 medium / L3 hard). */
+const L1_GENS = [
+  genProportion, genPercentRed, genTriangleArea, genBoxVolume, genRemainder, genMedian,
+  genSequence, genMultiStepWord, genFractionOf, genPerimeterRect, genOrderOps, genNegatives, genTimeConvert,
+  genFigRect, genFigShaded, genFigBars,
+  genRoundEstimate, genUnitPrice, genDozenCost, genPerimeterTri, genAvgOfList
+];
+const L2_GENS = [
+  genTwoSideLinear, genSolveExpression, genRatio, genPercentIncrease, genReversePercent,
+  genPythagoras, genExponentSolve, genAverageMissing, genConsecutive, genCoordDistance, genRatioShare,
+  genFractionAdd, genMode, genAngleTriangle, genDiscount, genSimpleProb, genSlope, genSquareRootEq,
+  genWorkBackwards, genCountingPrinciple, genMixedPowers, genConsecutiveEven,
+  genFigRightTri, genFigTriArea, genFigSpinner,
+  genTipTotal, genScaleMap, genRectDiagonal, genPercentOfWhat, genProbNot, genDataRange
+];
+const L3_GENS = [
+  genExponentEval, genPercentOfPercent, genCustomOp, genLcm, genAgeProblem,
+  genInequalityInt, genPolygonAngles, genAvgSpeed, genExpRules,
+  genSystemEq, genFactoredQuad, genFunctionEval, genTwoEvents, genThreeRatio,
+  genCompoundRatio, genMidpoint, genSuccessivePercent, genUnitsDigit, genVennNeither
+];
+const QUANT_GENS = [...L1_GENS, ...L2_GENS, ...L3_GENS];
+
+/* ================= Lessons: teach first, then drill the exact topic ================= */
+const TOPICS = [
+  { id:'percents', title:'Percents', sub:'of, off, and change',
+    gens:[genPercentIncrease, genReversePercent, genPercentRed, genPercentOfPercent, genDiscount],
+    lesson:`<p><b>Percent means "per 100."</b> So 25% is 25 out of every 100 — the same as 25/100 or 0.25.</p>
+      <p><b>The one move that solves most percent problems:</b> "x% of N" means multiply: (x ÷ 100) × N.</p>
+      <div class="passage"><b>Worked example:</b> What is 30% of 80?<br>30 ÷ 100 = 0.30, then 0.30 × 80 = <b>24</b>.</div>
+      <p><b>Percent change</b> = (change ÷ <b>original</b>) × 100. The trap: always divide by the number you <i>started</i> with, not the new one.</p>
+      <p><b>Working backwards:</b> if 20% of a number is 12, the number is 12 ÷ 0.20 = 60.</p>`},
+  { id:'ratios', title:'Ratios & Proportions', sub:'parts and scaling',
+    gens:[genRatio, genProportion, genRatioShare, genThreeRatio],
+    lesson:`<p><b>A ratio counts parts.</b> Boys to girls 2:3 means every group of 5 has 2 boys and 3 girls.</p>
+      <p><b>The magic move: find the size of ONE part.</b> Total ÷ (sum of parts) = one part. Then multiply.</p>
+      <div class="passage"><b>Worked example:</b> $40 is split in the ratio 3:5. Parts: 3 + 5 = 8. One part = $40 ÷ 8 = $5. The shares are 3 × $5 = <b>$15</b> and 5 × $5 = <b>$25</b>.</div>
+      <p><b>Proportions</b> (same rate): if 3 pens cost $6, one pen costs $2, so 7 pens cost $14. Always drop to ONE unit first.</p>`},
+  { id:'fractions', title:'Fractions', sub:'of, plus, and reducing',
+    gens:[genFractionOf, genFractionAdd, genFigShaded],
+    lesson:`<p><b>"Of" means multiply.</b> 2/3 of 18 = 18 ÷ 3 × 2 = 12. Divide by the bottom, multiply by the top.</p>
+      <p><b>Adding needs a common denominator.</b> You can only add same-sized slices.</p>
+      <div class="passage"><b>Worked example:</b> 1/4 + 1/3. Common denominator 12: 3/12 + 4/12 = <b>7/12</b>.</div>
+      <p><b>Always reduce at the end:</b> 6/8 → 3/4. The SSAT answer choices are almost always in lowest terms.</p>`},
+  { id:'equations', title:'Solving Equations', sub:'find x without fear',
+    gens:[genTwoSideLinear, genSolveExpression, genWorkBackwards, genSystemEq, genInequalityInt, genFactoredQuad],
+    lesson:`<p><b>One rule:</b> whatever you do to one side, do to the other. Your goal is x alone on one side.</p>
+      <div class="passage"><b>Worked example:</b> 5x + 3 = 2x + 15.<br>Subtract 2x: 3x + 3 = 15. Subtract 3: 3x = 12. Divide by 3: <b>x = 4</b>.</div>
+      <p><b>The classic SSAT trap:</b> the question asks for "3x + 1", not x. Solve for x first, then answer what they actually asked.</p>
+      <p><b>Check your answer</b> by plugging it back in — ten seconds that catches most mistakes.</p>`},
+  { id:'exponents', title:'Exponents & Roots', sub:'powers without panic',
+    gens:[genExponentSolve, genExponentEval, genExpRules, genSquareRootEq, genMixedPowers, genExponentQuotient],
+    lesson:`<p><b>An exponent counts multiplications:</b> 2⁴ = 2 × 2 × 2 × 2 = 16.</p>
+      <p><b>Same base, multiplying → ADD the exponents:</b> 2³ × 2⁴ = 2⁷.</p>
+      <p><b>Anything to the power 0 is 1.</b> Even 999⁰ = 1. Free points if you remember this.</p>
+      <div class="passage"><b>Worked example:</b> If 3ˣ = 81, then since 3 × 3 × 3 × 3 = 81, <b>x = 4</b>.</div>
+      <p><b>Square roots undo squares:</b> √144 = 12 because 12² = 144. Know the perfect squares up to 15² = 225.</p>`},
+  { id:'triangles', title:'Triangles', sub:'angles, area, Pythagoras',
+    gens:[genPythagoras, genAngleTriangle, genTriangleArea, genFigRightTri, genFigTriArea],
+    lesson:`<p><b>Angles always add to 180°.</b> Two angles given? Subtract both from 180.</p>
+      <p><b>Area = ½ × base × height.</b> The height must meet the base at a right angle.</p>
+      <p><b>Right triangles: a² + b² = c²</b> (c is the longest side, opposite the right angle).</p>
+      <div class="passage"><b>Worked example:</b> legs 6 and 8. 6² + 8² = 36 + 64 = 100 = 10². Hypotenuse = <b>10</b>.</div>
+      <p><b>Shortcut:</b> the SSAT loves the famous triples — 3-4-5, 6-8-10, 5-12-13. Spot them and skip the arithmetic.</p>`},
+  { id:'shapes', title:'Shapes & Solids', sub:'perimeter, area, volume',
+    gens:[genPerimeterRect, genBoxVolume, genPolygonAngles, genFigRect, genRectRatioArea],
+    lesson:`<p><b>Perimeter = walk around the edge</b> (add all sides). <b>Area = cover it</b> (for rectangles: length × width).</p>
+      <p><b>Volume = fill it:</b> length × width × height for a box.</p>
+      <div class="passage"><b>Worked example:</b> a box 4 × 3 × 2 holds 4 × 3 × 2 = <b>24</b> cubic units.</div>
+      <p><b>Polygon angles:</b> the inside angles of an n-sided shape add to (n − 2) × 180°. A hexagon: (6−2) × 180 = 720°.</p>`},
+  { id:'averages', title:'Averages & Data', sub:'mean, median, mode',
+    gens:[genAverageMissing, genMedian, genMode, genFigBars, genRemovedAverage],
+    lesson:`<p><b>Mean (average) = total ÷ count.</b> The power move: work with TOTALS. If 4 numbers average 10, they total 40 — that unlocks every "find the missing number" problem.</p>
+      <div class="passage"><b>Worked example:</b> Four tests average 85. Three scores are 80, 90, 82 (total 252). All four total 4 × 85 = 340. Missing score: 340 − 252 = <b>88</b>.</div>
+      <p><b>Median</b> = middle value after sorting (sort first — that is the trap!). <b>Mode</b> = the value that appears most often.</p>`},
+  { id:'probability', title:'Probability & Counting', sub:'chances and choices',
+    gens:[genSimpleProb, genTwoEvents, genCountingPrinciple, genFigSpinner],
+    lesson:`<p><b>Probability = what you want ÷ everything possible.</b> 3 red out of 10 marbles → P(red) = 3/10.</p>
+      <p><b>Two independent things BOTH happening → multiply.</b></p>
+      <div class="passage"><b>Worked example:</b> P(two heads in a row) = 1/2 × 1/2 = <b>1/4</b>.</div>
+      <p><b>Counting outfits:</b> choices multiply too. 3 shirts × 2 pants = 6 outfits. Don't add — multiply.</p>`},
+  { id:'patterns', title:'Patterns & Number Sense', sub:'sequences, remainders, LCM',
+    gens:[genSequence, genConsecutive, genConsecutiveEven, genRemainder, genLcm],
+    lesson:`<p><b>Sequences: find the step.</b> Subtract neighbors — 5, 8, 11 steps by +3, so next is 14.</p>
+      <p><b>Consecutive integers: think middle.</b> If three consecutive numbers sum to 36, the middle is 36 ÷ 3 = 12, so they are 11, 12, 13.</p>
+      <div class="passage"><b>Worked example:</b> remainder of 23 ÷ 5? 5 × 4 = 20, and 23 − 20 = <b>3</b>.</div>
+      <p><b>LCM (least common multiple):</b> list multiples of the bigger number and stop at the first one the smaller divides: for 6 and 8 → 8, 16, 24 ✓.</p>`},
+  { id:'wordproblems', title:'Word Problems', sub:'translate English into math',
+    gens:[genMultiStepWord, genAgeProblem, genAvgSpeed, genCustomOp, genFunctionEval, genPipesTogether, genTwoVarWord],
+    lesson:`<p><b>Word problems are translation.</b> "is" → equals. "of" → multiply. "more than" → add. "per" → divide.</p>
+      <p><b>Multi-step: do ONE step at a time and write each number down.</b> Rushing all steps in your head is where points die.</p>
+      <div class="passage"><b>Worked example:</b> "Leo is 3 times as old as his sister; together they are 24." Their ages make 3 + 1 = 4 parts. One part = 24 ÷ 4 = 6. Leo = <b>18</b>.</div>
+      <p><b>Made-up symbols</b> (like a ◆ b = 2a + b) aren't scary — they're instructions. Just substitute the numbers in.</p>`},
+  { id:'basics', title:'Number Basics', sub:'order of operations, negatives, units',
+    gens:[genOrderOps, genNegatives, genTimeConvert],
+    lesson:`<p><b>Order of operations:</b> multiply and divide BEFORE you add and subtract (parentheses first of all).</p>
+      <div class="passage"><b>Worked example:</b> 3 + 4 × 5 = 3 + 20 = <b>23</b> — not 35. The multiplication goes first even though it comes second.</div>
+      <p><b>Negative numbers: think of a number line or a thermometer.</b> Starting at −7 and rising 12 lands at +5. Adding moves right (warmer), subtracting moves left (colder).</p>
+      <p><b>Unit conversions multiply:</b> hours to minutes is × 60. Two and a half hours = 2.5 × 60 = 150 minutes. Half an hour is 30 minutes — memorize the halves.</p>`},
+  { id:'coordinate', title:'Coordinate Plane', sub:'points, slope, distance',
+    gens:[genSlope, genCoordDistance],
+    lesson:`<p><b>A point (x, y):</b> x is across, y is up. Alphabetical order — across, then up.</p>
+      <p><b>Slope = rise ÷ run</b> — how much the line climbs for each step right.</p>
+      <div class="passage"><b>Worked example:</b> from (1, 2) to (3, 8): rise = 6, run = 2, slope = <b>3</b>.</div>
+      <p><b>Distance between points is secretly Pythagoras:</b> the rise and run are the two legs; the distance is the hypotenuse.</p>`}
+];
+
+/* ---- Easy mode: single-step, small numbers ---- */
+function genEzAdd(){ const a=rnd(5,49),b=rnd(5,49); return Q(`What is ${a} + ${b}?`, a+b, [a+b+1,a+b-1,a+b+10,a+b-10], `${a} + ${b} = ${a+b}.`); }
+function genEzSub(){ const a=rnd(20,60),b=rnd(2,a-2); return Q(`What is ${a} − ${b}?`, a-b, [a-b+1,a-b-1,a+b,a-b+10], `${a} − ${b} = ${a-b}.`); }
+function genEzMul(){ const a=rnd(2,9),b=rnd(2,9); return Q(`What is ${a} × ${b}?`, a*b, [a*b+a,a*b-a,a*b+1,a+b], `${a} × ${b} = ${a*b}.`); }
+function genEzDiv(){ const b=rnd(2,9),q=rnd(2,9),a=b*q; return Q(`What is ${a} ÷ ${b}?`, q, [q+1,q-1,q+2,b], `${a} ÷ ${b} = ${q}.`); }
+function genEzHalf(){ const n=2*rnd(4,25); return Q(`What is half of ${n}?`, n/2, [n/2+1,n/2-1,n,n/2+5], `Half of ${n} is ${n/2}.`); }
+function genEzMissing(){ const a=rnd(2,20),m=rnd(2,20),c=a+m; return Q(`${a} + ___ = ${c}. What is the missing number?`, m, [m+1,m-1,c,m+2], `${c} − ${a} = ${m}.`); }
+function genEzAvg2(){ let a,b; do{a=rnd(2,30);b=rnd(2,30);}while((a+b)%2!==0); return Q(`What is the average of ${a} and ${b}?`, (a+b)/2, [(a+b)/2+1,(a+b)/2-1,a+b,(a+b)/2+2], `(${a} + ${b}) ÷ 2 = ${(a+b)/2}.`); }
+function genEzPercent(){ const p=choice([10,50]),n=10*rnd(2,9),ans=p*n/100; return Q(`What is ${p}% of ${n}?`, ans, [ans+1,ans-1,ans+5,ans*2], `${p}% of ${n} = ${ans}.`); }
+function genEzPerimeter(){ const s=rnd(2,12); return Q(`What is the perimeter of a square with side ${s}?`, 4*s, [s*s,4*s+4,4*s-4,2*s], `Perimeter = 4 × ${s} = ${4*s}.`); }
+function genEzSeq(){ const start=rnd(1,6),step=choice([2,3,5]); return Q(`What comes next: ${start}, ${start+step}, ${start+2*step}, ___?`, start+3*step, [start+3*step+step,start+3*step-step,start+3*step+1,start+4*step], `Add ${step} each time → ${start+2*step} + ${step} = ${start+3*step}.`); }
+const EASY_GENS = [genEzAdd,genEzSub,genEzMul,genEzDiv,genEzHalf,genEzMissing,genEzAvg2,genEzPercent,genEzPerimeter,genEzSeq];
+
+function isEasy(){ return account && account.diff==='easy'; }
+/* Draw `count` questions from a generator list, cycling a shuffled bag so topics don't repeat early. */
+const RECENT_STEMS = [];
+function unseen(make){
+  let q = make();
+  for (let i=0; i<7 && RECENT_STEMS.includes(q.q); i++) q = make();
+  RECENT_STEMS.push(q.q);
+  if (RECENT_STEMS.length > 120) RECENT_STEMS.shift();
+  return q;
+}
+/* Multiple choice from ready-made distinct strings (coordinates, ratios) */
+function pickQ(q, correct, wrongs, why){
+  const opts = [correct];
+  for (const w of wrongs){ if (opts.length>=5) break; if (w!==correct && !opts.includes(w)) opts.push(w); }
+  shuffle(opts);
+  return { q, choices: opts, answer: opts.indexOf(correct), why };
+}
+function takeFrom(list, count){
+  const out=[]; let bag=[];
+  for(let i=0;i<count;i++){ if(!bag.length) bag=shuffle(list.slice()); const g=bag.pop(); const q=unseen(g); q._gen=g; out.push(q); }
+  return out;
+}
+/* Balanced set: standard ≈ 30% easier / 45% medium / 25% hard; easy mode mixes basics with L1. */
+function genQuant(n){
+  if (isEasy()){
+    const nE=Math.ceil(n*0.6), n1=n-nE;
+    return shuffle(takeFrom(EASY_GENS,nE).concat(takeFrom(L1_GENS,n1)));
+  }
+  const n1=Math.round(n*0.3), n3=Math.round(n*0.25), n2=n-n1-n3;
+  return shuffle(takeFrom(L1_GENS,n1).concat(takeFrom(L2_GENS,n2), takeFrom(L3_GENS,n3)));
+}
+/* Session bags: every generator in a tier is used once before any repeats — kills the deja vu. */
+const SBAGS = {};
+function drawBag(list, key){
+  let b = SBAGS[key];
+  if (!b || !b.length) b = SBAGS[key] = shuffle(list.slice());
+  return b.pop();
+}
+let lastPickTier = 1;
+function pickGen(){
+  if (isEasy()){ lastPickTier = 0; return Math.random()<0.4 ? drawBag(L1_GENS,'eL1') : drawBag(EASY_GENS,'eEZ'); }
+  // skill 1..10 slides the mix: gentle start (55% easier) toward brutal (60% hard)
+  const t = (((account && account.skill) || 2) - 1) / 9;
+  const p1 = 0.55 - 0.45*t, p3 = 0.10 + 0.50*t;
+  const r = Math.random();
+  if (r < p1){ lastPickTier = 0; return drawBag(L1_GENS,'L1'); }
+  if (r < 1 - p3){ lastPickTier = 1; return drawBag(L2_GENS,'L2'); }
+  lastPickTier = 2;
+  // above skill 7, a share of hard draws go BEYOND test difficulty — train heavy, race light
+  const s = (account && account.skill) || 2;
+  if (s >= 7 && Math.random() < 0.4) return drawBag(STRETCH_GENS,'ST');
+  return drawBag(L3_GENS,'L3');
+}
+/* Skill moves with results: hard questions teach the system more than easy ones. */
+function updateSkill(ok, tier){
+  if (!account || isEasy() || tier == null) return;
+  const gain = [0.05, 0.08, 0.12][tier] || 0.08;
+  account.skill = Math.min(10, Math.max(1, (account.skill || 2) + (ok ? gain : -0.10)));
+  saveStore();
+}
+/* Stateless pickers — used where a seed must reproduce the same question (Daily, Online races). */
+function weightedChoice(){ const r=Math.random(); return r<0.30 ? choice(L1_GENS) : r<0.75 ? choice(L2_GENS) : choice(L3_GENS); }
+function statelessPick(){ if (isEasy()) return Math.random()<0.4 ? choice(L1_GENS) : choice(EASY_GENS); return weightedChoice(); }
+/* Races are competitive — mostly hard questions so speed alone can't win. */
+function raceChoice(){ const r=Math.random(); return r<0.10 ? choice(L1_GENS) : r<0.50 ? choice(L2_GENS) : choice(L3_GENS); }
+
+/* ================= Analogy engine: relationship banks -> thousands of distinct questions ================= */
+const ANALOGY_REL = [
+ {rel:'a young animal and its adult', pairs:[['cub','bear'],['fawn','deer'],['kitten','cat'],['puppy','dog'],['calf','cow'],['foal','horse'],['chick','hen'],['lamb','sheep'],['tadpole','frog'],['caterpillar','butterfly'],['gosling','goose'],['joey','kangaroo']]},
+ {rel:'a maker and their creation', pairs:[['author','novel'],['sculptor','statue'],['composer','symphony'],['architect','blueprint'],['poet','poem'],['painter','portrait'],['baker','bread'],['tailor','suit'],['playwright','drama'],['choreographer','dance']]},
+ {rel:'a worker and their tool', pairs:[['carpenter','saw'],['surgeon','scalpel'],['painter','brush'],['farmer','plow'],['writer','pen'],['photographer','camera'],['barber','scissors'],['blacksmith','hammer'],['angler','net'],['astronomer','telescope']]},
+ {rel:'a part and its whole', pairs:[['petal','flower'],['page','book'],['branch','tree'],['wheel','bicycle'],['key','piano'],['feather','bird'],['scale','fish'],['brick','wall'],['link','chain'],['star','constellation'],['word','sentence'],['soldier','army']]},
+ {rel:'a group name and its members', pairs:[['pride','lions'],['pod','whales'],['flock','sheep'],['swarm','bees'],['pack','wolves'],['herd','cattle'],['school','fish'],['colony','ants'],['fleet','ships'],['bouquet','flowers']]},
+ {rel:'an object and its function', pairs:[['knife','cut'],['pen','write'],['shovel','dig'],['needle','sew'],['broom','sweep'],['ruler','measure'],['lamp','illuminate'],['oven','bake'],['key','unlock'],['anchor','moor']]},
+ {rel:'a mild word and its extreme', pairs:[['warm','scorching'],['cool','frigid'],['annoyed','furious'],['sad','despondent'],['happy','ecstatic'],['dislike','loathe'],['damp','soaked'],['breeze','gale'],['hungry','ravenous'],['tired','exhausted']]},
+ {rel:'opposites', pairs:[['scarce','plentiful'],['timid','bold'],['expand','contract'],['ancient','modern'],['transparent','opaque'],['humble','arrogant'],['rigid','flexible'],['victory','defeat'],['generous','stingy'],['chaos','order']]},
+ {rel:'words with the same meaning', pairs:[['rapid','swift'],['mend','repair'],['fragile','delicate'],['peculiar','odd'],['abundant','plentiful'],['grave','serious'],['idle','inactive'],['candid','frank'],['obstinate','stubborn'],['jovial','merry']]},
+ {rel:'a word and what it lacks', pairs:[['arid','moisture'],['barren','life'],['silent','sound'],['naive','experience'],['penniless','money'],['anonymous','name'],['famine','food'],['drought','rain'],['vacant','occupants']]},
+ {rel:'a place and its activity', pairs:[['courtroom','trial'],['theater','performance'],['gymnasium','exercise'],['laboratory','experiment'],['kitchen','cooking'],['classroom','lesson'],['stadium','game'],['library','reading'],['forge','metalwork']]},
+ {rel:'an animal and its home', pairs:[['bee','hive'],['bird','nest'],['bear','den'],['rabbit','burrow'],['horse','stable'],['pig','sty'],['lion','lair'],['spider','web'],['bat','cave'],['beaver','lodge']]},
+ {rel:'an animal and its sound', pairs:[['dog','bark'],['cat','meow'],['lion','roar'],['horse','neigh'],['cow','moo'],['sheep','bleat'],['owl','hoot'],['snake','hiss'],['duck','quack'],['pig','grunt']]},
+ {rel:'a tool and the material it works', pairs:[['saw','wood'],['scissors','fabric'],['chisel','stone'],['mower','grass'],['razor','stubble'],['axe','timber'],['shears','wool'],['drill','metal']]},
+ {rel:'a protector and what it protects', pairs:[['helmet','head'],['glove','hand'],['armor','body'],['goggles','eyes'],['scabbard','sword'],['shell','turtle'],['bark','tree'],['husk','corn'],['sheath','blade']]},
+ {rel:'a science and its subject', pairs:[['botany','plants'],['astronomy','stars'],['geology','rocks'],['zoology','animals'],['meteorology','weather'],['linguistics','language'],['ornithology','birds'],['entomology','insects'],['cartography','maps']]},
+ {rel:'a worker and their workplace', pairs:[['teacher','school'],['doctor','hospital'],['chef','restaurant'],['judge','courtroom'],['actor','stage'],['pilot','cockpit'],['librarian','library'],['miner','mine'],['sailor','ship'],['banker','bank']]},
+ {rel:'a container and its contents', pairs:[['wallet','money'],['quiver','arrows'],['vase','flowers'],['album','photographs'],['pantry','food'],['envelope','letter'],['aquarium','fish'],['silo','grain'],['inkwell','ink']]},
+ {rel:'a cause and its effect', pairs:[['virus','illness'],['spark','fire'],['earthquake','tremor'],['insult','anger'],['practice','improvement'],['drought','famine'],['friction','heat'],['joke','laughter'],['fatigue','yawn']]},
+ {rel:'a unit and what it measures', pairs:[['minute','time'],['mile','distance'],['pound','weight'],['gallon','volume'],['degree','temperature'],['decibel','sound'],['acre','area'],['watt','power'],['knot','speed']]}
+];
+function genAnalogy(){
+  const rel = choice(ANALOGY_REL);
+  const [pa, pb] = pick(rel.pairs, 2);
+  // classic trap: right relationship, wrong pair
+  let trap = choice(rel.pairs)[1];
+  let guard = 0;
+  while ((trap === pb[1] || trap === pa[1]) && guard++ < 20) trap = choice(rel.pairs)[1];
+  const distract = [trap];
+  while (distract.length < 4){
+    const w = choice(choice(ANALOGY_REL).pairs)[1];
+    if (w !== pb[1] && w !== pa[1] && !distract.includes(w)) distract.push(w);
+  }
+  const opts = shuffle([pb[1], ...distract]);
+  return {
+    q: `${pa[0].charAt(0).toUpperCase()+pa[0].slice(1)} is to ${pa[1]} as ${pb[0]} is to —`,
+    choices: opts,
+    answer: opts.indexOf(pb[1]),
+    why: `${pa[0].charAt(0).toUpperCase()+pa[0].slice(1)} and ${pa[1]} are ${rel.rel}; ${pb[0]} and ${pb[1]} have the same relationship.`
+  };
+}
+
+/* ================= Verbal & Reading pools — SSAT-level ================= */
+const POOL = {
+  synonyms: [
+    { q:"ABHOR", choices:["admire","detest","forget","confuse","carry"], answer:1, why:"To abhor is to hate intensely — detest." },
+    { q:"ADEPT", choices:["clumsy","skillful","angry","distant","loud"], answer:1, why:"Adept means highly skilled." },
+    { q:"ADVERSE", choices:["favorable","unfavorable","identical","public","eager"], answer:1, why:"Adverse means harmful or unfavorable." },
+    { q:"AFFABLE", choices:["hostile","friendly","wealthy","dishonest","tired"], answer:1, why:"Affable means warm and friendly." },
+    { q:"AMBIGUOUS", choices:["unclear","enormous","certain","brave","narrow"], answer:0, why:"Ambiguous means open to more than one meaning — unclear." },
+    { q:"ARDUOUS", choices:["effortless","difficult","brief","joyful","silent"], answer:1, why:"Arduous means requiring great effort — difficult." },
+    { q:"AUDACIOUS", choices:["timid","bold","careful","quiet","ordinary"], answer:1, why:"Audacious means daring — bold." },
+    { q:"ADMONISH", choices:["praise","scold","admire","forget","astonish"], answer:1, why:"To admonish is to warn or reprimand — scold." },
+    { q:"BANAL", choices:["original","commonplace","dangerous","brilliant","hidden"], answer:1, why:"Banal means boring from overuse — commonplace." },
+    { q:"BELLIGERENT", choices:["peaceful","hostile","beautiful","loyal","brilliant"], answer:1, why:"Belligerent means aggressive and ready to fight — hostile." },
+    { q:"BREVITY", choices:["shortness","courage","weight","honesty","noise"], answer:0, why:"Brevity means shortness, especially of speech or writing." },
+    { q:"CANDID", choices:["secretive","honest","clever","nervous","famous"], answer:1, why:"Candid means truthful and direct — honest." },
+    { q:"CHRONIC", choices:["sudden","constant","curable","mild","final"], answer:1, why:"Chronic means persisting for a long time — constant." },
+    { q:"COERCE", choices:["persuade gently","force","reward","release","admire"], answer:1, why:"To coerce is to compel by pressure or threats — force." },
+    { q:"CONCISE", choices:["wordy","brief","confusing","polite","slow"], answer:1, why:"Concise means giving much information in few words — brief." },
+    { q:"CORDIAL", choices:["warm","frozen","rude","brief","distant"], answer:0, why:"Cordial means warm and friendly." },
+    { q:"DEARTH", choices:["abundance","scarcity","death","celebration","valley"], answer:1, why:"A dearth is a shortage — scarcity. (Trap: it is not 'death.')" },
+    { q:"STEADFAST", choices:["wavering","unwavering","speedy","stubborn","heavy"], answer:1, why:"Steadfast means firmly loyal and constant — unwavering." },
+    { q:"DISDAIN", choices:["respect","contempt","surprise","patience","delight"], answer:1, why:"Disdain is the feeling that something is beneath you — contempt." },
+    { q:"DOCILE", choices:["stubborn","obedient","fierce","clumsy","proud"], answer:1, why:"Docile means easy to teach or control — obedient." },
+    { q:"ECCENTRIC", choices:["ordinary","peculiar","electric","careful","central"], answer:1, why:"Eccentric means unconventional — peculiar." },
+    { q:"ELATED", choices:["overjoyed","exhausted","late","angry","calm"], answer:0, why:"Elated means extremely happy — overjoyed." },
+    { q:"DILAPIDATED", choices:["brand-new","run-down","enormous","expanded","polished"], answer:1, why:"Dilapidated means falling apart from neglect — run-down." },
+    { q:"ENIGMA", choices:["answer","mystery","insult","celebration","engine"], answer:1, why:"An enigma is a puzzle — a mystery." },
+    { q:"FEASIBLE", choices:["impossible","possible","expensive","invisible","required"], answer:1, why:"Feasible means able to be done — possible." },
+    { q:"EXEMPLARY", choices:["shameful","outstanding","typical","excused","visible"], answer:1, why:"Exemplary means serving as a model of excellence — outstanding." },
+    { q:"FUTILE", choices:["useless","fertile","powerful","upcoming","rare"], answer:0, why:"Futile means producing no result — useless. (Trap: not 'fertile.')" },
+    { q:"GRATUITOUS", choices:["grateful","unnecessary","expensive","generous","pleasant"], answer:1, why:"Gratuitous means uncalled for — unnecessary. (Trap: not 'grateful.')" },
+    { q:"GREGARIOUS", choices:["solitary","sociable","enormous","greedy","cautious"], answer:1, why:"Gregarious means fond of company — sociable." },
+    { q:"FORTITUDE", choices:["weakness","courage","fortress","luck","wealth"], answer:1, why:"Fortitude is strength in facing difficulty — courage. (Trap: not 'fortress.')" },
+    { q:"IMMINENT", choices:["distant","about to happen","famous","impossible","enormous"], answer:1, why:"Imminent means about to happen. (Trap: not 'eminent,' which means famous.)" },
+    { q:"IMPARTIAL", choices:["biased","fair","incomplete","emotional","royal"], answer:1, why:"Impartial means treating all sides equally — fair." },
+    { q:"INDIFFERENT", choices:["unconcerned","unique","angry","similar","curious"], answer:0, why:"Indifferent means having no interest — unconcerned. (Trap: not 'different.')" },
+    { q:"INDUSTRIOUS", choices:["mechanical","hardworking","wealthy","polluted","idle"], answer:1, why:"Industrious means diligent and hardworking. (Trap: not about industry/factories.)" },
+    { q:"INEVITABLE", choices:["avoidable","unavoidable","invisible","unlikely","instant"], answer:1, why:"Inevitable means certain to happen — unavoidable." },
+    { q:"INGENIOUS", choices:["honest","clever","naive","famous","stubborn"], answer:1, why:"Ingenious means brilliantly inventive — clever. (Trap: not 'ingenuous,' which means innocent.)" },
+    { q:"JUBILANT", choices:["mournful","triumphant","jealous","quiet","confused"], answer:1, why:"Jubilant means expressing great joy, especially at success — triumphant." },
+    { q:"KEEN", choices:["dull","sharp","kind","distant","loud"], answer:1, why:"Keen means sharp — of blades, minds, or senses." },
+    { q:"LAMENT", choices:["celebrate","mourn","repair","ignore","decide"], answer:1, why:"To lament is to express grief — mourn." },
+    { q:"LETHARGIC", choices:["energetic","sluggish","deadly","logical","brave"], answer:1, why:"Lethargic means lacking energy — sluggish. (Trap: not 'lethal.')" },
+    { q:"IMPETUOUS", choices:["cautious","impulsive","impressive","slow","kind"], answer:1, why:"Impetuous means acting quickly without thought — impulsive." },
+    { q:"MALICE", choices:["kindness","ill will","sickness","palace","skill"], answer:1, why:"Malice is the desire to harm others — ill will." },
+    { q:"LAVISH", choices:["meager","extravagant","clean","lawful","hidden"], answer:1, why:"Lavish means rich and abundant — extravagant." },
+    { q:"MUNDANE", choices:["extraordinary","ordinary","worldwide","lunar","brief"], answer:1, why:"Mundane means dull and ordinary." },
+    { q:"NONCHALANT", choices:["anxious","casually calm","rude","freezing","brand-new"], answer:1, why:"Nonchalant means coolly unconcerned — casually calm." },
+    { q:"NOVICE", choices:["expert","beginner","author","priest","idea"], answer:1, why:"A novice is someone new to a field — a beginner." },
+    { q:"OBSOLETE", choices:["current","outdated","stubborn","invisible","required"], answer:1, why:"Obsolete means no longer in use — outdated." },
+    { q:"OMINOUS", choices:["reassuring","threatening","all-knowing","enormous","forgetful"], answer:1, why:"Ominous means suggesting something bad will happen — threatening. (Trap: not 'omniscient.')" },
+    { q:"OPAQUE", choices:["transparent","not see-through","shiny","fragile","pale"], answer:1, why:"Opaque means light cannot pass through — not see-through." },
+    { q:"PENSIVE", choices:["thoughtful","expensive","locked-up","cheerful","generous"], answer:0, why:"Pensive means deeply thoughtful." },
+    { q:"PERILOUS", choices:["safe","dangerous","precious","parallel","brief"], answer:1, why:"Perilous means full of danger." },
+    { q:"MOROSE", choices:["cheerful","gloomy","curious","generous","proud"], answer:1, why:"Morose means sullen and gloomy." },
+    { q:"PRAGMATIC", choices:["idealistic","practical","talkative","proud","magnetic"], answer:1, why:"Pragmatic means dealing with things sensibly — practical." },
+    { q:"PROFOUND", choices:["shallow","deep","discovered","loud","common"], answer:1, why:"Profound means very deep — of ideas or feelings." },
+    { q:"OBSCURE", choices:["famous","little-known","dark-colored","rude","careful"], answer:1, why:"Obscure means not well known — little-known." },
+    { q:"QUELL", choices:["ignite","suppress","question","celebrate","measure"], answer:1, why:"To quell is to put an end to — suppress." },
+    { q:"RECLUSIVE", choices:["outgoing","solitary","famous","reckless","included"], answer:1, why:"Reclusive means avoiding the company of others — solitary." },
+    { q:"RELINQUISH", choices:["seize","give up","enjoy","repeat","polish"], answer:1, why:"To relinquish is to let go of — give up." },
+    { q:"PRISTINE", choices:["ruined","spotless","ancient","printed","valuable"], answer:1, why:"Pristine means in perfect, unspoiled condition — spotless." },
+    { q:"REVERE", choices:["despise","deeply respect","reverse","remember","fear"], answer:1, why:"To revere is to feel deep respect for." },
+    { q:"SAGACIOUS", choices:["foolish","wise","salty","aggressive","slow"], answer:1, why:"Sagacious means having keen judgment — wise. (Like Sage!)" },
+    { q:"QUANDARY", choices:["certainty","dilemma","quarry","quantity","celebration"], answer:1, why:"A quandary is a state of uncertainty about what to do — a dilemma." },
+    { q:"SERENE", choices:["turbulent","peaceful","royal","damp","musical"], answer:1, why:"Serene means calm and untroubled — peaceful." },
+    { q:"SKEPTICAL", choices:["trusting","doubtful","frightened","precise","hopeful"], answer:1, why:"Skeptical means inclined to doubt." },
+    { q:"SOLACE", choices:["distress","comfort","sunlight","loneliness","advice"], answer:1, why:"Solace is comfort in sorrow." },
+    { q:"SUBTLE", choices:["obvious","delicate","underground","brief","double"], answer:1, why:"Subtle means so fine it is hard to notice — delicate." },
+    { q:"SUPERFLUOUS", choices:["essential","unnecessary","superb","fluid","strong"], answer:1, why:"Superfluous means more than is needed — unnecessary." },
+    { q:"TENACIOUS", choices:["yielding","persistent","gentle","ten-sided","temporary"], answer:1, why:"Tenacious means holding on firmly — persistent." },
+    { q:"TERSE", choices:["long-winded","curt","tense","polite","smooth"], answer:1, why:"Terse means using very few words — curt." },
+    { q:"TRANQUIL", choices:["chaotic","peaceful","fast-moving","clear","sleepy"], answer:1, why:"Tranquil means free from disturbance — peaceful." },
+    { q:"UBIQUITOUS", choices:["rare","everywhere","unique","enormous","invisible"], answer:1, why:"Ubiquitous means found everywhere." },
+    { q:"VIGILANT", choices:["careless","watchful","violent","energetic","forgiving"], answer:1, why:"Vigilant means keeping careful watch — watchful." },
+    { q:"VIVID", choices:["dull","strikingly bright","alive","angry","huge"], answer:1, why:"Vivid means intensely bright or clear — strikingly bright." },
+    { q:"WARY", choices:["trusting","cautious","exhausted","warm","strange"], answer:1, why:"Wary means on guard — cautious. (Trap: not 'weary,' which means tired.)" },
+    { q:"TREPIDATION", choices:["confidence","dread","excitement","dizziness","anger"], answer:1, why:"Trepidation is trembling fear — dread." },
+    { q:"GARRULOUS", choices:["talkative","gloomy","generous","clumsy","shy"], answer:0, why:"Garrulous means excessively talkative." },
+    { q:"OBSTINATE", choices:["timid","stubborn","cheerful","brief","polite"], answer:1, why:"Obstinate means stubborn." },
+    { q:"EPHEMERAL", choices:["eternal","fleeting","colorful","heavy","ancient"], answer:1, why:"Ephemeral means lasting a very short time — fleeting." },
+    { q:"FRUGAL", choices:["wasteful","thrifty","fearful","honest","greedy"], answer:1, why:"Frugal means careful with money — thrifty." },
+    { q:"ZEALOUS", choices:["indifferent","enthusiastic","jealous","lazy","calm"], answer:1, why:"Zealous means full of energy and enthusiasm." },
+    { q:"TACITURN", choices:["talkative","reserved","tense","tidy","loud"], answer:1, why:"Taciturn means quiet and reserved by nature." },
+    { q:"PRUDENT", choices:["reckless","cautious","prudish","wealthy","foolish"], answer:1, why:"Prudent means showing good judgment — cautious." },
+    { q:"CAPRICIOUS", choices:["steady","unpredictable","greedy","capable","reliable"], answer:1, why:"Capricious means impulsive and unpredictable." },
+    { q:"AUSTERE", choices:["severe","cheerful","eastern","generous","luxurious"], answer:0, why:"Austere means stern or plain — severe." },
+    { q:"LUCID", choices:["clear","lucky","dim","loose","confusing"], answer:0, why:"Lucid means easy to understand — clear." },
+    { q:"VEHEMENT", choices:["gentle","forceful","hollow","vain","calm"], answer:1, why:"Vehement means showing strong, forceful feeling." },
+    { q:"METICULOUS", choices:["sloppy","careful","enormous","mean","hasty"], answer:1, why:"Meticulous means extremely careful and precise." },
+    { q:"AMIABLE", choices:["hostile","friendly","talented","amusing","grumpy"], answer:1, why:"Amiable means good-natured and friendly." },
+    { q:"DEVIOUS", choices:["honest","cunning","divine","direct","loyal"], answer:1, why:"Devious means sneaky or cunning." },
+    { q:"ELOQUENT", choices:["clumsy","articulate","equal","quiet","silent"], answer:1, why:"Eloquent means fluent and persuasive — articulate." },
+    { q:"HAUGHTY", choices:["humble","arrogant","cheerful","hasty","modest"], answer:1, why:"Haughty means arrogant and looking down on others." },
+    { q:"PLACID", choices:["calm","placed","stormy","plain","angry"], answer:0, why:"Placid means peaceful and calm." },
+    { q:"RESILIENT", choices:["fragile","adaptable","reluctant","resident","weak"], answer:1, why:"Resilient means able to recover quickly — adaptable." },
+    { q:"SCRUTINIZE", choices:["ignore","examine","scatter","shout","glance"], answer:1, why:"To scrutinize is to examine closely." },
+    { q:"VERBOSE", choices:["wordy","silent","truthful","verbal","brief"], answer:0, why:"Verbose means using too many words — wordy." },
+    { q:"COPIOUS", choices:["scarce","abundant","copied","clumsy","tiny"], answer:1, why:"Copious means plentiful — abundant." },
+    { q:"INDIGNANT", choices:["resentful","indifferent","poor","grateful","calm"], answer:0, why:"Indignant means angry at unfairness — resentful." },
+    { q:"SPONTANEOUS", choices:["planned","impulsive","sponsored","slow","rehearsed"], answer:1, why:"Spontaneous means done on impulse, without planning." },
+    { q:"BENEVOLENT", choices:["cruel","kind","wealthy","brave","selfish"], answer:1, why:"Benevolent means kind and generous." },
+    { q:"DILIGENT", choices:["lazy","hardworking","clever","tardy","careless"], answer:1, why:"Diligent means hardworking and careful." }
+  ],
+  analogies: [
+    { q:"Parched is to water as famished is to —", choices:["thirst","food","drink","hunger","sleep"], answer:1, why:"Parched means deprived of water; famished means deprived of food." },
+    { q:"Drought is to water as famine is to —", choices:["food","heat","crops","rain","wind"], answer:0, why:"A drought is a lack of water; a famine is a lack of food." },
+    { q:"Sculptor is to statue as poet is to —", choices:["stage","poem","reader","pen","song"], answer:1, why:"A sculptor creates a statue; a poet creates a poem." },
+    { q:"Novice is to expert as apprentice is to —", choices:["student","helper","master","beginner","teacher"], answer:2, why:"A novice grows into an expert; an apprentice grows into a master." },
+    { q:"Antidote is to poison as cure is to —", choices:["doctor","health","medicine","disease","patient"], answer:3, why:"An antidote counteracts poison; a cure counteracts disease." },
+    { q:"Oasis is to desert as island is to —", choices:["sand","ocean","palm","storm","river"], answer:1, why:"An oasis is surrounded by desert; an island is surrounded by ocean." },
+    { q:"Cub is to bear as fawn is to —", choices:["lion","forest","deer","calf","wolf"], answer:2, why:"A cub is a young bear; a fawn is a young deer." },
+    { q:"Stanza is to poem as chapter is to —", choices:["page","book","author","word","library"], answer:1, why:"A stanza is a part of a poem; a chapter is a part of a book." },
+    { q:"Pride is to lions as pod is to —", choices:["fish","birds","whales","wolves","ants"], answer:2, why:"A group of lions is a pride; a group of whales is a pod." },
+    { q:"Frugal is to extravagant as humble is to —", choices:["modest","arrogant","quiet","poor","kind"], answer:1, why:"Frugal and extravagant are opposites, as are humble and arrogant." },
+    { q:"Microscope is to tiny as telescope is to —", choices:["glass","star","distant","bright","small"], answer:2, why:"A microscope is used to view tiny things; a telescope, distant ones." },
+    { q:"Arid is to moisture as barren is to —", choices:["heat","life","sand","desert","color"], answer:1, why:"Arid means lacking moisture; barren means lacking life." },
+    { q:"Tile is to mosaic as thread is to —", choices:["needle","cloth","tapestry","color","loom"], answer:2, why:"Many tiles form a mosaic; many threads form a tapestry." },
+    { q:"Whisper is to shout as glance is to —", choices:["blink","stare","ignore","look","wink"], answer:1, why:"A shout is an intense whisper; a stare is an intense glance." }
+  ],
+  reading: [
+    {
+      passage:"By the time Marcus reached the summit, the cheering crowd below had shrunk to a restless smear of color. He had trained for this climb for three years, sacrificing weekends and friendships, and now, standing at the top, he felt not triumph but a strange hollowness. The mountain that had filled his every waking thought was conquered; what, he wondered, would he think about now?",
+      questions:[
+        { q:"The passage suggests that Marcus feels —", choices:["proud of his achievement","unexpectedly empty","afraid of the climb down","angry at the crowd","eager to climb again"], answer:1, why:"He feels a 'strange hollowness' instead of triumph — unexpectedly empty." },
+        { q:"As used in the passage, “smear” most nearly means —", choices:["stain","blurry mass","insult","bright flash","loud noise"], answer:1, why:"A 'restless smear of color' describes the crowd as a blurry mass." },
+        { q:"The passage is mainly about —", choices:["the dangers of mountain climbing","the emptiness that can follow a long-sought goal","the importance of training hard","Marcus's fear of heights","the view from the summit"], answer:1, why:"It centers on the hollow feeling that follows achieving a defining goal." }
+      ]
+    },
+    {
+      passage:"For centuries, sailors feared the Sargasso Sea, a vast region of the North Atlantic with no shores, bounded only by ocean currents. Thick mats of golden seaweed drift on its surface, and the water lies unusually still. Early sailors told of ships trapped for weeks in its windless calm. Modern scientists, however, prize the Sargasso Sea: its floating forests shelter young sea turtles, eels, and countless fish, making this once-dreaded expanse one of the ocean's most important nurseries.",
+      questions:[
+        { q:"The passage is mainly about —", choices:["why sailors feared every ocean","how a once-feared sea is now valued as a habitat","how seaweed grows in cold water","the danger of ocean currents","how sea turtles migrate"], answer:1, why:"It contrasts the old fear with the sea's modern value as a nursery." },
+        { q:"Scientists' view of the Sargasso Sea differs from early sailors' view because scientists —", choices:["also fear being trapped there","value it as a habitat for young animals","want to clear away the seaweed","build faster ships to cross it","have never sailed there"], answer:1, why:"Scientists prize it as a nursery rather than fearing it." },
+        { q:"As used in the passage, “prize” most nearly means —", choices:["award","value highly","force open","capture","ignore"], answer:1, why:"To prize something is to value it highly." }
+      ]
+    },
+    {
+      passage:"When the printing press arrived in Europe in the 1400s, many scholars were alarmed. Hand-copied books had been rare and precious, available only to the wealthy and the church. Now, critics warned, cheap printed books would spread errors, flood the world with worthless writing, and weaken people's memories. Yet the very flood they feared became a tide of learning: literacy spread, new ideas traveled quickly, and ordinary people gained access to knowledge once locked away.",
+      questions:[
+        { q:"The passage is mainly about —", choices:["how books were copied by hand","a feared new technology that proved beneficial","the high cost of early books","how human memory works","the history of the church"], answer:1, why:"Scholars feared the press, yet it spread learning widely." },
+        { q:"The author's attitude toward the printing press is best described as —", choices:["fearful","approving","indifferent","confused","sarcastic"], answer:1, why:"The author frames its effects positively — 'a tide of learning.'" },
+        { q:"According to the passage, critics worried that printed books would —", choices:["cost too much money","spread errors and weaken memory","help only the church","fall apart quickly","be too heavy to carry"], answer:1, why:"Critics warned of errors, worthless writing, and weakened memory." }
+      ]
+    }
+  ]
+};
+
+/* Course path: topics in teaching order; each unlocks when the previous is mastered */
+const TOPIC_ORDER = ['basics','fractions','percents','ratios','equations','exponents','averages','patterns','triangles','shapes','coordinate','probability','wordproblems'];
+TOPICS.sort((a,b)=> TOPIC_ORDER.indexOf(a.id) - TOPIC_ORDER.indexOf(b.id));
+/* Courses group the topics, Brilliant-style. Topics unlock in order inside their course. */
+const COURSES = [
+  { id:'found',    title:'Foundations',            desc:'The number skills everything else stands on', topics:['basics','fractions','percents','ratios'] },
+  { id:'algebra',  title:'Algebra & Patterns',     desc:'Equations, exponents, and sequences',         topics:['equations','exponents','patterns'] },
+  { id:'geometry', title:'Geometry',               desc:'Triangles, shapes, and the coordinate plane', topics:['triangles','shapes','coordinate'] },
+  { id:'data',     title:'Data, Chance & Words',   desc:'Averages, probability, and word problems',    topics:['averages','probability','wordproblems'] }
+];
+function topicIdxById(id){ return TOPICS.findIndex(t=>t.id===id); }
+function courseOfTopic(i){ const id=TOPICS[i].id; return COURSES.findIndex(c=>c.topics.includes(id)); }
+function courseProgress(c){ let got=0; c.topics.forEach(id=>{ got+=Math.min(topicScore(id),TOPIC_MASTERY); }); return got/(c.topics.length*TOPIC_MASTERY); }
+function topicUnlocked(i){
+  const ci=courseOfTopic(i); if(ci<0) return true;
+  const list=COURSES[ci].topics, pos=list.indexOf(TOPICS[i].id);
+  return pos===0 || topicScore(list[pos-1]) >= TOPIC_MASTERY;
+}
+function pathComplete(){ return TOPICS.every(t=> topicScore(t.id) >= TOPIC_MASTERY); }
+
+/* Wrong answer -> the exact lesson for that question's topic */
+[['basics',[genRoundEstimate]], ['ratios',[genUnitPrice,genScaleMap,genCompoundRatio]],
+ ['wordproblems',[genDozenCost,genVennNeither]], ['triangles',[genPerimeterTri,genRectDiagonal]],
+ ['averages',[genAvgOfList,genDataRange]], ['percents',[genTipTotal,genPercentOfWhat,genSuccessivePercent]],
+ ['probability',[genProbNot]], ['coordinate',[genMidpoint]], ['patterns',[genUnitsDigit]]
+].forEach(([id,gens])=>{ const t=TOPICS[topicIdxById(id)]; if(t) t.gens.push(...gens); });
+const GEN_TOPIC = new Map();
+TOPICS.forEach((t,i)=> t.gens.forEach(g => GEN_TOPIC.set(g, i)));
+function lessonLinkHTML(q){
+  const i = (q && q._ti != null) ? q._ti : ((q && q._gen != null) ? GEN_TOPIC.get(q._gen) : undefined);
+  if (i === undefined) return '';
+  return `<div style="margin-top:8px"><button class="seg" style="flex:none" onclick="jumpToLesson(${i})">${ico('bulb',13)} Teach me: ${TOPICS[i].title}</button></div>`;
+}
+function addDays(n){ const d=new Date(); d.setDate(d.getDate()+n); return dateStr(d); }
+/* Spaced repetition: a miss graduates after 3 correct answers spaced 1 then 3 days apart. */
+function dueMisses(){ const t=dateStr(new Date()); return account ? account.misses.filter(m=>!m.due || m.due<=t) : []; }
+function recordMiss(q, passage){
+  if (!account || !q) return;
+  const ti = (q._ti != null) ? q._ti : ((q._gen != null) ? GEN_TOPIC.get(q._gen) : null);
+  if (account.misses.some(mm => mm.q === q.q)) return;
+  account.misses.push({ q:q.q, choices:q.choices, answer:q.answer, why:q.why, draw:q.draw||null, passage:passage||'', ti: ti==null?null:ti, box:0, due:dateStr(new Date()) });
+  if (account.misses.length > 30) account.misses.shift();
+}
+/* Every answered math question feeds the knowledge map, whatever mode it came from. */
+function snapshotProgress(){
+  if (!account) return;
+  const today = dateStr(new Date());
+  if (account.hist.length && account.hist[account.hist.length-1].d === today) return;
+  account.hist.push({ d:today,
+    sk:+((account.skill||2).toFixed(2)),
+    va:+((account.verbalSkill.analogies||2).toFixed(2)),
+    vr:+((account.verbalSkill.reading||2).toFixed(2)),
+    vs:+((account.verbalSkill.synonyms||2).toFixed(2)),
+    ans:account.stats.answered||0, sc:account.stats.bestScaled||0 });
+  if (account.hist.length > 60) account.hist.shift();
+}
+function noteTopicResult(q, ok){
+  if (!account || !q) return;
+  const ti = (q._ti != null) ? q._ti : ((q._gen != null) ? GEN_TOPIC.get(q._gen) : null);
+  if (ti == null) return;
+  if (!account.tstats) account.tstats = {};
+  const s = account.tstats[ti] || (account.tstats[ti] = [0, 0]);
+  s[0]++; if (ok) s[1]++;
+}
+function jumpToLesson(i){
+  resetToHome();
+  document.getElementById('intro').classList.add('hidden');
+  openLesson(i);
+  document.getElementById('learn').classList.remove('hidden');
+  highlightNav('learn');
+}
+
+
+const GEN_READING = [{"passage": "Deep beneath the ocean's sunlit surface lies a realm where photosynthesis fails, yet life persists in astonishing abundance. Hydrothermal vents, cracks in the seafloor spewing mineral-rich, superheated water, sustain entire ecosystems independent of sunlight. Chemosynthetic bacteria oxidize hydrogen sulfide to produce energy, forming the foundation of a food web supporting tube worms, blind shrimp, and eyeless crabs. These organisms tolerate crushing pressure, near-freezing surrounding waters punctuated by scalding vent plumes, and utter darkness. Scientists consider these communities a tantalizing analog for extraterrestrial life, suggesting that wherever chemical energy and liquid water intersect, biology might improbably take root, even on distant, sunless moons.", "questions": [{"q": "What is the main idea of the passage?", "choices": ["Ocean pressure prevents most marine life from surviving near vents", "Hydrothermal vent ecosystems thrive on chemical energy rather than sunlight, hinting at possibilities for life elsewhere", "Tube worms and crabs are the only species found near hydrothermal vents", "Sunlight is necessary for all forms of oceanic life to exist", "Hydrothermal vents are too dangerous for scientific study"], "answer": 1, "why": "The passage centers on chemosynthesis-based ecosystems and their implications for extraterrestrial life."}, {"q": "Based on the passage, what can be inferred about the search for life beyond Earth?", "choices": ["Researchers believe sunlight is essential for any form of life to exist", "Scientists doubt vent ecosystems have any relevance to astrobiology", "Extraterrestrial life would need to resemble tube worms exactly", "Vent ecosystems suggest life might exist on moons with subsurface oceans lacking sunlight", "Life can only exist within Earth's oceanic environments"], "answer": 3, "why": "The passage explicitly connects vent ecosystems to the idea that life could exist on sunless, distant moons."}, {"q": "As used in the passage, the word \"tantalizing\" most nearly means", "choices": ["frightening", "irrelevant", "alarming", "predictable", "intriguing"], "answer": 4, "why": "Tantalizing describes something that excites interest or hope, matching context of scientific fascination."}, {"q": "According to the passage, what enables bacteria near hydrothermal vents to produce energy?", "choices": ["Absorbing sunlight through specialized organs", "Consuming tube worms and shrimp directly", "Oxidizing hydrogen sulfide from vent water", "Filtering nutrients from cold surrounding water", "Photosynthesizing using vent light emissions"], "answer": 2, "why": "The passage states bacteria oxidize hydrogen sulfide to generate energy, forming the food web's base."}]}, {"passage": "Voyager 1's departure from our solar system in 2012 marked a strange triumph: a machine launched in 1977, carrying computing power thousands of times weaker than a modern phone, had outlasted its designers' most ambitious hopes. Its plutonium batteries, decaying by inches, still whisper data across fifteen billion miles, arriving faintly, years-delayed, like a letter from someone who no longer remembers writing it. Engineers now ration its instruments, shutting off one after another to conserve power. Yet the probe presses onward, indifferent to its own obsolescence, carrying a golden record of Earth's sounds toward stars it will never actually reach.", "questions": [{"q": "Which choice best expresses the main idea of the passage?", "choices": ["Voyager 1 has survived far longer and traveled far farther than its makers anticipated, though it now operates under increasing limitations.", "Modern smartphones are more powerful than the equipment used in most historic space missions.", "The golden record aboard Voyager 1 will eventually be discovered by an alien civilization.", "NASA engineers regret launching Voyager 1 due to its outdated technology.", "Voyager 1's plutonium batteries were poorly designed and are failing faster than expected."], "answer": 0, "why": "The passage centers on the probe's unexpected longevity and its gradual decline."}, {"q": "What can be inferred about the engineers managing Voyager 1 today?", "choices": ["They are actively upgrading its computer systems remotely.", "They are making careful tradeoffs to extend the mission's remaining lifespan.", "They believe the mission has already failed completely.", "They communicate with the probe instantly without delay.", "They plan to retrieve the probe and bring it back to Earth."], "answer": 1, "why": "The mention of 'rationing' instruments implies deliberate, careful management to prolong function."}, {"q": "As used in the passage, the word \"ration\" most nearly means", "choices": ["destroy", "ignore", "distribute evenly among many users", "limit the use of to preserve resources", "increase without restriction"], "answer": 3, "why": "In context, engineers are conserving limited power by restricting the probe's active instruments."}, {"q": "The tone of the passage's description of Voyager 1 is best characterized as", "choices": ["dismissive and unconcerned", "purely technical and emotionless", "admiring and slightly wistful", "angry and critical", "mocking and sarcastic"], "answer": 2, "why": "Phrases like 'strange triumph' and the letter metaphor convey admiration tinged with melancholy."}]}, {"passage": "When Matthew Henson reached the North Pole in 1909 alongside Robert Peary, he was, by most accounts, the first member of the expedition to actually stand on that exact spot. A skilled navigator fluent in Inuit language and customs, Henson had spent nearly two decades preparing for polar travel, mastering dog-sledding and igloo-building techniques essential to survival. Yet for decades, credit for the achievement accrued almost entirely to Peary, while Henson's indispensable contributions were relegated to footnotes. Only much later did historians reassess the record, recognizing Henson's expertise as inseparable from the expedition's ultimate success.", "questions": [{"q": "What is the main idea of the passage?", "choices": ["Peary's navigational skills exceeded Henson's abilities", "Matthew Henson's crucial role in reaching the North Pole was long underappreciated", "Igloo-building was more important than dog-sledding", "Historians have always credited Henson fairly", "The North Pole expedition failed due to poor planning"], "answer": 1, "why": "The passage centers on Henson's vital contribution and its delayed recognition."}, {"q": "What can be inferred about the historical treatment of Henson's role?", "choices": ["It was influenced by racial and social biases of the era", "It was based on inaccurate geographic surveys", "It reflected Henson's own reluctance for recognition", "It was corrected immediately after the expedition", "It had no connection to Peary's reputation"], "answer": 0, "why": "The long delay in crediting Henson, an African American explorer, suggests the era's prejudices shaped historical accounts."}, {"q": "In the passage, the word \"indispensable\" most nearly means", "choices": ["irrelevant", "temporary", "essential", "expensive", "confusing"], "answer": 2, "why": "Indispensable means absolutely necessary, matching the context of contributions vital to success."}, {"q": "According to the passage, what specific skills did Henson possess?", "choices": ["Shipbuilding and cartography", "Fluency in Inuit language and polar survival techniques", "Medical training and meteorology", "Photography and journalism", "Diplomacy and translation of European languages"], "answer": 1, "why": "The passage explicitly states Henson was fluent in Inuit language and skilled in dog-sledding and igloo-building."}]}, {"passage": "The orb-weaver spider's web appears delicate, yet its silk rivals steel in tensile strength while remaining far more elastic. Engineers have long coveted this combination, since materials that stretch without snapping are notoriously difficult to synthesize. What makes the feat more remarkable is the spider's efficiency: it produces multiple silk varieties from a single abdomen, each engineered for a distinct purpose—sticky capture threads, rigid structural spokes, silk for wrapping prey. Researchers attempting to replicate these properties in laboratories have achieved only partial success, suggesting that millions of years of evolutionary refinement remain difficult to compress into a few decades of human ingenuity.", "questions": [{"q": "Which statement best captures the main idea of the passage?", "choices": ["Spider silk is stronger than steel in every measurable way", "Orb-weaver silk demonstrates a complex natural engineering that humans have struggled to fully replicate", "Engineers have successfully synthesized artificial spider silk", "Spiders produce silk primarily to wrap their prey", "Evolution always produces materials superior to human inventions"], "answer": 1, "why": "The passage centers on silk's remarkable properties and the difficulty of human replication."}, {"q": "What can be inferred about laboratory efforts to recreate spider silk?", "choices": ["They have completely failed to produce any usable material", "They have been abandoned due to lack of interest", "They have succeeded in matching silk's properties exactly", "They have made progress but not fully matched nature's version", "They focus only on the sticky capture threads"], "answer": 3, "why": "The passage states researchers achieved 'only partial success,' implying progress without full replication."}, {"q": "In context, the word \"coveted\" most nearly means", "choices": ["ignored", "desired strongly", "criticized", "misunderstood", "abandoned"], "answer": 1, "why": "Engineers wanting a valuable material property is best captured by 'desired strongly.'"}, {"q": "According to the passage, why is the spider's silk production considered efficient?", "choices": ["It uses no biological resources", "It occurs faster than any synthetic process", "A single abdomen produces multiple silk types suited to different functions", "It only requires one type of silk for all purposes", "It has remained unchanged for millions of years"], "answer": 2, "why": "The passage explicitly describes multiple silk varieties produced from one abdomen for different purposes."}]}, {"passage": "The Atacama Desert, stretching along Chile's Pacific coast, receives less than half an inch of rain annually, making it the driest nonpolar region on Earth. Paradoxically, this arid expanse borders one of the ocean's richest fisheries. The Humboldt Current, sweeping cold water northward from Antarctica, suppresses rainfall by stabilizing the air above it, yet simultaneously churns nutrients upward from the seafloor. These nutrients nourish plankton, which sustain vast schools of anchovies and, in turn, seabirds and larger fish. Scientists studying the Atacama's ancient soil, undisturbed for millions of years, have even used it as a proxy for understanding Martian terrain.", "questions": [{"q": "What is the main idea of the passage?", "choices": ["The Atacama Desert is entirely lifeless and scientifically uninteresting.", "The same oceanic current that creates the Atacama's extreme dryness also fuels a thriving marine ecosystem nearby.", "Rainfall patterns in Chile are impossible for scientists to explain.", "Mars and the Atacama Desert share an identical climate history.", "Anchovies are the primary cause of the Atacama's dryness."], "answer": 1, "why": "The passage centers on the paradoxical link between the Humboldt Current's drying effect and its nutrient-rich marine productivity."}, {"q": "Based on the passage, what can be inferred about the relationship between the Humboldt Current's temperature and regional climate?", "choices": ["The current's cold temperature has no effect on the atmosphere above it.", "The current's coldness helps prevent moisture-laden air from producing rain over the desert.", "Warmer currents typically produce drier deserts than cold ones.", "The current warms the coastal air, causing frequent storms.", "The desert's dryness causes the current to be cold."], "answer": 1, "why": "The passage states the current stabilizes the air above it, suppressing rainfall, implying its cold temperature limits precipitation."}, {"q": "In context, what does the word \"proxy\" most nearly mean?", "choices": ["Enemy", "Substitute or stand-in", "Voter", "Decoration", "Contradiction"], "answer": 1, "why": "Scientists use the Atacama's soil as a substitute model for studying conditions on Mars."}, {"q": "According to the passage, what happens to nutrients stirred up by the Humboldt Current?", "choices": ["They evaporate into the atmosphere and cause rain.", "They sink permanently to the ocean floor.", "They nourish plankton, beginning a food chain supporting fish and birds.", "They are absorbed directly by desert soil.", "They dissolve and disappear without ecological effect."], "answer": 2, "why": "The passage explicitly describes nutrients nourishing plankton, which then support anchovies, seabirds, and larger fish."}]}, {"passage": "The saxophone owes its existence to one man's frustration with orchestral gaps. In the 1840s, Belgian instrument maker Adolphe Sax sought a hybrid: an instrument with the agility of woodwinds but the projecting power of brass. He fashioned a single-reed mouthpiece onto a conical brass body, producing a tone both mellow and piercing. Patented in 1846, the saxophone initially struggled for acceptance; military bands embraced it before orchestras did. Ironically, its eventual fame came not from classical music but from jazz musicians in early twentieth-century America, who exploited its expressive slides and raw timbre, transforming Sax's overlooked invention into an icon of improvisation.", "questions": [{"q": "Which choice best states the main idea of the passage?", "choices": ["The saxophone was invented for jazz musicians specifically.", "The saxophone, created to bridge woodwind and brass qualities, found unexpected fame through jazz rather than classical music.", "Adolphe Sax was primarily a military band composer.", "Orchestras quickly adopted the saxophone after its patent in 1846.", "The saxophone's conical shape was its most controversial feature."], "answer": 1, "why": "The passage traces the instrument's origin and its surprising path to popularity through jazz."}, {"q": "What can be inferred about orchestras' initial reaction to the saxophone?", "choices": ["They immediately incorporated it into symphonic works.", "They were more resistant to it than military bands were.", "They banned it entirely from performance halls.", "They preferred it over traditional brass instruments.", "They commissioned Sax to create more instruments for them."], "answer": 1, "why": "The text states military bands accepted it before orchestras did, implying orchestral hesitation."}, {"q": "As used in the passage, the word \"exploited\" most nearly means", "choices": ["abused", "ignored", "took advantage of", "destroyed", "criticized"], "answer": 2, "why": "In context, jazz musicians made skillful use of the saxophone's expressive qualities."}, {"q": "According to the passage, what specifically made the saxophone's tone distinctive?", "choices": ["Its use of two reeds instead of one", "Its combination of a single-reed mouthpiece and conical brass body", "Its resemblance to a traditional trumpet", "Its wooden construction", "Its extremely small size compared to other instruments"], "answer": 1, "why": "The passage explicitly describes this combination as producing the instrument's unique tone."}]}, {"passage": "For decades, archaeologists assumed that the absence of large stone monuments meant a society lacked complexity. This assumption crumbled when researchers examined the Amazon basin's raised fields, canals, and causeways, structures built from earth rather than stone. Satellite imagery and soil analysis revealed that pre-Columbian populations had engineered vast agricultural networks capable of supporting dense settlements, all beneath a canopy that had long masked their scale. The discovery forced scholars to reconsider not only Amazonian history but also the very criteria used to judge sophistication. Durable materials, it turned out, had never been a reliable measure of a civilization's ingenuity.", "questions": [{"q": "What is the main idea of the passage?", "choices": ["Stone monuments are the most reliable evidence of ancient civilizations.", "Satellite imagery is more accurate than soil analysis in archaeological research.", "The discovery of Amazonian earthworks challenged assumptions about how to measure past societies' complexity.", "Amazonian societies were more advanced than any other pre-Columbian culture.", "Canals and causeways are more important than agricultural fields."], "answer": 2, "why": "The passage centers on how earthworks in the Amazon overturned assumptions linking monument durability to societal complexity."}, {"q": "What can be inferred about earlier archaeological methods used to study the Amazon?", "choices": ["They relied heavily on satellite imagery from the start.", "They likely failed to detect features hidden beneath dense forest cover.", "They focused primarily on interviewing local historians.", "They proved that the Amazon had no ancient settlements at all.", "They were more advanced than methods used elsewhere in the world."], "answer": 1, "why": "The passage notes the canopy 'masked' the structures' scale, implying earlier methods missed evidence hidden by forest."}, {"q": "As used in the passage, the word \"crumbled\" most nearly means", "choices": ["eroded physically", "weakened or collapsed", "broke into stone fragments", "became more convincing", "was excavated"], "answer": 1, "why": "In context, the assumption 'crumbled' figuratively, meaning it was disproven or fell apart, not literally eroded."}, {"q": "According to the passage, what specifically did researchers use to uncover the Amazonian earthworks?", "choices": ["Oral histories from indigenous communities", "Ancient written records", "Satellite imagery and soil analysis", "Underwater sonar mapping", "Carbon dating of stone tools"], "answer": 2, "why": "The passage explicitly states that satellite imagery and soil analysis revealed the engineered agricultural networks."}]}, {"passage": "Foresters once regarded trees as solitary competitors, each straining alone toward sunlight. Recent research complicates this picture. Through networks of underground fungal threads, trees exchange carbon, nitrogen, and water, effectively subsidizing weaker or shaded neighbors. Older, well-connected trees—sometimes called hub trees—appear to recognize their own offspring and preferentially nourish them. Skeptics caution against overstating this cooperation as deliberate altruism, noting that fungi may simply be redistributing resources for their own benefit, with trees as incidental beneficiaries. Still, the discovery has unsettled the old metaphor of the forest as a battlefield, suggesting instead something closer to a reluctant, transactional community.", "questions": [{"q": "Which statement best captures the main idea of the passage?", "choices": ["Fungi control forests entirely for their own benefit", "New research suggests trees interact through underground networks in ways that complicate the idea of pure competition", "Older trees are selfish and hoard resources from younger ones", "Forests function exactly like human communities", "Trees no longer compete with each other for sunlight"], "answer": 1, "why": "The passage centers on how fungal networks reveal cooperative exchange that challenges the competitive model of forests."}, {"q": "What can be inferred about the skeptics mentioned in the passage?", "choices": ["They believe trees have no relationship with fungi at all", "They think the cooperative behavior may be a byproduct of fungal self-interest rather than tree altruism", "They deny that fungal networks exist underground", "They argue hub trees are dying out", "They support calling forests battlefields"], "answer": 1, "why": "The passage says skeptics attribute the resource-sharing to fungi acting in their own interest, not deliberate tree cooperation."}, {"q": "In context, what does the word \"transactional\" most nearly mean?", "choices": ["Emotional and unpredictable", "Involving competitive violence", "Based on mutual exchange rather than pure generosity", "Entirely accidental and meaningless", "Governed by strict human laws"], "answer": 2, "why": "The passage contrasts battlefield imagery with a community based on exchange, implying transactional means reciprocal give-and-take."}, {"q": "The tone of the passage's final sentence is best described as", "choices": ["outraged and dismissive", "cautiously reconsidering an old assumption", "completely certain and celebratory", "indifferent to the research", "mocking scientists who study forests"], "answer": 1, "why": "The phrase 'reluctant, transactional community' shows measured reconsideration rather than certainty or celebration."}]}, {"passage": "The liver's capacity for regeneration borders on the miraculous. Surgeons can remove up to seventy percent of this organ, and within weeks it will regrow to nearly its original mass. This resilience stems from hepatocytes, the liver's primary cells, which retain a rare ability among adult human cells: they can multiply rapidly when tissue is lost, rather than remaining in a dormant state. Scientists studying this phenomenon hope to unlock similar regenerative pathways in organs like the heart and kidneys, which lack such robust self-repair mechanisms. For now, though, the liver remains a singular exception, quietly defying assumptions about the body's limited capacity for renewal.", "questions": [{"q": "What is the main idea of the passage?", "choices": ["Organ transplants are becoming safer due to new surgical techniques.", "The liver possesses an unusual regenerative ability that scientists hope to replicate elsewhere.", "Hepatocytes are the only cells found in the human liver.", "The heart and kidneys are more important organs than the liver.", "Human cells generally regenerate quickly after injury."], "answer": 1, "why": "The passage centers on the liver's exceptional regenerative capacity and its scientific significance."}, {"q": "What can be inferred about most adult human cells based on the passage?", "choices": ["They regenerate faster than hepatocytes.", "They are typically unable to multiply as readily as hepatocytes do.", "They are removed during most surgeries.", "They are located primarily in the liver.", "They cannot survive outside the body."], "answer": 1, "why": "The passage states hepatocytes' ability to multiply rapidly is 'rare among adult human cells,' implying most others lack this trait."}, {"q": "In the passage, the word \"dormant\" most nearly means", "choices": ["diseased", "inactive", "multiplying", "transplanted", "damaged"], "answer": 1, "why": "Dormant is contrasted with cells that 'multiply rapidly,' so it means inactive or resting."}, {"q": "According to the passage, how much of the liver can be removed and still allow regrowth?", "choices": ["Ten percent", "Twenty-five percent", "Fifty percent", "Seventy percent", "Ninety percent"], "answer": 3, "why": "The passage explicitly states surgeons can remove up to seventy percent of the liver."}]}, {"passage": "Before electricity, lighthouse keepers relied on ingenious mechanisms to magnify feeble flames into beams visible for miles. The Fresnel lens, invented in 1822, revolutionized this task. Unlike ordinary lenses, which waste light by absorbing it within thick glass, the Fresnel design used concentric rings of glass prisms to bend light efficiently, concentrating nearly all available illumination into a single powerful beam. This innovation allowed lighthouses to warn ships from far greater distances while burning less fuel. Keepers still faced grueling duties: polishing lenses, trimming wicks, and maintaining logs through isolated nights. Yet the lens itself, silently refracting light, did the essential work of guidance.", "questions": [{"q": "What is the main idea of the passage?", "choices": ["Lighthouse keepers had easy jobs once electricity arrived", "The Fresnel lens improved lighthouse efficiency by concentrating light more effectively than earlier lenses", "Ships could not see lighthouses before 1822", "Fresnel lenses eliminated the need for lighthouse keepers entirely", "Thick glass lenses were preferred for their durability"], "answer": 1, "why": "The passage centers on how the Fresnel lens improved light concentration and lighthouse function."}, {"q": "Based on the passage, what can be inferred about lighthouse keepers' work even after the Fresnel lens was introduced?", "choices": ["It became entirely automated", "It remained physically demanding and required constant attention", "It was no longer necessary", "It focused solely on inventing new lenses", "It required them to travel between multiple lighthouses nightly"], "answer": 1, "why": "The passage notes keepers still polished lenses, trimmed wicks, and kept logs through isolated nights, showing ongoing labor."}, {"q": "In the passage, what does the word \"grueling\" most nearly mean?", "choices": ["Effortless", "Enjoyable", "Exhausting", "Brief", "Mysterious"], "answer": 2, "why": "\"Grueling duties\" refers to physically and mentally taxing work, meaning exhausting."}, {"q": "What is the tone of the final two sentences of the passage?", "choices": ["Dismissive of the keepers' contributions", "Appreciative, contrasting human labor with the lens's quiet efficiency", "Angry about outdated technology", "Confused about the lens's function", "Sarcastic toward lighthouse design"], "answer": 1, "why": "The passage juxtaposes the keepers' hard work with the lens's silent effectiveness in an appreciative tone."}]}, {"passage": "Basketball's invention traces to a single frustrated instructor. In December 1891, James Naismith faced restless students at a Massachusetts training school, needing an indoor game to occupy them during New England's harsh winter. Rather than adapt an existing sport, he devised thirteen rules emphasizing skill over brute force, then nailed a peach basket to each end of the gymnasium's balcony. Players tossed a soccer ball toward these targets, and janitors initially retrieved it manually after every score, since the baskets retained their bottoms. This clumsy arrangement persisted until someone finally cut a hole through the bottom, letting the ball fall freely and the game move considerably faster.", "questions": [{"q": "What is the main idea of the passage?", "choices": ["Naismith preferred soccer balls over other equipment", "Basketball emerged from a practical need to solve a specific winter problem, evolving through initial awkwardness", "Winter weather in Massachusetts prevented outdoor sports entirely", "Janitors played a central role in shaping basketball's popularity", "Thirteen rules were too many for a simple game"], "answer": 1, "why": "The passage centers on how necessity drove the sport's creation and gradual refinement."}, {"q": "What can be inferred about the peach baskets' original design?", "choices": ["They were designed specifically for basketball from the start", "Their impracticality was an unintended flaw that took time to correct", "They were more efficient than the eventual hoop design", "Naismith intended them to slow the game deliberately", "Students refused to use them at first"], "answer": 1, "why": "The passage shows the closed-bottom baskets caused delays that were only later fixed, implying an overlooked design flaw."}, {"q": "In context, what does \"restless\" most nearly mean?", "choices": ["Exhausted and weak", "Uninterested in athletics", "Fidgety and unable to stay calm or settled", "Angry and confrontational", "Skilled but bored with easy tasks"], "answer": 2, "why": "\"Restless\" describes students' inability to sit still, which is why Naismith needed an engaging activity."}, {"q": "According to the passage, why did the game initially move slowly?", "choices": ["Players lacked understanding of the rules", "The gymnasium was too small for effective play", "The soccer ball was too heavy to throw accurately", "The baskets retained the ball, requiring manual retrieval after each score", "Janitors refused to participate in retrieving the ball"], "answer": 3, "why": "The passage explicitly states the baskets kept their bottoms, forcing manual retrieval that slowed play."}]}, {"passage": "For decades, ornithologists assumed migrating birds simply followed familiar landmarks—coastlines, rivers, mountain ranges. Yet many species travel accurately over featureless ocean, at night, or through unfamiliar territory on their first journey alone, with no experienced guide. Research now suggests birds possess a remarkable internal compass, sensing Earth's magnetic field through specialized proteins in their eyes and beaks. Some species also calibrate this sense against the position of stars or the sun's arc. This layered navigational system, refined over millions of years, allows a bird hatched in Alaska to find, unerringly, a specific wintering ground thousands of miles away in South America.", "questions": [{"q": "Which choice best states the main idea of the passage?", "choices": ["Birds rely primarily on landmarks like rivers and coastlines to migrate successfully.", "Migrating birds use a sophisticated combination of magnetic and celestial cues rather than only visible landmarks.", "Young birds cannot migrate successfully without an experienced guide leading the way.", "Ornithologists have fully solved the mystery of how birds migrate across oceans.", "Star position is the single most important factor in bird navigation."], "answer": 1, "why": "The passage centers on the discovery of an internal, multi-layered navigation system beyond landmark-following."}, {"q": "What can be inferred about birds making their first migratory journey alone?", "choices": ["They typically fail to reach their destination without assistance.", "They rely entirely on memorized landmarks from a previous trip.", "They must possess innate navigational abilities rather than learned ones.", "They wait for older birds to guide them before departing.", "They travel shorter distances than experienced birds do."], "answer": 2, "why": "Since first-time migrants succeed without a guide or prior experience, their navigation ability must be innate rather than learned."}, {"q": "In context, the word \"calibrate\" most nearly means", "choices": ["ignore", "discover", "adjust or fine-tune", "construct", "memorize permanently"], "answer": 2, "why": "Calibrating the magnetic sense against stars or sun means adjusting or fine-tuning it for accuracy."}, {"q": "According to the passage, what is one specific example given of precise migratory navigation?", "choices": ["A bird crossing a mountain range using visual memory.", "A bird hatched in Alaska finding a specific wintering ground in South America.", "A bird following a flock leader across the ocean.", "A bird using river patterns to reach Europe.", "A bird returning to the exact tree where it was born."], "answer": 1, "why": "The passage explicitly cites this example as evidence of the birds' precise, unerring navigational ability."}]}, {"passage": "When Louis Braille lost his sight at age three, existing tactile reading systems were cumbersome, relying on raised Latin letters that were slow to read by touch. In 1824, at just fifteen, Braille reimagined the problem entirely. Drawing on a military code called night writing, he devised a system of raised dots arranged in cells of six, each configuration representing a letter, number, or punctuation mark. Unlike its predecessors, Braille's system could be read quickly and even written by the blind themselves using a simple stylus. Though French educators resisted adopting it for decades, Braille's method eventually spread worldwide, transforming literacy and independence for blind people everywhere.", "questions": [{"q": "What is the main idea of the passage?", "choices": ["Louis Braille invented a superior tactile reading system that eventually revolutionized literacy for blind people despite initial resistance.", "Military codes were the only useful source for reading system designs.", "French educators were responsible for spreading Braille worldwide.", "Blind people had no way to read before the nineteenth century.", "Louis Braille lost his sight due to a childhood accident."], "answer": 0, "why": "The passage centers on Braille's invention and its eventual global impact."}, {"q": "What can be inferred about why French educators resisted Braille's system?", "choices": ["They believed dots were harder to feel than raised letters.", "They likely favored the existing raised-letter system they were accustomed to using.", "They thought Braille was too young to invent anything useful.", "They preferred systems based on military codes.", "They wanted blind people to remain illiterate."], "answer": 1, "why": "The passage implies institutional resistance to change from an established method, suggesting attachment to the older system."}, {"q": "What does the word \"cumbersome\" most likely mean as used in the passage?", "choices": ["Inexpensive", "Popular", "Awkward and inefficient", "Colorful", "Temporary"], "answer": 2, "why": "The context describes the older systems as slow and difficult, matching 'awkward and inefficient.'"}, {"q": "According to the passage, what advantage did Braille's system have over previous tactile methods?", "choices": ["It used raised Latin letters exclusively.", "It could only be read, not written, by blind users.", "It was invented by French educators.", "It could be read quickly and also written by blind users themselves.", "It required no training to learn."], "answer": 3, "why": "The passage explicitly states the system could be read quickly and written using a stylus by blind individuals."}]}, {"passage": "Deep beneath the ocean's sunlit surface lies a realm where bioluminescence—the production of light by living organisms—becomes essential for survival. Anglerfish dangle glowing lures to entice prey toward waiting jaws, while some squid eject luminous ink to blind predators rather than merely obscuring their escape. Scientists estimate that over seventy percent of deep-sea creatures possess this capability, suggesting it arose independently multiple times through evolution. Far from a mere curiosity, bioluminescence serves as camouflage, communication, and weaponry in an environment where sunlight never penetrates. Researchers continue discovering novel chemical mechanisms behind these lights, hoping to apply them in medical imaging and environmental sensing technologies.", "questions": [{"q": "What is the main idea of the passage?", "choices": ["Anglerfish are the only deep-sea creatures that use light to hunt", "Bioluminescence is a widespread and multifunctional adaptation crucial to deep-sea survival", "Ocean scientists have fully explained how bioluminescent chemicals work", "Sunlight cannot reach the deepest parts of the ocean", "Squid ink is more effective than fish lures at deterring predators"], "answer": 1, "why": "The passage centers on bioluminescence's prevalence and varied survival functions in the deep sea."}, {"q": "What can be inferred about why bioluminescence evolved independently multiple times?", "choices": ["It is a random mutation with no real survival benefit", "It only benefits predators, not prey species", "The trait must be so advantageous in the dark that natural selection favored it repeatedly across unrelated species", "All bioluminescent creatures share a single common ancestor", "Scientists have proven it evolved only once and then spread"], "answer": 2, "why": "The passage implies repeated independent evolution signals strong adaptive value in a lightless environment."}, {"q": "In the passage, the word \"entice\" most nearly means", "choices": ["frighten", "attract", "confuse", "illuminate", "escape"], "answer": 1, "why": "\"Entice\" means to lure or draw in, matching how the lure attracts prey."}, {"q": "According to the passage, how does squid ink function differently from a simple defensive smokescreen?", "choices": ["It provides camouflage by matching the ocean floor's color", "It communicates with other squid to warn them of danger", "It is used exclusively for attracting mates", "It temporarily blinds predators rather than just hiding the squid", "It has no proven defensive purpose"], "answer": 3, "why": "The passage explicitly states some squid use luminous ink to blind predators, not merely obscure escape."}]}, {"passage": "For decades, space agencies treated asteroids as obstacles to avoid. Now they are reconsidering. Beneath their unremarkable, cratered surfaces, many asteroids harbor water ice and metals like platinum, resources that could sustain future missions or fuel industries on Earth. Mining them, however, presents formidable challenges: microgravity makes drilling difficult, distances stretch communication delays to minutes, and no legal framework clearly governs extraterrestrial ownership. Nevertheless, private companies and governments alike are investing in prospecting missions, wagering that the first successful asteroid harvest could transform space travel from a costly government endeavor into a self-sustaining, resource-driven enterprise reaching far beyond our own planet.", "questions": [{"q": "What is the main idea of the passage?", "choices": ["Asteroids are dangerous obstacles that space agencies must learn to avoid entirely", "Interest in asteroids has shifted toward viewing them as valuable resources despite significant obstacles", "Private companies have already succeeded in mining asteroids for profit", "Legal frameworks now clearly regulate who owns resources found in space", "Communication delays make asteroid missions impossible to carry out safely"], "answer": 1, "why": "The passage centers on the shift from avoiding asteroids to viewing them as resource opportunities, alongside the challenges involved."}, {"q": "Which of the following can be inferred from the passage?", "choices": ["Asteroid mining will definitely fail due to legal issues", "Governments have abandoned interest in space resource projects", "No asteroid contains valuable materials worth extracting", "Successful asteroid mining could change how space exploration is funded and conducted", "Microgravity makes asteroid drilling easier than drilling on Earth"], "answer": 3, "why": "The passage states that a successful harvest could transform space travel into a resource-driven enterprise, implying a major shift in funding and approach."}, {"q": "As used in the passage, the word \"formidable\" most nearly means", "choices": ["insignificant", "impressive in a positive way", "extremely difficult to overcome", "easily solved", "financially rewarding"], "answer": 2, "why": "In context, \"formidable challenges\" refers to obstacles that are especially difficult to overcome, such as drilling issues and communication delays."}, {"q": "According to the passage, which of the following is explicitly mentioned as a challenge of asteroid mining?", "choices": ["Lack of interest from private companies", "Absence of platinum and other metals", "The high cost of building spacecraft engines", "Unclear legal ownership of extraterrestrial resources", "Overcrowding of asteroids by multiple nations"], "answer": 3, "why": "The passage directly states that no legal framework clearly governs extraterrestrial ownership, making this an explicitly mentioned challenge."}]}, {"passage": "When Joseph-Ignace Guillotin proposed a swift, mechanical means of execution in 1789, his goal was not cruelty but equality. Under the old French regime, beheading by sword was reserved for nobles, while commoners faced slower, more painful deaths. The device that eventually bore his name replaced human variability with a falling blade, ensuring every condemned person, regardless of rank, suffered the same brief fate. Guillotin himself opposed capital punishment entirely and was reportedly horrified that his advocacy for humane reform became forever linked to the Reign of Terror's bloodshed, his name synonymous with an instrument he never actually invented.", "questions": [{"q": "What is the main idea of the passage?", "choices": ["The guillotine was designed to make executions equally quick for all social classes", "Guillotin invented the guillotine to punish nobles for centuries of privilege", "French executions before 1789 were universally slow and painful", "Guillotin supported capital punishment as a form of social justice", "The guillotine was the first mechanical device used in Europe"], "answer": 0, "why": "The passage centers on the device's purpose: equal treatment in execution regardless of rank."}, {"q": "What can be inferred about Guillotin's feelings toward his legacy?", "choices": ["He was proud that his name became attached to a famous invention", "He felt indifferent since he had no real connection to the device", "He was distressed that his reform efforts became tied to violence he opposed", "He believed the Reign of Terror justified his original proposal", "He regretted not inventing the device himself"], "answer": 2, "why": "The text states he opposed capital punishment and was horrified by the association with bloodshed."}, {"q": "In context, what does \"variability\" most nearly mean?", "choices": ["Legal authority", "Public opinion", "Inconsistency or unpredictability", "Financial cost", "Physical strength"], "answer": 2, "why": "The blade replaced inconsistent human executioners with a uniform mechanical process."}, {"q": "According to the passage, how did executions differ before the guillotine's use?", "choices": ["Only nobles were executed, while commoners were imprisoned", "Commoners were beheaded by sword while nobles suffered slower deaths", "Nobles received swift sword deaths while commoners faced slower ones", "All executions were performed with equal swiftness regardless of class", "Executions were determined randomly by lottery"], "answer": 2, "why": "The passage explicitly states nobles were beheaded by sword while commoners endured slower, more painful methods."}]}, {"passage": "The axolotl, a salamander native to a single lake basin near Mexico City, defies the typical rules of amphibian development. Unlike its relatives, it rarely undergoes metamorphosis, retaining external gills and an aquatic lifestyle throughout its life—a condition biologists call neoteny. Even more remarkable is its regenerative capacity: an axolotl can regrow not only limbs but also portions of its heart, spinal cord, and even brain tissue, without scarring. Scientists studying these creatures hope to unlock cellular mechanisms applicable to human medicine. Yet the wild axolotl population has dwindled precipitously, threatened by pollution and habitat loss, making this scientifically invaluable animal critically endangered.", "questions": [{"q": "What is the main idea of the passage?", "choices": ["Axolotls are common pets valued for their unusual appearance", "Axolotls possess unique biological traits that make them scientifically important, though they are now endangered", "Metamorphosis is a process all salamanders must undergo", "Mexico City has destroyed most of its natural lakes", "Human medicine has already fully replicated axolotl regeneration"], "answer": 1, "why": "The passage centers on the axolotl's neoteny and regenerative abilities alongside its endangered status."}, {"q": "Based on the passage, what can be inferred about most other salamander species?", "choices": ["They typically transition from an aquatic juvenile stage to a more terrestrial adult form", "They cannot regenerate any body parts", "They live exclusively in Mexico", "They are more endangered than axolotls", "They lack gills entirely at every life stage"], "answer": 0, "why": "Since axolotls are described as unusual for retaining gills and not metamorphosing, other salamanders presumably do metamorphose into a different adult form."}, {"q": "As used in the passage, the word \"precipitously\" most nearly means", "choices": ["gradually", "steeply and suddenly", "permanently", "unpredictably in cycles", "mildly"], "answer": 1, "why": "\"Precipitously\" describes a sharp, rapid decline, fitting the context of a dwindling population."}, {"q": "The author's tone toward the axolotl's declining population can best be described as", "choices": ["indifferent and detached", "celebratory and triumphant", "concerned and urgent", "dismissive and skeptical", "amused and lighthearted"], "answer": 2, "why": "The final sentence emphasizes threats and endangered status, conveying genuine concern rather than neutrality or celebration."}]}, {"passage": "Before revolutionizing physics, Albert Einstein was, by many accounts, an unremarkable student. Teachers found him disengaged, prone to daydreaming rather than reciting facts. He disliked rote memorization, a staple of German schooling, and later admitted that formal education nearly extinguished his natural curiosity. Yet outside the classroom, young Einstein pursued knowledge voraciously: he taught himself calculus, devoured philosophy texts, and marveled at a pocket compass his father showed him, wondering what invisible force moved its needle. This early fascination with unseen forces would eventually blossom into theories that redefined space, time, and gravity, proving that conventional measures of scholastic promise poorly predicted his extraordinary genius.", "questions": [{"q": "What is the main idea of the passage?", "choices": ["Einstein hated school and never learned anything valuable there", "Einstein's unconventional early learning contrasted with his later scientific achievements", "German schools were poorly designed for gifted children", "Einstein's father was responsible for his son's success", "Calculus was the most important subject Einstein studied"], "answer": 1, "why": "The passage contrasts Einstein's disengagement in formal schooling with the self-driven curiosity that later fueled his groundbreaking discoveries."}, {"q": "What can be inferred about the education system Einstein experienced?", "choices": ["It emphasized creative, independent thinking", "It relied heavily on memorization and standard recitation", "It focused primarily on teaching physics and mathematics", "It was designed specifically for future scientists", "It encouraged students to explore topics like compasses"], "answer": 1, "why": "The passage states he disliked rote memorization, 'a staple of German schooling,' implying the system emphasized memorized recitation over exploration."}, {"q": "In the passage, the word \"voraciously\" most nearly means", "choices": ["reluctantly", "carelessly", "eagerly and intensely", "occasionally", "secretly"], "answer": 2, "why": "'Voraciously' describes an intense, eager appetite, matching how he 'devoured' texts and taught himself calculus."}, {"q": "According to the passage, the compass incident is significant because it", "choices": ["proves Einstein's father was a scientist", "shows Einstein's early interest in unseen physical forces", "demonstrates his skill at building instruments", "was the moment he decided to become a teacher", "reveals his dislike of his father's gifts"], "answer": 1, "why": "The passage directly links his wonder at the compass's invisible force to the curiosity that later shaped his theories about unseen forces like gravity."}]}, {"passage": "Beneath Yellowstone lies not a mountain but a caldera—a vast depression formed when an ancient volcano's roof collapsed into its own emptied magma chamber. Unlike the cone-shaped peaks of popular imagination, calderas betray their violence only through subtler signs: geysers, hot springs, and gently rolling plains that mask cataclysmic origins. Three eruptions over the past two million years, each thousands of times more powerful than Mount St. Helens' 1980 blast, carved this landscape. Geologists monitor the region's slow ground swelling and seismic murmurs not because eruption looms imminently, but because understanding such systems illuminates the restless architecture hidden beneath seemingly placid terrain everywhere.", "questions": [{"q": "What is the main idea of this passage?", "choices": ["Yellowstone is more dangerous than any other volcanic site on Earth", "Calderas like Yellowstone's reveal violent volcanic histories despite their unassuming appearance", "Mount St. Helens erupted with less force than most volcanoes", "Geysers and hot springs are unrelated to volcanic activity", "Scientists believe Yellowstone will erupt very soon"], "answer": 1, "why": "The passage centers on how Yellowstone's deceptively calm landscape conceals a violent volcanic past."}, {"q": "What can be inferred about the author's view of geological monitoring at Yellowstone?", "choices": ["It is a wasteful use of scientific resources", "It serves broader scientific understanding beyond predicting imminent disaster", "It has proven that Yellowstone is now dormant forever", "It is primarily done to attract tourists", "It contradicts what geologists know about calderas"], "answer": 1, "why": "The final sentence explains monitoring's value lies in illuminating volcanic systems generally, not just forecasting eruption."}, {"q": "In context, what does the word \"cataclysmic\" most nearly mean?", "choices": ["Peaceful", "Ancient", "Disastrous", "Predictable", "Microscopic"], "answer": 2, "why": "The word describes eruptions thousands of times more powerful than a known massive eruption, implying disaster-level force."}, {"q": "According to the passage, how do calderas typically differ from other volcanoes in appearance?", "choices": ["Calderas are always taller than typical volcanic cones", "Calderas lack any surface features at all", "Calderas form only underwater", "Calderas appear as depressions or plains rather than cone-shaped peaks", "Calderas are surrounded by permanent ice fields"], "answer": 3, "why": "The passage explicitly contrasts caldera depressions and rolling plains with cone-shaped volcanic peaks."}]}, {"passage": "In 1874, a group of painters rejected by France's official Salon staged their own exhibition in Paris. Critics mocked one canvas, Monet's hazy harbor scene titled 'Impression, Sunrise,' claiming it looked unfinished, mere sketchwork masquerading as art. A reviewer sarcastically dubbed the whole group 'Impressionists,' intending insult. Yet the painters embraced the label. Rather than rendering precise detail, they sought to capture fleeting light and atmosphere, working rapidly outdoors instead of in studios. Within decades, the once-ridiculed style became celebrated worldwide, and that dismissive nickname turned into the proud name of one of history's most influential art movements.", "questions": [{"q": "What is the main idea of the passage?", "choices": ["Monet was the most talented painter of his generation", "A mocking critical label eventually became the celebrated name of a major art movement", "French art critics in the 1870s had poor judgment", "Outdoor painting was invented in 1874", "The Salon exhibition was more important than independent shows"], "answer": 1, "why": "The passage traces how an insult transformed into the accepted name for Impressionism."}, {"q": "What can be inferred about the official Salon mentioned in the passage?", "choices": ["It welcomed experimental new styles readily", "It had strict, traditional standards that excluded unconventional work", "It no longer exists today", "It was founded by Monet himself", "It focused exclusively on sculpture"], "answer": 1, "why": "Since the painters were rejected and had to organize their own show, the Salon likely favored conventional, traditional art."}, {"q": "In context, what does the word \"embraced\" most nearly mean?", "choices": ["Physically hugged", "Ignored completely", "Willingly accepted and adopted", "Angrily rejected", "Slowly forgot"], "answer": 2, "why": "The painters took the mocking term and made it their own, meaning they willingly accepted it."}, {"q": "What is the overall tone of the passage regarding the critics' initial reaction?", "choices": ["Purely admiring", "Mildly ironic, given how the story ultimately unfolded", "Completely neutral and factual with no irony", "Furious and accusatory toward critics", "Confused about what happened"], "answer": 1, "why": "The passage highlights the irony that an insult became a celebrated title, creating a subtly ironic tone."}]}, {"passage": "A derecho is a fast-moving band of thunderstorms capable of producing widespread, damaging straight-line winds over hundreds of miles. Unlike a tornado, which twists violently within a narrow path, a derecho advances in a relentless, unbroken line, felling trees and stripping power lines across entire regions within hours. Meteorologists classify a storm as a derecho only if wind damage extends continuously for at least 240 miles and includes gusts of 58 miles per hour or greater. Because these storms arrive with little warning and dissipate quickly, they are sometimes called 'inland hurricanes,' though their formation and structure differ entirely from tropical cyclones.", "questions": [{"q": "What is the main idea of the passage?", "choices": ["Tornadoes are more destructive than derechos because they twist violently.", "A derecho is a specific, large-scale windstorm distinguished by its continuous path of damage and rapid movement.", "Meteorologists cannot agree on how to classify severe windstorms.", "Hurricanes and derechos form through identical atmospheric processes.", "Power outages are the primary danger posed by any severe storm."], "answer": 1, "why": "The passage centers on defining and explaining the unique characteristics of a derecho."}, {"q": "What can be inferred about why derechos are nicknamed 'inland hurricanes'?", "choices": ["They actually originate over the ocean before moving inland.", "They rotate in the same manner as hurricanes.", "Their widespread wind damage resembles hurricane effects despite forming differently.", "They last for several days like hurricanes.", "They only occur in coastal states near hurricane paths."], "answer": 2, "why": "The passage notes the nickname stems from similar damage patterns, not similar formation."}, {"q": "In the passage, the word 'relentless' most nearly means", "choices": ["temporary", "unpredictable", "unyielding", "scattered", "weak"], "answer": 2, "why": "The storm's line is described as continuous and unbroken, meaning unyielding or persistent."}, {"q": "According to the passage, what is required for a storm to be officially classified as a derecho?", "choices": ["Winds must exceed 100 miles per hour.", "Damage must occur in a circular pattern.", "The storm must last more than 24 hours.", "Damage must extend continuously for at least 240 miles with gusts of 58 mph or more.", "The storm must form over warm ocean water."], "answer": 3, "why": "The passage explicitly states these two specific criteria for classification."}]}, {"passage": "The engineers of ancient Rome achieved feats that puzzled scholars for centuries: aqueducts spanning miles carried water across valleys using only gravity, their gentle downward slope calculated without modern instruments. Roman concrete, mixed with volcanic ash, grew stronger over time as seawater seeped through it, a property researchers only recently decoded. Yet this ingenuity coexisted with startling neglect; sanitation systems ran beneath crowded tenements prone to collapse and fire. Rome's grandeur, then, was not seamless progress but a patchwork of brilliant innovation and persistent hazard, a paradox that reveals how even the most celebrated civilizations advanced unevenly across different aspects of daily life.", "questions": [{"q": "Which best expresses the main idea of the passage?", "choices": ["Roman aqueducts were the greatest engineering triumph of the ancient world.", "Rome's achievements were undermined entirely by poor sanitation.", "Roman civilization combined remarkable engineering with significant everyday risks.", "Volcanic ash was the key ingredient in all Roman construction.", "Ancient scholars fully understood Roman engineering techniques."], "answer": 2, "why": "The passage emphasizes the paradox of brilliant innovation alongside neglect and hazard."}, {"q": "What can be inferred about Roman concrete's interaction with seawater?", "choices": ["It dissolved rapidly, requiring constant repair.", "It was avoided in coastal construction projects.", "It reacted in a way that reinforced rather than weakened the material.", "It was chemically identical to modern concrete.", "It caused Roman engineers to abandon coastal building."], "answer": 2, "why": "The passage states the concrete grew stronger over time as seawater seeped through it."}, {"q": "In context, the word \"patchwork\" most nearly means", "choices": ["a fabric used in construction", "a uniform and consistent system", "an inconsistent mixture of elements", "a secret method of building", "a failed engineering experiment"], "answer": 2, "why": "Patchwork describes Rome's mix of brilliance and hazard, meaning an inconsistent combination."}, {"q": "According to the passage, what problem existed in crowded Roman tenements?", "choices": ["They lacked any water supply system.", "They were built without volcanic ash.", "They were prone to collapse and fire.", "They had no sanitation systems at all.", "They were abandoned due to poor design."], "answer": 2, "why": "The passage explicitly states tenements were prone to collapse and fire."}]}, {"passage": "Ordinary window glass begins as sand, soda ash, and limestone, melted together at nearly 1,600 degrees Celsius until it becomes a glowing, viscous liquid. This molten mixture is then poured onto a bath of liquid tin, where it spreads evenly and floats, since glass is less dense than tin. As the glass glides across the tin's surface, gravity and surface tension conspire to flatten it into a uniform sheet, free of the ripples that once plagued handmade panes. Slowly cooled in a temperature-controlled chamber called a lehr, the glass hardens gradually, avoiding the internal stresses that would otherwise make it fragile and prone to shattering.", "questions": [{"q": "What is the main idea of the passage?", "choices": ["Sand is the only necessary ingredient for producing glass", "Modern glassmaking relies on a molten tin bath and controlled cooling to create flat, durable sheets", "Glass is more fragile today than it was in earlier centuries", "Limestone prevents glass from melting at high temperatures", "Tin is more valuable than the glass it helps produce"], "answer": 1, "why": "The passage traces the entire float-glass process from raw materials to controlled cooling."}, {"q": "What can be inferred about handmade glass panes mentioned in the passage?", "choices": ["They were made without any heat at all", "They were often uneven or rippled compared to float glass", "They were manufactured using liquid tin baths", "They cooled instantly without a lehr", "They contained no sand or limestone"], "answer": 1, "why": "The passage says the tin bath removes ripples 'that once plagued handmade panes,' implying earlier glass had this flaw."}, {"q": "In the passage, the word \"viscous\" most nearly means", "choices": ["transparent", "thick and slow-flowing", "extremely cold", "brightly colored", "chemically unstable"], "answer": 1, "why": "Viscous describes the molten glass's thick, slow-moving consistency before it spreads on the tin."}, {"q": "According to the passage, why must the glass cool slowly in the lehr?", "choices": ["To make it float better on tin", "To prevent internal stresses that could cause shattering", "To increase its melting temperature", "To remove excess sand from the mixture", "To make the tin bath reusable"], "answer": 1, "why": "The passage states gradual cooling avoids internal stresses that would make the glass fragile."}]}, {"passage": "The axolotl, a Mexican salamander, refuses to grow up in the ordinary sense. While most amphibians outgrow their gilled, aquatic larval stage, the axolotl remains perpetually juvenile, retaining feathery external gills and a finned tail into adulthood, a condition biologists call neoteny. This arrested development, however, belies remarkable regenerative powers: an axolotl can regrow not merely a severed limb but also portions of its heart, spinal cord, and even brain tissue, without scarring. Scientists studying these creatures hope to unlock cellular secrets applicable to human medicine. Ironically, the wild axolotl now teeters near extinction, its Mexico City lake habitat shrunk by pollution and urban sprawl.", "questions": [{"q": "What is the main idea of the passage?", "choices": ["Axolotls are common pets that require specialized aquatic care.", "The axolotl's unusual arrested development is linked to extraordinary regenerative abilities of scientific interest.", "Neoteny is a condition found in most amphibian species.", "Urban development is the primary cause of amphibian extinction worldwide.", "Human medicine has already replicated the axolotl's regenerative powers."], "answer": 1, "why": "The passage centers on how the axolotl's neoteny connects to its regenerative capabilities and scientific relevance."}, {"q": "What can be inferred about why scientists are interested in axolotls?", "choices": ["Axolotls are easier to breed in captivity than other salamanders.", "Their regenerative abilities might offer insights transferable to treating human injuries or diseases.", "Axolotls have no natural predators in the wild.", "They live longer than most other amphibian species.", "Their gills allow them to survive in polluted water."], "answer": 1, "why": "The passage states scientists hope to unlock cellular secrets applicable to human medicine, implying practical medical interest."}, {"q": "As used in the passage, the word \"teeters\" most nearly means", "choices": ["thrives steadily", "balances precariously", "grows rapidly", "migrates seasonally", "multiplies uncontrollably"], "answer": 1, "why": "\"Teeters near extinction\" conveys a precarious, unstable position, meaning balances precariously."}, {"q": "According to the passage, what threatens wild axolotls?", "choices": ["Overhunting by researchers seeking regenerative tissue", "Competition from newly introduced predator species", "Pollution and shrinking habitat due to urban sprawl", "A genetic mutation causing infertility", "Climate change altering water temperature"], "answer": 2, "why": "The passage explicitly states the axolotl's habitat has shrunk due to pollution and urban sprawl."}]}, {"passage": "When Matthew Henson reached the North Pole in 1909, alongside Robert Peary, he had already spent nearly two decades mastering skills few outsiders possessed: he spoke Inuktitut fluently, built sledges, and drove dog teams with a precision that veteran explorers envied. Peary, often credited alone for the achievement, privately acknowledged that Henson's expertise was indispensable to the expedition's survival. Yet racial prejudice in early twentieth-century America obscured Henson's contributions for decades. Only later did historians recognize him as a co-discoverer rather than a mere assistant, revealing how exploration narratives can be shaped as much by social bias as by actual accomplishment.", "questions": [{"q": "What is the main idea of the passage?", "choices": ["Peary could not have survived the expedition without dog sledges.", "Matthew Henson's crucial role in reaching the North Pole was long unrecognized due to racial bias.", "Inuit culture influenced early twentieth-century exploration techniques.", "Historians disagree about who reached the North Pole first.", "Robert Peary intentionally sabotaged Henson's reputation."], "answer": 1, "why": "The passage centers on Henson's overlooked contributions and later historical correction."}, {"q": "What can be inferred about Peary's private views of Henson?", "choices": ["Peary believed Henson was unqualified for the expedition.", "Peary resented Henson's fluency in Inuktitut.", "Peary privately valued Henson's skills even though public credit went elsewhere.", "Peary refused to work with Henson again.", "Peary considered Henson merely a translator."], "answer": 2, "why": "The passage states Peary privately acknowledged Henson's expertise was indispensable, despite public credit favoring Peary."}, {"q": "In context, what does \"indispensable\" mean?", "choices": ["Irrelevant", "Temporary", "Costly", "Essential", "Confusing"], "answer": 3, "why": "\"Indispensable\" describes something absolutely necessary, matching \"essential.\""}, {"q": "What tone does the passage take toward the historical treatment of Henson?", "choices": ["Approving of how quickly he was recognized", "Indifferent to the outcome", "Critical of the delayed and biased recognition", "Mocking of his abilities", "Uncertain about his actual role"], "answer": 2, "why": "The passage highlights prejudice obscuring his contributions, implying a critical stance toward that injustice."}]}, {"passage": "The bombardier beetle possesses one of nature's most startling defenses. When threatened, it mixes chemicals stored in separate internal chambers, producing a boiling, noxious spray expelled with an audible pop. This reaction occurs almost instantaneously, thanks to enzymes that catalyze the process without destroying the beetle's own tissues. Scientists once doubted such a mechanism could evolve gradually, since each component seemed useless alone. Yet research suggests the chambers and chemicals developed incrementally, each stage offering some survival advantage. Engineers have even studied this system to design more efficient fuel-injection and spray technologies, proving that ancient evolutionary solutions can inspire remarkably modern innovations.", "questions": [{"q": "What is the main idea of the passage?", "choices": ["Bombardier beetles are the most dangerous insects in existence", "The beetle's chemical defense evolved gradually and now inspires human technology", "Enzymes are the only reason beetles can survive their own defenses", "Scientists have fully solved the mystery of insect evolution", "Fuel-injection systems were invented before scientists studied beetles"], "answer": 1, "why": "The passage centers on the beetle's evolved defense mechanism and its modern technological applications."}, {"q": "What can be inferred about the initial skepticism regarding the beetle's defense mechanism?", "choices": ["Scientists believed beetles were incapable of chemical production", "Researchers assumed the beetle's spray was purely accidental", "It seemed difficult to explain how a multi-part system could evolve piece by piece", "Scientists doubted the beetle could survive its own explosion", "No one believed engineers could learn from insects"], "answer": 2, "why": "The passage states each component seemed useless alone, implying doubt about gradual, incremental evolution."}, {"q": "As used in the passage, the word \"catalyze\" most nearly means", "choices": ["prevent", "slow down", "speed up", "dilute", "conceal"], "answer": 2, "why": "In context, enzymes that catalyze a chemical reaction accelerate it."}, {"q": "What does the passage suggest about the tone of the final sentence?", "choices": ["Skeptical that engineers gained anything useful from beetles", "Admiring of how natural adaptations can inform human innovation", "Critical of scientists for studying insects instead of machines", "Neutral and purely factual with no evaluative stance", "Concerned that beetles are being exploited for research"], "answer": 1, "why": "The phrase \"remarkably modern innovations\" conveys admiration for nature's evolutionary ingenuity."}]}, {"passage": "The saxophone, now synonymous with jazz, was actually born in classical Europe. In 1846, Belgian instrument maker Adolphe Sax patented a family of brass-bodied, single-reed instruments designed to bridge the tonal gap between woodwinds and brass in military bands. Sax envisioned his invention filling orchestral gaps, but French bandmasters embraced it first, prizing its penetrating yet flexible tone. Only decades later, as African American musicians in New Orleans experimented with its expressive slides and growls, did the saxophone acquire its improvisational identity. Ironically, the instrument most associated with spontaneous jazz improvisation began as a meticulously engineered solution to a rather technical orchestration problem.", "questions": [{"q": "What is the main idea of the passage?", "choices": ["The saxophone was invented by jazz musicians in New Orleans.", "The saxophone's original engineered purpose differs strikingly from the improvisational role it later acquired.", "Adolphe Sax intended his instrument solely for orchestras.", "French bandmasters rejected the saxophone at first.", "The saxophone has always been used exclusively in jazz."], "answer": 1, "why": "The passage traces the instrument from a technical invention to its later jazz identity, emphasizing this contrast."}, {"q": "What can be inferred about Adolphe Sax's original expectations for his invention?", "choices": ["He expected it to remain unused for decades.", "He hoped it would replace all woodwinds entirely.", "He did not anticipate its eventual association with jazz improvisation.", "He designed it specifically for French military bands.", "He intended it primarily for solo classical performance."], "answer": 2, "why": "Since Sax envisioned orchestral use and jazz identity came much later through others' experimentation, he could not have foreseen that outcome."}, {"q": "In context, the word \"penetrating\" most nearly means", "choices": ["confusing", "piercing and clearly audible", "soft and muted", "emotionally moving", "difficult to play"], "answer": 1, "why": "The tone is described as cutting through other instruments, meaning sharply audible."}, {"q": "According to the passage, who first widely adopted the saxophone after its invention?", "choices": ["Orchestral composers", "French bandmasters", "New Orleans jazz musicians", "Belgian instrument makers", "American military bands"], "answer": 1, "why": "The passage states French bandmasters embraced it first, before jazz musicians later transformed its use."}]}, {"passage": "For decades, archaeologists assumed that ancient Nubian pyramids at Meroë were merely derivative imitations of Egyptian tombs. Recent excavations, however, reveal distinct construction techniques, steeper angles, and burial goods reflecting a wholly separate cultural identity. Researchers now recognize that Nubian builders adapted the pyramid form to their own religious practices rather than simply copying their northern neighbors. This reassessment matters beyond academic circles: it corrects a long-standing narrative that treated African civilizations south of Egypt as passive recipients of foreign influence. The Meroë findings, still being cataloged, suggest that trade and cultural exchange flowed in multiple directions, challenging historians to reconsider assumptions about innovation and originality across the ancient world.", "questions": [{"q": "Which choice best states the main idea of the passage?", "choices": ["Egyptian pyramids were larger and more sophisticated than those at Meroë", "New evidence shows Nubian pyramids reflect an independent culture, not mere imitation of Egypt", "Archaeologists have abandoned the study of Nubian civilization entirely", "Trade routes between Egypt and Nubia have been fully mapped for centuries", "The Meroë excavations proved that pyramids originated in Nubia rather than Egypt"], "answer": 1, "why": "The passage centers on how new findings overturn the idea that Nubian pyramids were simple copies of Egyptian ones."}, {"q": "What can be inferred about historians' previous assumptions regarding African civilizations south of Egypt?", "choices": ["They believed these civilizations had no contact with Egypt at all", "They assumed these civilizations only borrowed culture rather than originating it", "They considered these civilizations more advanced than Egypt", "They thought these civilizations predated Egyptian pyramid-building", "They believed these civilizations left no archaeological evidence"], "answer": 1, "why": "The passage states the old narrative treated southern civilizations as 'passive recipients of foreign influence,' implying they were seen as borrowers rather than innovators."}, {"q": "In the passage, the word \"derivative\" most nearly means", "choices": ["financially valuable", "artistically unique", "copied from another source", "religiously symbolic", "structurally unstable"], "answer": 2, "why": "'Derivative' describes something imitative or copied, which fits the context of pyramids assumed to be imitations of Egyptian ones."}, {"q": "What is the tone of the passage toward the new archaeological findings?", "choices": ["Dismissive and skeptical", "Neutral and indifferent", "Appreciative and open to reconsidering prior beliefs", "Alarmed and defensive", "Sarcastic and mocking"], "answer": 2, "why": "The passage presents the findings as valuable corrections to past assumptions, showing an appreciative, open-minded tone."}]}, {"passage": "Foresters once judged a forest's health by counting trees. This metric, however, obscures a subtler reality: forests are less a collection of individuals than a networked community. Underground, thread-like fungi called mycorrhizae link roots across species, ferrying carbon, nitrogen, and water between them. A struggling seedling in deep shade may survive on sugars donated by a distant, sunlit elder. Scientists have even observed dying trees offloading nutrients to neighbors before death, as if bequeathing resources. Such findings complicate the old image of trees as solitary competitors and suggest that cooperation, not just competition, sustains the woodland's remarkable resilience.", "questions": [{"q": "What is the main idea of the passage?", "choices": ["Counting trees is the most reliable way to measure forest health.", "Forests function as interconnected communities in which trees share resources through underground fungal networks.", "Mycorrhizae are harmful parasites that weaken tree roots over time.", "Dying trees are a sign of an unhealthy, declining forest.", "Sunlight is the only factor that determines a seedling's survival."], "answer": 1, "why": "The passage centers on the idea that fungal networks enable cooperative resource-sharing among trees."}, {"q": "What can be inferred about the traditional view of forests mentioned in the passage?", "choices": ["It emphasized cooperation over competition among trees.", "It was based primarily on studies of mycorrhizal networks.", "It viewed trees mainly as separate entities competing for resources.", "It focused exclusively on underground nutrient exchange.", "It was developed after the discovery of nutrient-sharing behavior."], "answer": 2, "why": "The passage says the findings 'complicate the old image of trees as solitary competitors,' implying the traditional view emphasized competition between separate individuals."}, {"q": "In the passage, the word \"bequeathing\" most nearly means", "choices": ["stealing", "concealing", "transmitting as an inheritance", "destroying completely", "refusing to share"], "answer": 2, "why": "\"Bequeathing\" refers to passing something on to another, as in leaving an inheritance, matching the context of dying trees giving resources to neighbors."}, {"q": "According to the passage, what happens to some trees before they die?", "choices": ["They stop producing sugars entirely.", "They compete more aggressively for sunlight.", "They transfer nutrients to nearby trees.", "They sever their connections to the fungal network.", "They grow new roots to access water."], "answer": 2, "why": "The passage explicitly states that dying trees have been observed offloading nutrients to neighboring trees before death."}]}, {"passage": "The human liver performs a feat of quiet endurance: it can lose up to seventy percent of its mass to injury or surgical removal and still regenerate to nearly full size within weeks. Unlike most organs, which scar over damage, the liver's remaining cells multiply rapidly, reconstructing lost tissue with remarkable fidelity. Scientists have long puzzled over what triggers this response, suspecting a cascade of chemical signals released the moment tissue is lost. This regenerative capacity has made partial liver transplants possible, allowing a single donor organ to save two lives, since both the donated section and the remainder grow to meet the body's needs.", "questions": [{"q": "What is the main idea of the passage?", "choices": ["Liver transplants are safer than other organ transplants", "The liver's unusual ability to regrow itself has significant medical benefits", "Scarring prevents most organs from healing properly", "Scientists have fully explained how liver regeneration works", "Donor organs are always split into two functioning parts"], "answer": 1, "why": "The passage centers on the liver's regenerative ability and its practical medical significance."}, {"q": "What can be inferred about the exact trigger for liver regeneration?", "choices": ["It has been completely identified by researchers", "It involves no chemical processes at all", "It remains only partially understood by scientists", "It only occurs during transplant surgeries", "It was discovered through animal studies alone"], "answer": 2, "why": "The passage says scientists 'suspect' a cause, indicating the mechanism isn't fully confirmed."}, {"q": "In the passage, the word \"fidelity\" most nearly means", "choices": ["loyalty", "accuracy", "speed", "weakness", "secrecy"], "answer": 1, "why": "Fidelity here describes how precisely the liver reconstructs its original structure, meaning accuracy."}, {"q": "According to the passage, why can one donated liver help two patients?", "choices": ["The donor liver never actually shrinks in size", "Both the transplanted section and remaining portion can regrow", "Surgeons duplicate the liver before transplantation", "Only healthy donors are allowed to give part of their liver", "Liver cells from two donors are combined during surgery"], "answer": 1, "why": "The passage explicitly states both the donated section and the remainder grow to meet bodily needs."}]}, {"passage": "Before electric bulbs, lighthouse keepers relied on elaborate lens systems to project a beam visible for miles. The Fresnel lens, invented in 1822, revolutionized this task by replacing bulky, heavy glass with a series of thin, precisely angled prisms arranged in concentric rings. This design captured and bent light far more efficiently than earlier mirrors, allowing a modest flame to rival the intensity of a bonfire. Coastal authorities initially resisted adopting the costly invention, skeptical that such delicate glasswork could withstand harsh maritime conditions. Yet within decades, Fresnel lenses illuminated coastlines worldwide, dramatically reducing shipwrecks and proving that ingenious engineering could triumph over stubborn institutional caution.", "questions": [{"q": "Which choice best states the main idea of the passage?", "choices": ["Lighthouse keepers were skeptical of new technology in general.", "The Fresnel lens improved lighthouse illumination and eventually overcame official resistance to its adoption.", "Bonfires were once used as the primary source of coastal navigation light.", "Coastal authorities preferred mirrors because they were cheaper than glass.", "Shipwrecks were rare even before the invention of the Fresnel lens."], "answer": 1, "why": "The passage centers on the Fresnel lens's innovation and its gradual acceptance despite initial doubt."}, {"q": "What can be inferred about coastal authorities' initial reaction to the Fresnel lens?", "choices": ["They immediately recognized its superiority and funded its installation everywhere.", "They believed the lens was too dim to be useful at sea.", "They doubted its durability and were reluctant to invest despite its potential benefits.", "They preferred to abandon lighthouses altogether in favor of other signals.", "They had no opinion since they were unaware of the invention."], "answer": 2, "why": "The passage states authorities were skeptical the delicate glasswork could endure harsh conditions, implying doubt about durability."}, {"q": "As used in the passage, the word \"stubborn\" most nearly means", "choices": ["fragile", "obstinate", "curious", "efficient", "temporary"], "answer": 1, "why": "\"Stubborn institutional caution\" describes an unyielding, obstinate resistance to change."}, {"q": "The tone of the passage's final sentence is best described as", "choices": ["mournful and regretful", "confused and uncertain", "admiring and triumphant", "dismissive and sarcastic", "anxious and foreboding"], "answer": 2, "why": "The sentence celebrates the lens's ultimate success over doubt, conveying an admiring, triumphant tone."}]}, {"passage": "Basketball's invention was strikingly deliberate compared to sports that evolved gradually over centuries. In 1891, James Naismith, a physical education instructor in Massachusetts, faced a practical problem: restless students needed indoor exercise during harsh winters, but existing games proved too rough for a gymnasium. Naismith devised thirteen rules and nailed a peach basket to an elevated railing, requiring players to retrieve the ball manually after each score—an inconvenience later remedied by cutting the basket's bottom out. His original vision emphasized skill over brute force, banning tackling and running with the ball. Within a decade, the sport had spread internationally, its simplicity and adaptability fueling remarkably swift, almost accidental global popularity.", "questions": [{"q": "What is the main idea of the passage?", "choices": ["Basketball was designed for outdoor play but adapted for indoor use later.", "Basketball emerged from a specific, intentional solution to a winter exercise problem and spread quickly worldwide.", "Naismith struggled for decades to perfect his thirteen rules.", "Peach baskets remain an essential part of modern basketball equipment.", "Basketball was originally a rougher, more violent game than it is today."], "answer": 1, "why": "The passage centers on basketball's deliberate creation and rapid global spread."}, {"q": "What can be inferred about the peach basket's design flaw?", "choices": ["It was intentionally difficult to encourage teamwork.", "It suggests the game's practical mechanics were refined through use, not fully anticipated at first.", "It proves Naismith disliked scoring in his own game.", "It shows the sport was never meant to include shooting.", "It indicates gymnasiums lacked proper equipment budgets."], "answer": 1, "why": "The need to later cut the basket's bottom implies the original design was an imperfect first attempt."}, {"q": "In context, the word \"remedied\" most nearly means", "choices": ["worsened", "ignored", "fixed", "questioned", "celebrated"], "answer": 2, "why": "The inconvenience of retrieving the ball was solved, or fixed, by cutting the basket open."}, {"q": "According to the passage, what did Naismith's original rules emphasize?", "choices": ["Physical strength and tackling ability", "Skill rather than physical roughness", "Team size over individual talent", "Outdoor conditions and weather adaptation", "Speed above all other qualities"], "answer": 1, "why": "The passage explicitly states his rules banned tackling and emphasized skill over brute force."}]}, {"passage": "Each autumn, the bar-tailed godwit undertakes a feat that strains credulity: a nonstop flight of over 11,000 kilometers from Alaska to New Zealand, crossing open Pacific waters without pausing to rest or feed. To fuel this odyssey, the bird gorges beforehand, doubling its body weight in fat while shrinking its digestive organs, which become superfluous cargo. Scientists tracking these journeys via satellite tags remain puzzled by how the godwit navigates so precisely across featureless ocean, relying seemingly on some inherited compass rather than learned landmarks. Such endurance challenges assumptions about the physiological limits of avian flight.", "questions": [{"q": "What is the main idea of the passage?", "choices": ["Satellite tracking has revolutionized ornithology entirely", "The bar-tailed godwit's extraordinary nonstop migration reveals surprising physical and navigational capabilities", "Alaska and New Zealand share unusual bird populations", "Most birds shrink their organs before migrating", "Ocean crossings are typically dangerous for migratory species"], "answer": 1, "why": "The passage centers on the godwit's remarkable migratory feat and what it suggests about avian limits."}, {"q": "What can be inferred about the godwit's digestive organs before migration?", "choices": ["They are permanently removed by natural selection", "They grow larger to store more fat", "They are unnecessary during the flight since the bird does not eat, so the body deprioritizes them", "They are used for navigation instead of digestion", "They remain unchanged throughout the journey"], "answer": 2, "why": "Since the bird doesn't feed during flight, shrinking digestive organs makes sense as reallocating resources rather than for another stated purpose."}, {"q": "As used in the passage, the word \"superfluous\" most nearly means", "choices": ["essential", "unnecessary", "dangerous", "temporary", "enlarged"], "answer": 1, "why": "Superfluous means excess or not needed, matching context where the organs become extra cargo during flight."}, {"q": "The passage's tone toward the godwit's migration can best be described as", "choices": ["dismissive and skeptical", "alarmed and cautionary", "admiring and wonder-filled", "neutral and clinical", "bored and indifferent"], "answer": 2, "why": "Phrases like 'strains credulity' and describing scientists as 'puzzled' convey genuine amazement at the feat."}]}, {"passage": "Before she became a pioneering computer scientist, Grace Hopper was a curious child who once dismantled seven alarm clocks to understand their mechanisms, much to her mother's dismay. Her father, though initially skeptical of educating daughters rigorously, eventually encouraged her mathematical pursuits. Hopper devoured books on mathematics and physics, later earning a Ph.D. from Yale at a time when few women entered such fields. This early tenacity, blending mechanical curiosity with academic discipline, foreshadowed her future work on early computers, where she would insist on precision and clarity, traits first visible in a girl determined to know exactly how things worked.", "questions": [{"q": "What is the main idea of the passage?", "choices": ["Grace Hopper's childhood curiosity and persistence laid the foundation for her later scientific achievements.", "Grace Hopper's father refused to let her study mathematics.", "Alarm clocks were the primary tool used in early computer science education.", "Yale University was the only school that admitted women in Hopper's era.", "Grace Hopper disliked mechanical objects as a child."], "answer": 0, "why": "The passage traces how Hopper's early curiosity and discipline shaped her future scientific career."}, {"q": "What can be inferred about attitudes toward women's education during Hopper's youth?", "choices": ["Women were universally barred from all universities.", "Such attitudes were generally supportive and unquestioned.", "Some skepticism existed, but exceptional women could still pursue advanced degrees.", "Mathematics was considered an easy subject for women.", "Her father actively supported her studies from the very beginning."], "answer": 2, "why": "The passage notes her father's initial skepticism, implying broader doubts, yet Hopper still earned a Ph.D., showing persistence overcame obstacles."}, {"q": "In context, what does the word \"tenacity\" most nearly mean?", "choices": ["Carelessness", "Persistence", "Confusion", "Shyness", "Weakness"], "answer": 1, "why": "The passage describes Hopper's determined, unwavering pursuit of understanding, which matches the meaning of persistence."}, {"q": "According to the passage, what did young Grace Hopper do with alarm clocks?", "choices": ["She sold them to neighbors.", "She collected them as a hobby without examining them.", "She took apart seven of them to learn how they worked.", "She built a new type of clock from scratch.", "She donated them to her school."], "answer": 2, "why": "The passage explicitly states she dismantled seven alarm clocks to understand their mechanisms."}]}, {"passage": "Ball lightning remains one of meteorology's most stubborn puzzles. Witnesses describe glowing, softball-sized orbs that drift silently through the air, occasionally passing through windows or walls before vanishing with a faint pop. For centuries, skeptics dismissed these accounts as hallucination or folklore, yet thousands of independent reports, some from trained scientists, share startling consistencies in size, color, and duration. Laboratory attempts to recreate the phenomenon have produced fleeting, plasma-like spheres, lending tentative credibility to the reports. Still, no theory fully explains how such a structure could maintain its shape and energy for the many seconds observers claim to witness.", "questions": [{"q": "What is the main idea of the passage?", "choices": ["Ball lightning is a scientifically fabricated myth with no credible evidence.", "Ball lightning is a real but still poorly understood phenomenon supported by consistent reports.", "Laboratory experiments have fully explained the causes of ball lightning.", "Weather scientists agree that ball lightning is simply ordinary lightning misperceived.", "Ball lightning only occurs in folklore and has never been reported by scientists."], "answer": 1, "why": "The passage presents ball lightning as real, widely reported, yet unexplained."}, {"q": "What can be inferred about the laboratory experiments mentioned?", "choices": ["They definitively proved that ball lightning cannot exist.", "They created spheres identical in every way to reported ball lightning.", "They produced only partial, temporary results that don't fully match eyewitness accounts.", "They were dismissed by scientists as irrelevant to the phenomenon.", "They showed that ball lightning is caused by hallucinations."], "answer": 2, "why": "The passage says lab spheres are 'fleeting' and lend only 'tentative' credibility, implying incomplete replication."}, {"q": "In the passage, the word \"stubborn\" most nearly means", "choices": ["aggressive", "persistently unresolved", "physically strong", "emotionally difficult", "commonly ignored"], "answer": 1, "why": "'Stubborn puzzle' describes a problem that resists solution, meaning persistently unresolved."}, {"q": "According to the passage, what detail do many independent witness reports share?", "choices": ["The exact location where the phenomenon occurs", "Similarities in size, color, and duration of the orbs", "The scientific credentials of the observers", "The specific weather conditions preceding the event", "The sound made when lightning strikes the ground"], "answer": 1, "why": "The passage explicitly states that reports share 'startling consistencies in size, color, and duration.'"}]}, {"passage": "The Nabataeans, an ancient Arab people, carved the city of Petra directly into rose-colored sandstone cliffs in what is now Jordan. Rather than merely surviving in their arid homeland, they thrived by mastering water management, constructing elaborate channels, cisterns, and dams to capture scarce rainfall. This ingenuity transformed Petra into a flourishing trade hub where camel caravans exchanged incense, spices, and silk. Despite lacking abundant natural resources, the Nabataeans leveraged their strategic location between Arabia, Egypt, and the Mediterranean, growing wealthy as intermediaries. Their engineering achievements remain so remarkable that Petra continues to astonish modern visitors nearly two thousand years later.", "questions": [{"q": "What is the main idea of the passage?", "choices": ["Petra was destroyed by a lack of water resources", "The Nabataeans succeeded through clever engineering and strategic trade despite a harsh environment", "Camel caravans were the only source of Nabataean wealth", "Petra's sandstone cliffs were naturally suited for agriculture", "The Nabataeans were primarily farmers rather than traders"], "answer": 1, "why": "The passage centers on how ingenuity and location enabled Nabataean prosperity in a difficult landscape."}, {"q": "What can be inferred about the Nabataeans' priorities?", "choices": ["They valued military conquest above all else", "They prioritized solving environmental challenges to enable economic success", "They preferred isolation over trade with neighboring regions", "They ignored engineering in favor of religious pursuits", "They relied entirely on foreign powers for water supplies"], "answer": 1, "why": "Their water systems directly enabled their trade-based economy, showing practical problem-solving in service of prosperity."}, {"q": "What does the word \"intermediaries\" most nearly mean in the passage?", "choices": ["Rulers who governed distant lands", "Skilled builders of stone architecture", "Go-betweens who facilitated exchange between other parties", "Warriors who protected trade routes", "Farmers who grew crops for export"], "answer": 2, "why": "The context describes the Nabataeans profiting by connecting other regions' trade, meaning they acted as go-betweens."}, {"q": "According to the passage, why is Petra still considered remarkable today?", "choices": ["It contains the largest collection of ancient manuscripts", "Its engineering achievements continue to impress visitors after centuries", "It remains the wealthiest trading city in the region", "It was rebuilt using modern construction techniques", "It is the only ancient city carved from sandstone"], "answer": 1, "why": "The passage states Petra's engineering feats still astonish visitors nearly two thousand years later."}]}, {"passage": "Ordinary window glass begins as a churning vat of sand, soda ash, and limestone heated to nearly 1,700 degrees Celsius until it becomes a glowing, viscous liquid. This molten mixture is then poured onto a bed of molten tin, a technique perfected in the 1950s. Because tin remains liquid at these temperatures yet never mixes with glass, the two substances float apart, and gravity alone coaxes the glass into a perfectly flat, uniformly thick ribbon. As the ribbon glides forward, it cools gradually, hardening just enough to be lifted off the tin bath without scarring its pristine surface. Finally, controlled annealing relieves internal stresses, preventing the glass from shattering under ordinary handling.", "questions": [{"q": "Which best states the main idea of the passage?", "choices": ["Sand is the only ingredient necessary for making glass", "Modern flat glass owes its smoothness to floating molten glass on liquid tin", "Glass manufacturing has remained unchanged since the 1950s", "Tin is more valuable than the glass it helps produce", "Annealing is the first step in glass production"], "answer": 1, "why": "The passage centers on how floating glass on tin creates flat, smooth glass."}, {"q": "What can be inferred about glass that skips the annealing process?", "choices": ["It would be more transparent than annealed glass", "It would likely be more fragile and prone to breaking", "It would float better on the tin bath", "It would cool more slowly than normal", "It would require less sand to produce"], "answer": 1, "why": "The passage states annealing relieves stress to prevent shattering, implying its absence increases fragility."}, {"q": "In the passage, the word \"coaxes\" most nearly means", "choices": ["forces violently", "gently induces", "chemically alters", "randomly scatters", "permanently seals"], "answer": 1, "why": "\"Coaxes\" describes gravity gently guiding the glass into shape, meaning to gently induce."}, {"q": "According to the passage, why don't glass and tin mix together?", "choices": ["They are heated to different temperatures", "Tin is a solid while glass is always liquid", "The two substances never combine even when both are molten", "Glass is poured too quickly for mixing to occur", "Tin is deliberately cooled before contact"], "answer": 2, "why": "The passage explicitly states the two substances never mix despite both being liquid at that stage."}]}];
+POOL.reading.push(...GEN_READING);
+
+/* ================= Level / XP system ================= */
+let xp = 0, level = 1, toastTimer = null;
+
+function levelForXP(x){
+  let lvl=1, need=0, step=100;
+  while (x >= need+step){ need+=step; lvl++; step+=50; }
+  return lvl;
+}
+function levelBounds(lvl){
+  let l=1, need=0, step=100;
+  while (l<lvl){ need+=step; step+=50; l++; }
+  return { start:need, next:need+step };
+}
+function loadStore(){
+  let data = null;
+  if (window.__SAVED_DATA && typeof window.__SAVED_DATA === 'object') data = window.__SAVED_DATA;   // native Mac app
+  else { try { data = JSON.parse(localStorage.getItem('ssat_store')); } catch(e){} }                // browser
+  if (data && Array.isArray(data.accounts)) store = data;
+  if (!Array.isArray(store.reports)) store.reports = [];
+  store.accounts.forEach(ensureFields);
+  soundOn = store.sound !== false;
+  account = store.accounts.find(a => a.id === store.currentId) || null;
+  syncXPFromAccount();
+}
+function saveStore(){
+  if (account) account.updatedAt = Date.now();
+  const json = JSON.stringify(store);
+  try { localStorage.setItem('ssat_store', json); } catch(e){}
+  if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.save)
+    window.webkit.messageHandlers.save.postMessage(json);   // persist all accounts to disk in Mac app
+  if (typeof scheduleSync==='function') scheduleSync();
+}
+function syncXPFromAccount(){ xp = account ? account.xp : 0; level = levelForXP(xp); }
+function addXP(amount){
+  if (!account) return false;
+  const before = level;
+  account.xp += amount; xp = account.xp; level = levelForXP(xp);
+  accrueWeek(amount);      // weekly league points
+  saveStore();
+  return level > before;   // true if leveled up
+}
+function levelBarHTML(){
+  const b = levelBounds(level);
+  const cur = xp - b.start, span = b.next - b.start, pctv = Math.min(100, Math.round(cur/span*100));
+  return `<div class="lvl-row"><div class="lvl-badge">★ Level ${level}</div>
+    <div class="lvl-xp">${cur} / ${span} XP to Level ${level+1}</div></div>
+    <div class="xp-track"><div class="xp-fill" style="width:${pctv}%"></div></div>`;
+}
+function renderHomeLevel(){ const el=document.getElementById('levelPanel'); if (el) el.innerHTML = levelBarHTML(); }
+function showToast(msg){
+  const t=document.getElementById('toast'); if(!t) return;
+  t.textContent=msg; t.classList.remove('hidden');
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.add('hidden'), 2400);
+}
+
+/* ================= Juice: sound effects + confetti ================= */
+let audioCtx=null, soundOn=true;
+function actx(){ if(!audioCtx){ try{ audioCtx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } return audioCtx; }
+function beep(freqs, dur, type, vol){
+  if(!soundOn) return; const ctx=actx(); if(!ctx) return;
+  if(ctx.state==='suspended'){ try{ ctx.resume(); }catch(e){} }
+  freqs.forEach((f,i)=>{
+    const o=ctx.createOscillator(), g=ctx.createGain();
+    o.type=type||'sine'; o.frequency.value=f; o.connect(g); g.connect(ctx.destination);
+    const s=ctx.currentTime+i*dur, e=s+dur;
+    g.gain.setValueAtTime(0.0001,s);
+    g.gain.exponentialRampToValueAtTime(vol||0.22,s+0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001,e);
+    o.start(s); o.stop(e+0.02);
+  });
+}
+let combo=0;
+function playCorrect(){ combo=Math.min(combo+1,9); const m=Math.pow(1.059,combo-1); beep([660*m,990*m],0.09,'sine'); }
+function playWrong(){ combo=0; beep([200,140],0.13,'sawtooth'); }
+function playFanfare(){ beep([523,659,784,1047],0.12,'triangle'); }
+function playTap(){ beep([700],0.035,'sine',0.06); }
+function playSwoosh(){ beep([460,360],0.05,'sine',0.08); }
+function playCoachChime(){ beep([784,988],0.09,'sine',0.12); }
+function playTick(){ beep([1050],0.045,'square',0.07); }
+function playRoundWin(){ beep([587,880],0.09,'triangle'); }
+function playRoundLose(){ beep([311,233],0.12,'sawtooth',0.15); }
+function toggleSound(){
+  soundOn=!soundOn; store.sound=soundOn; saveStore();
+  const b=document.getElementById('soundBtn'); if(b) b.innerHTML = soundOn?ico('volume',15)+' Sound: On':ico('mute',15)+' Sound: Off';
+  if(soundOn) playCorrect();
+}
+function confetti(){
+  const c=document.getElementById('confetti'); if(!c) return;
+  const ctx=c.getContext('2d'); if(!ctx) return;
+  c.width=window.innerWidth; c.height=window.innerHeight;
+  const colors=['#263048','#ca9827','#2f9150','#c04528','#b06a1c'], parts=[];
+  for(let i=0;i<140;i++) parts.push({x:c.width/2, y:c.height*0.3, vx:(Math.random()-0.5)*14, vy:Math.random()*-12-4, col:colors[i%colors.length], s:Math.random()*6+4, rot:Math.random()*6, vr:(Math.random()-0.5)*0.4});
+  let frames=0;
+  (function tick(){
+    ctx.clearRect(0,0,c.width,c.height);
+    parts.forEach(p=>{ p.vy+=0.4; p.x+=p.vx; p.y+=p.vy; p.rot+=p.vr;
+      ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(p.rot); ctx.fillStyle=p.col; ctx.fillRect(-p.s/2,-p.s/2,p.s,p.s); ctx.restore(); });
+    if(++frames<100) requestAnimationFrame(tick); else ctx.clearRect(0,0,c.width,c.height);
+  })();
+}
+function celebrate(){ confetti(); playFanfare(); }
+function flashScreen(ok){
+  const f=document.getElementById('flash'); if(!f) return;
+  f.className=''; void f.offsetWidth;          // restart the animation even on rapid answers
+  f.className = ok ? 'green' : 'red';
+}
+function xpFloat(el, txt){
+  if(!el) return;
+  const r=el.getBoundingClientRect();
+  const d=document.createElement('div'); d.className='xp-float'; d.textContent=txt;
+  d.style.left=(r.left+r.width/2)+'px'; d.style.top=(r.top-4)+'px';
+  document.body.appendChild(d);
+  setTimeout(()=>d.remove(), 950);
+}
+function answerFX(ok, el, txt){
+  flashScreen(ok);
+  if(ok) xpFloat(el, txt || '+10 XP');
+}
+
+/* ================= Local accounts (each person's own on-device account) ================= */
+function uid(){ return 'a' + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+
+/* Soft-lock hash for local account passwords — keeps them out of the save file as plain text. */
+function pinHash(s){ let h=5381; for(let i=0;i<s.length;i++){ h=((h<<5)+h+s.charCodeAt(i))|0; } return 'h'+(h>>>0).toString(36); }
+
+function renderHome(){
+  account = store.accounts.find(a => a.id === store.currentId) || null;
+  const main = document.getElementById('homeMain');
+  if (account){
+    syncXPFromAccount();
+    document.getElementById('accountBar').innerHTML =
+      `<div class="acct-row"><span>${ico('person',14)} <b>${account.name}</b> · ★ Level ${level}</span>
+        <span style="display:flex;gap:6px"><button class="seg" onclick="manageAccount()">Manage</button>
+        <button class="seg" onclick="switchAccount()">Switch</button></span></div>`;
+    main.classList.remove('hidden');
+    renderHomeLevel();
+    renderStreak();
+    renderRankChip();
+    renderDiff();
+    renderNextUp();
+    renderHomeCourses();
+    const sl=document.getElementById('skillsLine');
+    if (sl){
+      const chip=(name,v)=>`<span class="badge" title="${name} skill, 1–10">${name} ${(v||2).toFixed(1)}</span>`;
+      sl.innerHTML = chip('Math',account.skill) + chip('Analogies',account.verbalSkill.analogies)
+        + chip('Reading',account.verbalSkill.reading) + chip('Synonyms',account.verbalSkill.synonyms);
+    }
+    applyTheme();
+    const pl=document.getElementById('premiumLine');
+    if(pl) pl.innerHTML = isPremium()
+      ? `<span class="badge" style="background:linear-gradient(160deg,#e0c169,#ca9827);color:#1a2136;border-color:#a87f1e">${ico('crown',12)} Premium</span>`
+      : `<button class="seg" style="flex:none" onclick="navTo('premium')">${ico('crown',13)} Go Premium</button>`;
+    const sBtn=document.getElementById('soundBtn'); if(sBtn) sBtn.innerHTML = soundOn?ico('volume',15)+' Sound: On':ico('mute',15)+' Sound: Off';
+    document.querySelectorAll('#homeMain [data-ico]:empty').forEach(el2 => { el2.innerHTML = ico(el2.dataset.ico, +(el2.dataset.sz||24)); });
+    setTimeout(maybeTour, 400);
+  } else {
+    renderLogin();
+    main.classList.add('hidden');
+  }
+  renderReportFoot();
+}
+/* The home screen answers "what should I do right now?" */
+function toggleModes(){ const el=document.getElementById('allModes'); if(el) el.classList.toggle('hidden'); }
+function renderHomeCourses(){
+  const el=document.getElementById('homeCourses'); if(!el || !account) return;
+  el.innerHTML = COURSES.map((c,ci)=>{
+    const p = Math.round(courseProgress(c)*100);
+    const mastered = c.topics.filter(id=>topicScore(id)>=TOPIC_MASTERY).length;
+    return `<button class="mbtn" style="padding:12px 10px" onclick="navTo('learn'); openCourse(${ci})">
+      <span style="width:40px;height:40px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:conic-gradient(#2f9150 ${p}%, #e8e0c9 0)">
+        <span style="width:29px;height:29px;border-radius:50%;background:var(--card);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--navy)">${p}%</span>
+      </span>
+      <span>${c.title}<br><span style="font-weight:400;font-size:11px;color:var(--gray)">${mastered}/${c.topics.length} topics</span></span>
+    </button>`;
+  }).join('');
+}
+function renderNextUp(){
+  const el=document.getElementById('nextUp'); if(!el || !account) return;
+  let mode, title, sub;
+  if (!account.diagAt){
+    mode='gaps'; title='Find your gaps'; sub='26-question diagnostic maps what you know';
+  } else if (dueMisses().length){
+    const d=dueMisses().length;
+    mode='review'; title='Review your misses'; sub=d+' review'+(d===1?'':'s')+' due today · spaced just right';
+  } else if (gapTopics().length){
+    mode='focus'; title='Fix a gap: '+TOPICS[gapTopics()[0]].title; sub='25-minute Focus Sprint aimed at your weakest spot';
+  } else if (account.lastDaily !== dateStr(new Date())){
+    mode='daily'; title="Daily Challenge"; sub="today's 5 questions · bonus XP";
+  } else {
+    let found=null, fi=-1;
+    for (const c of COURSES){ for (const id of c.topics){ const i=topicIdxById(id);
+      if (topicUnlocked(i) && topicScore(id) < TOPIC_MASTERY){ found=TOPICS[i]; fi=i; break; } } if (found) break; }
+    if (found){ mode='lesson:'+fi; title='Continue: '+found.title; sub=Math.min(topicScore(found.id),TOPIC_MASTERY)+'/'+TOPIC_MASTERY+' mastered'; }
+    else { mode='fulltest'; title='Full Test'; sub='every topic mastered — prove it'; }
+  }
+  el.innerHTML=`<button class="tile tile-primary" style="width:100%;margin-bottom:4px;padding:14px 10px" onclick="nextUpGo('${mode}')">
+    <span class="tile-label" style="font-size:16px">${title} &rarr;</span><span class="tile-sub">${sub}</span></button>`;
+}
+function nextUpGo(m){
+  if (m.indexOf('lesson:')===0){ jumpToLesson(+m.split(':')[1]); highlightNav('learn'); return; }
+  navTo(m);
+}
+function renderLogin(){
+  document.getElementById('accountBar').innerHTML = `<div class="acct-box">
+      <div class="acct-title">Log in to Quizard</div>
+      <input id="loginName" placeholder="Name" maxlength="20" autocomplete="off" />
+      <input id="loginPass" type="password" placeholder="Password" maxlength="32" />
+      <div class="acct-btns"><button class="btn" onclick="doLogin()">Log in</button>
+        <button class="btn secondary" onclick="showNewAccount()">Create account</button></div>
+    </div>`;
+}
+function doLogin(){
+  const name=(document.getElementById('loginName').value||'').trim();
+  const pass=(document.getElementById('loginPass').value||'').trim();
+  if(!name){ showToast('Enter your name'); return; }
+  const a=store.accounts.find(x=>x.name.toLowerCase()===name.toLowerCase());
+  if(!a){ showToast('No account with that name'); return; }
+  if(a.pinH && a.pinH!==pinHash(pass)){ showToast('Incorrect password'); return; }
+  setCurrent(a.id);
+}
+function showNewAccount(){
+  document.getElementById('accountBar').innerHTML = `<div class="acct-box">
+      <div class="acct-title">Create your SSAT account</div>
+      <input id="newName" placeholder="Your name" maxlength="20" />
+      <input id="newPin" type="password" placeholder="Optional password (keeps your account private)" maxlength="32" />
+      <div class="acct-btns"><button class="btn" onclick="createAccount()">Create</button>
+        <button class="btn secondary" onclick="renderHome()">Cancel</button></div>
+    </div>`;
+  const n=document.getElementById('newName'); if(n) n.focus();
+}
+function createAccount(){
+  const name=(document.getElementById('newName').value||'').trim();
+  const pin=(document.getElementById('newPin').value||'').trim();
+  if(!name){ showToast('Please enter a name'); return; }
+  if(store.accounts.some(x=>x.name.toLowerCase()===name.toLowerCase())){ showToast('That name is taken — pick another'); return; }
+  const a={ id:uid(), name, pinH: pin?pinHash(pin):'', xp:0 }; ensureFields(a);
+  store.accounts.push(a); store.currentId=a.id; saveStore();
+  setsDone=0; bestScore=-1;
+  renderHome();
+  autoOnline();
+  showToast(`Welcome, ${name}!`);
+}
+function setCurrent(id){
+  store.currentId=id; saveStore();
+  setsDone=0; bestScore=-1;
+  renderHome();
+  autoOnline();
+}
+function switchAccount(){
+  store.currentId=null; account=null; saveStore();
+  const is=document.getElementById('introStats'); if(is) is.classList.add('hidden');
+  renderHome();
+}
+function manageAccount(){
+  document.getElementById('accountBar').innerHTML = `<div class="acct-box">
+      <div class="acct-title">Manage account</div>
+      <input id="editName" value="${account.name}" maxlength="20" />
+      <input id="editPass" type="password" placeholder="${account.pinH ? 'New password (leave blank to keep current)' : 'Set a password (optional)'}" maxlength="32" />
+      <div class="acct-btns"><button class="btn" onclick="saveAccountEdits()">Save changes</button>
+        <button class="btn secondary" onclick="renderHome()">Cancel</button></div>
+      <button class="btn secondary" style="border-color:var(--red);color:var(--red)" onclick="deleteAccount()">Delete this account</button>
+    </div>`;
+  const n=document.getElementById('editName'); if(n) n.focus();
+}
+function saveAccountEdits(){
+  const name=(document.getElementById('editName').value||'').trim();
+  if(!name){ showToast('Name cannot be empty'); return; }
+  account.name=name;
+  const np=(document.getElementById('editPass').value||'').trim();
+  if(np) account.pinH=pinHash(np);   // only update the password if a new one is entered
+  saveStore();
+  renderHome();
+  showToast('Account updated');
+}
+function deleteAccount(){
+  document.getElementById('accountBar').innerHTML = `<div class="acct-box">
+      <div class="acct-title">Delete "${account.name}"? This erases their XP and progress for good.</div>
+      <div class="acct-btns"><button class="btn danger" onclick="confirmDelete()">Delete</button>
+        <button class="btn secondary" onclick="manageAccount()">Cancel</button></div>
+    </div>`;
+}
+function confirmDelete(){
+  store.accounts = store.accounts.filter(a => a.id !== account.id);
+  store.currentId=null; account=null; saveStore();
+  const is=document.getElementById('introStats'); if(is) is.classList.add('hidden');
+  renderHome();
+  showToast('Account deleted');
+}
+
+/* ================= Fun: streaks, achievements, beat-the-clock ================= */
+function ensureFields(a){
+  if(typeof a.xp!=='number') a.xp=0;
+  if(typeof a.streak!=='number') a.streak=0;
+  if(typeof a.bestStreak!=='number') a.bestStreak=0;
+  if(typeof a.lastPlayed!=='string') a.lastPlayed='';
+  if(!Array.isArray(a.achievements)) a.achievements=[];
+  if(!a.stats || typeof a.stats!=='object') a.stats={};
+  const s=a.stats;
+  if(typeof s.answered!=='number') s.answered=0;
+  if(typeof s.correct!=='number') s.correct=0;
+  if(typeof s.perfectSets!=='number') s.perfectSets=0;
+  if(typeof s.bestClock!=='number') s.bestClock=0;
+  if(typeof s.bestScaled!=='number') s.bestScaled=0;
+  if(typeof a.rp!=='number') a.rp=0;
+  if(typeof a.bestRun!=='number') a.bestRun=0;
+  if(typeof a.lastDaily!=='string') a.lastDaily='';
+  if(typeof a.weekPoints!=='number') a.weekPoints=0;
+  if(typeof a.weekId!=='string') a.weekId='';
+  if(typeof a.diff!=='string') a.diff='standard';
+  if(typeof a.vote!=='string') a.vote='';
+  if(typeof a.pin==='string' && a.pin){ a.pinH=pinHash(a.pin); delete a.pin; }   // migrate old plaintext passwords
+  if(typeof a.pinH!=='string') a.pinH='';
+  if(typeof a.onlineName!=='string') a.onlineName='';
+  if(typeof a.onlineSecret!=='string') a.onlineSecret='';
+  if(typeof a.onlineToken!=='string') a.onlineToken='';
+  if(typeof a.onlineRating!=='number') a.onlineRating=0;
+  if(typeof a.skill!=='number') a.skill=2;   // adaptive difficulty, 1 (gentle) to 10 (brutal)
+  if(!a.topics || typeof a.topics!=='object') a.topics={};   // topicId -> correct answers in that drill
+  if(!Array.isArray(a.misses)) a.misses=[];   // missed questions waiting for revenge
+  a.misses.forEach(m=>{ if(m.box==null) m.box=0; if(!m.due) m.due=dateStr(new Date()); });
+  if(!a.verbalSkill || typeof a.verbalSkill!=='object') a.verbalSkill={analogies:2, reading:2, synonyms:2};
+  if(!a.lessonsDone || typeof a.lessonsDone!=='object') a.lessonsDone={};
+  if(!a.tstats || typeof a.tstats!=='object') a.tstats={};        // per-topic [answered, correct] across every mode
+  if(typeof a.diagAt!=='string') a.diagAt='';
+  if(!Array.isArray(a.hist)) a.hist=[];                            // daily progress snapshots — the report's growth data
+  if(typeof a.tourDone!=='boolean') a.tourDone=false;
+  if(typeof a.premium!=='boolean') a.premium=false;
+  if(typeof a.premiumPlan!=='string') a.premiumPlan='';
+}
+function dateStr(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function markActivity(){
+  if(!account) return;
+  snapshotProgress();
+  const today=dateStr(new Date());
+  if(account.lastPlayed===today) return;            // already counted today
+  const y=new Date(); y.setDate(y.getDate()-1);
+  account.streak = (account.lastPlayed===dateStr(y)) ? (account.streak+1) : 1;
+  account.lastPlayed=today;
+  if(account.streak>account.bestStreak) account.bestStreak=account.streak;
+  saveStore();
+  renderStreak();
+  showToast(`${account.streak}-day streak — keep it going!`);
+}
+function recordAnswer(ok){ if(!account) return; account.stats.answered++; if(ok) account.stats.correct++; }
+function renderStreak(){
+  const el=document.getElementById('streakLine'); if(!el) return;
+  el.innerHTML = (account && account.streak>0) ? `<span class="streak-chip">${ico('flame',14)} ${account.streak}-day streak</span>` : '';
+}
+
+const ACHIEVEMENTS = [
+  { id:'first',   icon:'star',      title:'First Step',    desc:'Answer your first question correctly.', test:a=>a.stats.correct>=1 },
+  { id:'perfect', icon:'medal',     title:'Perfect Score', desc:'Get 14/14 on a practice test.',         test:a=>a.stats.perfectSets>=1 },
+  { id:'q50',     icon:'paper',     title:'Half Century',  desc:'Answer 50 questions in total.',          test:a=>a.stats.answered>=50 },
+  { id:'q100',    icon:'book',      title:'Centurion',     desc:'Answer 100 questions in total.',         test:a=>a.stats.answered>=100 },
+  { id:'lvl5',    icon:'star',      title:'Rising Star',   desc:'Reach Level 5.',                         test:a=>levelForXP(a.xp)>=5 },
+  { id:'lvl10',   icon:'crown',     title:'Genius',        desc:'Reach Level 10.',                        test:a=>levelForXP(a.xp)>=10 },
+  { id:'streak3', icon:'flame',     title:'On a Roll',     desc:'Practice 3 days in a row.',              test:a=>a.bestStreak>=3 },
+  { id:'streak7', icon:'calendar',  title:'Week Warrior',  desc:'Practice 7 days in a row.',              test:a=>a.bestStreak>=7 },
+  { id:'clock10', icon:'hourglass', title:'Speed Demon',   desc:'Score 10+ in Beat the Clock.',           test:a=>a.stats.bestClock>=10 },
+  { id:'clock15', icon:'trophy',    title:'Lightning',     desc:'Score 15+ in Beat the Clock.',           test:a=>a.stats.bestClock>=15 }
+];
+function checkAchievements(){
+  if(!account) return;
+  const newly=[];
+  ACHIEVEMENTS.forEach(ac=>{
+    if(!account.achievements.includes(ac.id) && ac.test(account)){ account.achievements.push(ac.id); newly.push(ac); }
+  });
+  if(newly.length){ saveStore(); celebrate(); newly.forEach(ac=>showToast(`Achievement unlocked: ${ac.title}`)); }
+}
+function openAchievements(){
+  document.getElementById('intro').classList.add('hidden');
+  renderAchievements();
+  document.getElementById('achievements').classList.remove('hidden');
+}
+function renderAchievements(){
+  const got = account ? account.achievements : [];
+  const cards = ACHIEVEMENTS.map(ac=>{
+    const has=got.includes(ac.id);
+    return `<div class="badge-card ${has?'':'locked'}">
+      <div class="badge-icon" style="color:${has?'var(--gold)':'var(--gray)'}">${ico(has?ac.icon:'lock',18)}</div>
+      <div><div class="badge-title">${ac.title}</div><div class="badge-desc">${ac.desc}</div></div></div>`;
+  }).join('');
+  document.getElementById('achievements').innerHTML = `
+    <div class="card">
+      <div class="section-title">${ico('medal',17)} Achievements — ${got.length}/${ACHIEVEMENTS.length}</div>
+      ${cards}
+      <button class="btn secondary" onclick="closeAchievements()">Back to menu</button>
+    </div>`;
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function closeAchievements(){
+  const el=document.getElementById('achievements'); el.classList.add('hidden'); el.innerHTML='';
+  renderHome();
+  document.getElementById('intro').classList.remove('hidden');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+/* ---- Beat the Clock (60-second blitz) ---- */
+let clockTimeLeft=0, clockScore=0, clockTimer=null, clockCurrent=null, clockAnswered=false;
+function openClock(){
+  document.getElementById('intro').classList.add('hidden');
+  document.getElementById('clock').classList.remove('hidden');
+  const best = account ? account.stats.bestClock : 0;
+  document.getElementById('clock').innerHTML = `
+    <div class="card" style="text-align:center">
+      <div style="color:var(--navy)">${ico('hourglass',40)}</div>
+      <div class="section-title" style="justify-content:center">Beat the Clock</div>
+      <p class="section-instr">60 seconds. As many correct answers as you can. The timer starts when you say so.</p>
+      ${best?`<p style="font-weight:700;color:var(--navy)">Personal best: ${best}</p>`:''}
+      <button class="btn" onclick="clockCountdown()">I'm ready &rarr;</button>
+      <button class="btn secondary" onclick="closeClock()">Back to menu</button>
+    </div>`;
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function clockCountdown(){
+  let n = 3;
+  const tick = ()=>{
+    if (n === 0){ beginClock(); return; }
+    document.getElementById('clock').innerHTML = `
+      <div class="card" style="text-align:center;padding:60px 20px">
+        <div class="score-big" style="font-size:72px">${n}</div>
+      </div>`;
+    playCorrect();
+    n--;
+    clockTimer = setTimeout(tick, 800);
+  };
+  clearTimeout(clockTimer); clearInterval(clockTimer);
+  tick();
+}
+function beginClock(){
+  clockScore=0; clockTimeLeft=60;
+  clearInterval(clockTimer);
+  clockTimer=setInterval(()=>{
+    clockTimeLeft--;
+    const t=document.getElementById('clockTime'); if(t) t.textContent=clockTimeLeft+'s';
+    if(clockTimeLeft>0 && clockTimeLeft<=5) playTick();
+    if(clockTimeLeft<=0) endClock();
+  },1000);
+  nextClockQuestion();
+}
+function nextClockQuestion(){
+  clockAnswered=false;
+  clockCurrent=getStudyQuestion(true);
+  const q=clockCurrent.q;
+  const choices=q.choices.map((c,i)=>`<label class="choice" id="cc-${i}" onclick="answerClock(${i})"><span>${String.fromCharCode(65+i)}. ${c}</span></label>`).join('');
+  document.getElementById('clock').innerHTML=`
+    <div class="clock-bar"><span class="clock-time" id="clockTime">${clockTimeLeft}s</span>
+      <span class="clock-score">Score: ${clockScore}</span></div>
+    <div class="card">
+      ${clockCurrent.passage?`<div class="passage">${clockCurrent.passage}</div>`:''}
+      <div class="q-stem">${q.q}</div>
+      ${figHTML(q)}
+      ${choices}
+      ${reportLineHTML('clock')}
+    </div>
+    <button class="btn secondary" onclick="closeClock()">← Back to menu</button>`;
+  drawFigs();
+}
+function answerClock(i){
+  if(clockAnswered || clockTimeLeft<=0) return;
+  clockAnswered=true;
+  const right=clockCurrent.q.answer, ok=(i===right);
+  const lab=document.getElementById('cc-'+i); if(lab) lab.classList.add(ok?'correct':'wrong');
+  if(!ok){ const r=document.getElementById('cc-'+right); if(r) r.classList.add('correct'); }
+  recordAnswer(ok); rpForAnswer(ok); updateSkill(ok, clockCurrent.tier); noteTopicResult(clockCurrent.q, ok);
+  if (clockCurrent.vkind) updateVerbalSkill(clockCurrent.vkind, ok);
+  if(!ok) recordMiss(clockCurrent.q, clockCurrent.passage);
+  if(ok) playCorrect(); else playWrong();
+  answerFX(ok, lab);
+  if(ok){ clockScore++; addXP(10); const sc=document.querySelector('.clock-score'); if(sc) sc.textContent='Score: '+clockScore; }
+  setTimeout(()=>{ if(clockTimeLeft>0) nextClockQuestion(); }, 450);
+}
+function endClock(){
+  clearInterval(clockTimer);
+  let best=false;
+  if(account && clockScore>account.stats.bestClock){ account.stats.bestClock=clockScore; best=true; }
+  markActivity(); checkAchievements(); saveStore();
+  if(best) celebrate();
+  const bestVal = account ? account.stats.bestClock : clockScore;
+  document.getElementById('clock').innerHTML=`
+    <div class="card" style="text-align:center">
+      <div class="score-big">${clockScore}</div>
+      <div class="score-sub">correct in 60 seconds  ·  +${clockScore*10} XP</div>
+      ${best?`<div class="verdict v-strong" style="margin-top:12px">★ New personal best!</div>`
+            :`<div style="color:var(--gray);margin-top:10px">Personal best: ${bestVal}</div>`}
+      <button class="btn" onclick="clockCountdown()">Play again →</button>
+      <button class="btn secondary" onclick="closeClock()">Back to menu</button>
+    </div>`;
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function closeClock(){
+  clearInterval(clockTimer);
+  const el=document.getElementById('clock'); el.classList.add('hidden'); el.innerHTML='';
+  renderHome();
+  document.getElementById('intro').classList.remove('hidden');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+/* ---- Versus (two-player hot-seat) ---- */
+let vsPlayers=[{name:'Player 1',score:0},{name:'Player 2',score:0}], vsTurn=0, vsAsked=0, vsCurrent=null, vsAnswered=false;
+function openVersus(){
+  document.getElementById('intro').classList.add('hidden');
+  document.getElementById('versus').classList.remove('hidden');
+  const p1 = account ? account.name : 'Player 1';
+  document.getElementById('versus').innerHTML = `
+    <div class="card">
+      <div class="section-title">${ico('swords',17)} Versus</div>
+      <p class="section-instr">Two players, one device. Take turns answering — after 5 rounds each, whoever's ahead wins (ties go to sudden death). Pass the device each turn.</p>
+      <input id="vsName1" value="${p1}" maxlength="16" />
+      <input id="vsName2" value="Player 2" maxlength="16" />
+      <button class="btn" onclick="startVersus()">Start match →</button>
+      <button class="btn secondary" onclick="closeVersus()">Back to menu</button>
+    </div>`;
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function startVersus(){
+  const n1=(document.getElementById('vsName1').value||'').trim()||'Player 1';
+  const n2=(document.getElementById('vsName2').value||'').trim()||'Player 2';
+  vsPlayers=[{name:n1,score:0},{name:n2,score:0}];
+  vsTurn=0; vsAsked=0;
+  vsTurnIntro();
+}
+function vsBoard(){
+  return `<div class="vs-board">
+    <div class="vs-side ${vsTurn===0?'active':''}"><div class="vs-name">${vsPlayers[0].name}</div><div class="vs-score">${vsPlayers[0].score}</div></div>
+    <div class="vs-vs">vs</div>
+    <div class="vs-side ${vsTurn===1?'active':''}"><div class="vs-name">${vsPlayers[1].name}</div><div class="vs-score">${vsPlayers[1].score}</div></div>
+  </div>`;
+}
+function vsTurnIntro(){
+  document.getElementById('versus').innerHTML = `
+    ${vsBoard()}
+    <div class="card" style="text-align:center">
+      <div class="vs-turn">${vsPlayers[vsTurn].name}'s turn</div>
+      <p class="section-instr">Pass the device to ${vsPlayers[vsTurn].name}, then tap to begin.</p>
+      <button class="btn" onclick="vsShowQuestion()">Start turn →</button>
+    </div>
+    <button class="btn secondary" onclick="closeVersus()">← Back to menu</button>`;
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function vsShowQuestion(){
+  vsAnswered=false;
+  vsCurrent=getStudyQuestion();
+  const q=vsCurrent.q;
+  const choices=q.choices.map((c,i)=>`<label class="choice" id="vc-${i}" onclick="vsAnswer(${i})"><span>${String.fromCharCode(65+i)}. ${c}</span></label>`).join('');
+  document.getElementById('versus').innerHTML=`
+    ${vsBoard()}
+    <div class="card">
+      <div class="vs-turn">${vsPlayers[vsTurn].name}, your question:</div>
+      ${vsCurrent.passage?`<div class="passage">${vsCurrent.passage}</div>`:''}
+      <div class="q-stem">${q.q}</div>
+      ${figHTML(q)}
+      ${choices}
+      <div id="vsNav"></div>
+      ${reportLineHTML('versus')}
+    </div>`;
+  drawFigs();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function vsAnswer(i){
+  if(vsAnswered) return; vsAnswered=true;
+  const right=vsCurrent.q.answer, ok=(i===right);
+  vsCurrent.q.choices.forEach((c,idx)=>{
+    const lab=document.getElementById('vc-'+idx); if(!lab) return;
+    lab.classList.add('locked'); lab.onclick=null;
+    if(idx===right) lab.classList.add('correct'); else if(idx===i) lab.classList.add('wrong');
+  });
+  if(ok) vsPlayers[vsTurn].score++;
+  if(ok) playCorrect(); else playWrong();
+  answerFX(ok, document.getElementById('vc-'+i), '+1');
+  const exp=document.createElement('div'); exp.className='explain'+(ok?' ok':'');
+  exp.innerHTML=(ok?'<b>Correct! +1 point</b> ':'<b style="color:var(--red)">Not quite.</b> ')+`<b>Why:</b> ${vsCurrent.q.why}`;
+  const nav=document.getElementById('vsNav');
+  nav.parentNode.insertBefore(exp, nav);
+  nav.innerHTML=`<button class="btn" onclick="vsAfter()">Continue →</button>`;
+}
+function vsAfter(){
+  vsAsked++;
+  vsTurn = 1 - vsTurn;
+  if (vsAsked>=10 && vsAsked%2===0 && vsPlayers[0].score!==vsPlayers[1].score){ endVersus(); return; }
+  vsTurnIntro();
+}
+function endVersus(){
+  const w = vsPlayers[0].score>vsPlayers[1].score ? vsPlayers[0] : vsPlayers[1];
+  celebrate();
+  document.getElementById('versus').innerHTML=`
+    ${vsBoard()}
+    <div class="card" style="text-align:center">
+      <div style="color:var(--gold)">${ico('trophy',46)}</div>
+      <div class="score-big" style="font-size:26px">${w.name} wins!</div>
+      <div class="score-sub">Final: ${vsPlayers[0].name} ${vsPlayers[0].score} — ${vsPlayers[1].score} ${vsPlayers[1].name}</div>
+      <button class="btn" onclick="startVersus()">Rematch →</button>
+      <button class="btn secondary" onclick="closeVersus()">Back to menu</button>
+    </div>`;
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function closeVersus(){
+  const el=document.getElementById('versus'); el.classList.add('hidden'); el.innerHTML='';
+  renderHome();
+  document.getElementById('intro').classList.remove('hidden');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+/* ================= Ranked ladder ================= */
+const TIERS = [
+  {name:'Bronze',min:0,color:'#a06b32'},{name:'Silver',min:150,color:'#9a968c'},{name:'Gold',min:350,color:'#ca9827'},
+  {name:'Platinum',min:600,color:'#82989e'},{name:'Diamond',min:900,color:'#5aa3bd'},{name:'Master',min:1300,color:'#bd8f2c'}
+];
+/* Tier glyph: shield with a roman numeral, crown for Master — colored per tier */
+function tierIcon(i, size){
+  const s=size||16;
+  if (i===5) return `<span style="color:${TIERS[5].color}">${ico('crown',s)}</span>`;
+  return `<span style="color:${TIERS[i].color}"><svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS.shield}<text x="12" y="14.5" text-anchor="middle" font-family="Georgia,serif" font-size="8" fill="currentColor" stroke="none">${['I','II','III','IV','V'][i]}</text></svg></span>`;
+}
+function tierIndex(rp){ let idx=0; TIERS.forEach((t,i)=>{ if(rp>=t.min) idx=i; }); return idx; }
+function tierForRP(rp){ return TIERS[tierIndex(rp)]; }
+function nextTier(rp){ for(const t of TIERS){ if(t.min>rp) return t; } return null; }
+function awardRP(delta){
+  if(!account) return;
+  const bi=tierIndex(account.rp);
+  account.rp=Math.max(0, account.rp+delta);
+  const ai=tierIndex(account.rp);
+  saveStore(); renderRankChip();
+  if(ai>bi){ celebrate(); showToast(`Promoted to ${TIERS[ai].name}!`); }
+}
+/* RP scales with tier: fast climb early, hard-earned at the top. */
+function rpScale(){
+  const i = account ? tierIndex(account.rp) : 0;
+  return { gain: [4,3,3,2,2,1][i], loss: [1,1,1,2,2,2][i] };
+}
+function rpForAnswer(ok){ const s = rpScale(); awardRP(ok ? s.gain : -s.loss); }
+function renderRankChip(){
+  const el=document.getElementById('rankLine'); if(!el) return;
+  if(!account){ el.innerHTML=''; return; }
+  const t=tierForRP(account.rp);
+  const online = account.onlineRating>0 ? ` <span class="rank-chip">${ico('globe',13)} ${account.onlineRating} online</span>` : '';
+  const skill = !isEasy() ? ` <span class="rank-chip">${ico('bulb',13)} Skill ${(account.skill||2).toFixed(1)}</span>` : '';
+  el.innerHTML=`<span class="rank-chip">${tierIcon(tierIndex(account.rp),15)} ${t.name} · ${account.rp} RP</span>`+skill+online;
+}
+function renderDiff(){
+  const el=document.getElementById('diffSel'); if(!el||!account) return;
+  const d=account.diff||'standard';
+  el.innerHTML=`<button class="seg ${d==='easy'?'seg-on':''}" onclick="setDiff('easy')">Easy</button>
+    <button class="seg ${d==='standard'?'seg-on':''}" onclick="setDiff('standard')">Standard</button>`;
+}
+function setDiff(d){ if(account){ account.diff=d; saveStore(); } renderDiff(); }
+
+/* ================= Weekly league ================= */
+function curWeekId(){
+  const d=new Date(), jan=new Date(d.getFullYear(),0,1);
+  const week=Math.ceil((((d-jan)/86400000)+jan.getDay()+1)/7);
+  return d.getFullYear()+'-W'+week;
+}
+function accrueWeek(amount){
+  if(!account) return;
+  if(account.weekId!==curWeekId()){ account.weekId=curWeekId(); account.weekPoints=0; }
+  account.weekPoints += amount;
+}
+function openCompete(){
+  document.getElementById('intro').classList.add('hidden');
+  const rp=account?account.rp:0, idx=tierIndex(rp), nt=nextTier(rp);
+  const ladder=TIERS.map((t,i)=>`<div class="tier-row ${i===idx?'tier-on':''}"><span>${tierIcon(i,16)} ${t.name}</span><span class="tier-rp">${t.min}+ RP</span></div>`).join('');
+  const prog = nt ? `<p class="section-instr" style="text-align:center">${nt.min-rp} RP to ${nt.name}</p>` : `<p class="section-instr" style="text-align:center">${ico('crown',14)} Top tier reached!</p>`;
+  const wk=curWeekId();
+  const ranked=store.accounts.map(a=>({name:a.name, pts:(a.weekId===wk?(a.weekPoints||0):0)})).sort((x,y)=>y.pts-x.pts);
+  const league=ranked.map((a,i)=>`<div class="tier-row ${account&&a.name===account.name?'tier-on':''}"><span>${i+1}. ${a.name}</span><span class="tier-rp">${a.pts} pts</span></div>`).join('');
+  document.getElementById('compete').innerHTML=`
+    <div class="card">
+      <div class="section-title">${ico('trophy',17)} Your Rank</div>
+      <div style="text-align:center;margin:6px 0">${tierIcon(idx,46)}</div>
+      <div style="text-align:center;font-weight:800;color:var(--navy);font-size:20px">${tierForRP(rp).name} · ${rp} RP</div>
+      ${prog}${ladder}
+    </div>
+    <div class="card">
+      <div class="section-title">How RP works</div>
+      <p class="section-instr" style="margin:0 0 8px">Earn Rank Points in any solo mode:</p>
+      <div class="tier-row"><span><b style="color:var(--green)">✓</b> Correct answer</span><span class="tier-rp" style="color:var(--green)">+${rpScale().gain} RP</span></div>
+      <div class="tier-row"><span><b style="color:var(--red)">✗</b> Wrong answer</span><span class="tier-rp" style="color:var(--red)">−${rpScale().loss} RP</span></div>
+      <p class="section-instr" style="margin:8px 0 0">RP scales with your tier — low ranks climb fast, high ranks earn less and lose more per miss. Versus and Online races give no RP.</p>
+    </div>
+    <div class="card">
+      <div class="section-title">${ico('calendar',16)} This Week's League</div>
+      <p class="section-instr">Weekly XP race between accounts on this device — resets each week.</p>
+      ${league||'<div class="acct-empty">No scores yet this week.</div>'}
+    </div>
+    <button class="btn secondary" onclick="closeCompete()">Back to menu</button>`;
+  document.getElementById('compete').classList.remove('hidden');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function closeCompete(){ const el=document.getElementById('compete'); el.classList.add('hidden'); el.innerHTML=''; renderHome(); document.getElementById('intro').classList.remove('hidden'); window.scrollTo({top:0,behavior:'smooth'}); }
+
+/* ================= Survival runs (3 lives) ================= */
+let survLives=3, survScore=0, survCurrent=null, survAnswered=false;
+function openSurvival(){
+  document.getElementById('intro').classList.add('hidden');
+  survLives=3; survScore=0;
+  document.getElementById('survival').classList.remove('hidden');
+  survNext();
+}
+function survNext(){
+  survAnswered=false; survCurrent=getStudyQuestion(true);
+  const q=survCurrent.q;
+  const choices=q.choices.map((c,i)=>`<label class="choice" id="sv-${i}" onclick="survAnswer(${i})"><span>${String.fromCharCode(65+i)}. ${c}</span></label>`).join('');
+  document.getElementById('survival').innerHTML=`
+    <div class="clock-bar"><span class="hearts">${heartsHTML(survLives)}</span><span class="clock-score">Streak: ${survScore}</span></div>
+    <div class="card">${survCurrent.passage?`<div class="passage">${survCurrent.passage}</div>`:''}<div class="q-stem">${q.q}</div>${figHTML(q)}${choices}<div id="svNav"></div>${reportLineHTML('survival')}</div>
+    <button class="btn secondary" onclick="closeSurvival()">← Back to menu</button>`;
+  drawFigs();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function survAnswer(i){
+  if(survAnswered) return; survAnswered=true;
+  const right=survCurrent.q.answer, ok=(i===right);
+  const lab=document.getElementById('sv-'+i); if(lab) lab.classList.add(ok?'correct':'wrong');
+  if(!ok){ const r=document.getElementById('sv-'+right); if(r) r.classList.add('correct'); }
+  recordAnswer(ok); rpForAnswer(ok); updateSkill(ok, survCurrent.tier); noteTopicResult(survCurrent.q, ok);
+  if (survCurrent.vkind) updateVerbalSkill(survCurrent.vkind, ok);
+  if(!ok) recordMiss(survCurrent.q, survCurrent.passage);
+  answerFX(ok, lab);
+  if(ok){ survScore++; playCorrect(); addXP(10); } else { survLives--; playWrong(); }
+  markActivity(); checkAchievements();
+  const hb=document.querySelector('.hearts'); if(hb) hb.innerHTML=heartsHTML(survLives);
+  if(survLives<=0){ setTimeout(survEnd, 750); }
+  else { document.getElementById('svNav').innerHTML=`<button class="btn" onclick="survNext()">Next →</button>`; }
+}
+function survEnd(){
+  let best=false;
+  if(account && survScore>account.bestRun){ account.bestRun=survScore; best=true; }
+  saveStore();
+  if(best) celebrate();
+  const bestVal=account?account.bestRun:survScore;
+  document.getElementById('survival').innerHTML=`
+    <div class="card" style="text-align:center">
+      <div style="color:var(--gray)">${ico('sword',40)}</div>
+      <div class="score-big">${survScore}</div><div class="score-sub">question streak · +${survScore*10} XP</div>
+      ${best?`<div class="verdict v-strong" style="margin-top:12px">★ New best run!</div>`:`<div style="color:var(--gray);margin-top:10px">Best run: ${bestVal}</div>`}
+      <button class="btn" onclick="openSurvival()">Try again →</button>
+      <button class="btn secondary" onclick="closeSurvival()">Back to menu</button>
+    </div>`;
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function closeSurvival(){ const el=document.getElementById('survival'); el.classList.add('hidden'); el.innerHTML=''; renderHome(); document.getElementById('intro').classList.remove('hidden'); window.scrollTo({top:0,behavior:'smooth'}); }
+
+/* ================= Daily challenge (seeded by date) ================= */
+function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+function dateSeed(){ const d=dateStr(new Date()); let h=0; for(let i=0;i<d.length;i++) h=(h*31+d.charCodeAt(i))|0; return h>>>0; }
+function withSeed(seed, fn){ const orig=Math.random; Math.random=mulberry32(seed); try{ return fn(); } finally{ Math.random=orig; } }
+let dailyQs=[], dailyIdx=0, dailyCorrect=0, dailyAnswered=false;
+function openDaily(){
+  document.getElementById('intro').classList.add('hidden');
+  document.getElementById('daily').classList.remove('hidden');
+  if(account && account.lastDaily===dateStr(new Date())){
+    document.getElementById('daily').innerHTML=`
+      <div class="card" style="text-align:center">
+        <div style="color:var(--navy)">${ico('calendar',40)}</div>
+        <div class="section-title" style="justify-content:center">Daily Challenge complete!</div>
+        <p class="section-instr">You've done today's challenge. Come back tomorrow for a new one and keep your streak alive.</p>
+        <button class="btn secondary" onclick="closeDaily()">Back to menu</button>
+      </div>`;
+    return;
+  }
+  dailyQs = withSeed(dateSeed(), ()=> Array.from({length:5}, ()=>{
+    if (Math.random()<0.3){ const v=vShortQ(); return { q:v.q, label:v.label, vkind:v.vkind }; }
+    const g=statelessPick(); const q=g(); q._gen=g; return { q, label:'Math' };
+  }));
+  dailyIdx=0; dailyCorrect=0;
+  dailyShow();
+}
+function dailyShow(){
+  dailyAnswered=false;
+  const item=dailyQs[dailyIdx], q=item.q;
+  const choices=q.choices.map((c,i)=>`<label class="choice" id="dl-${i}" onclick="dailyAnswer(${i})"><span>${String.fromCharCode(65+i)}. ${c}</span></label>`).join('');
+  document.getElementById('daily').innerHTML=`
+    <div class="clock-bar"><span class="clock-time">Daily</span><span class="clock-score">${dailyIdx+1} / 5</span></div>
+    <div class="card">${item.passage?`<div class="passage">${item.passage}</div>`:''}<div class="q-stem">${q.q}</div>${figHTML(q)}${choices}<div id="dlNav"></div>${reportLineHTML('daily')}</div>
+    <button class="btn secondary" onclick="closeDaily()">← Back to menu</button>`;
+  drawFigs();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function dailyAnswer(i){
+  if(dailyAnswered) return; dailyAnswered=true;
+  const item=dailyQs[dailyIdx], right=item.q.answer, ok=(i===right);
+  const lab=document.getElementById('dl-'+i); if(lab) lab.classList.add(ok?'correct':'wrong');
+  if(!ok){ const r=document.getElementById('dl-'+right); if(r) r.classList.add('correct'); }
+  recordAnswer(ok); rpForAnswer(ok); noteTopicResult(item.q, ok);
+  if (item.vkind) updateVerbalSkill(item.vkind, ok);
+  if(!ok) recordMiss(item.q, item.passage);
+  answerFX(ok, lab);
+  if(ok){ dailyCorrect++; playCorrect(); addXP(10); } else playWrong();
+  const exp=document.createElement('div'); exp.className='explain'+(ok?' ok':'');
+  exp.innerHTML=(ok?'<b>Correct! +10 XP</b> ':'<b style="color:var(--red)">Not quite.</b> ')+`<b>Why:</b> ${item.q.why}`+(ok?'':`<div class="explain-ans">Correct answer: ${String.fromCharCode(65+right)}. ${item.q.choices[right]}</div>`+lessonLinkHTML(item.q)+coachBtnHTML());
+  if(!ok) coachSetContext(item.q, i);
+  const nav=document.getElementById('dlNav'); nav.parentNode.insertBefore(exp,nav);
+  nav.innerHTML=`<button class="btn" onclick="dailyNext()">${dailyIdx<4?'Next →':'Finish'}</button>`;
+}
+function dailyNext(){
+  dailyIdx++;
+  if(dailyIdx<5){ dailyShow(); return; }
+  if(account) account.lastDaily=dateStr(new Date());
+  addXP(30); markActivity(); checkAchievements(); saveStore(); celebrate();
+  document.getElementById('daily').innerHTML=`
+    <div class="card" style="text-align:center">
+      <div style="color:var(--gold)">${ico('star',40)}</div>
+      <div class="score-big">${dailyCorrect}/5</div><div class="score-sub">today's challenge · +${dailyCorrect*10+30} XP · +20 RP</div>
+      <p class="section-instr" style="margin-top:10px">Come back tomorrow for a new challenge!</p>
+      <button class="btn secondary" onclick="closeDaily()">Back to menu</button>
+    </div>`;
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function closeDaily(){ const el=document.getElementById('daily'); el.classList.add('hidden'); el.innerHTML=''; renderHome(); document.getElementById('intro').classList.remove('hidden'); window.scrollTo({top:0,behavior:'smooth'}); }
+
+/* ================= Full Test: 25 questions, 30 minutes, real SSAT rules ================= */
+let fullTest=false, testTimerId=null, testSecs=0, testStartAt=0;
+const FT_N=25, FT_SECS=30*60;
+
+function openFullTest(){
+  if (premiumGate('The Full Test')) return;
+  document.getElementById('intro').classList.add('hidden');
+  const best = account ? account.stats.bestScaled : 0;
+  document.getElementById('fulltest').innerHTML = `
+    <div class="card">
+      <div class="section-title">${ico('hourglass',18)} Full Test — Quantitative Section</div>
+      <p class="section-instr">This works exactly like the real SSAT quant section:</p>
+      <div class="tier-row"><span>${FT_N} questions, all visible — skip and come back freely</span></div>
+      <div class="tier-row"><span>30 minutes on the clock; it submits itself at 0:00</span></div>
+      <div class="tier-row"><span>No feedback until the end</span></div>
+      <div class="tier-row"><span>Real scoring: +1 per correct, −¼ per wrong, blanks cost nothing — so don't wild-guess</span></div>
+      ${best?`<p style="font-weight:700;color:var(--navy);margin-top:10px">Your best estimated score: ${best}</p>`:''}
+      <button class="btn" style="margin-top:10px" onclick="startFullTest()">Begin the test &rarr;</button>
+      <button class="btn secondary" onclick="closeFullTest()">Back to menu</button>
+    </div>`;
+  document.getElementById('fulltest').classList.remove('hidden');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function closeFullTest(){
+  clearInterval(testTimerId); fullTest=false;
+  const el=document.getElementById('fulltest'); el.classList.add('hidden'); el.innerHTML='';
+  renderHome();
+  document.getElementById('intro').classList.remove('hidden');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function startFullTest(){
+  fullTest=true; applyAssessmentUI();
+  osend({t:'assess_start', mins:35});
+  const el=document.getElementById('fulltest'); el.classList.add('hidden'); el.innerHTML='';
+  newSet(FT_N);
+  testSecs=FT_SECS; testStartAt=Date.now();
+  const form=document.getElementById('quiz');
+  const bar=document.createElement('div');
+  bar.className='card';
+  bar.style.cssText='position:sticky;top:8px;z-index:20;padding:10px 16px;display:flex;justify-content:space-between;align-items:center';
+  bar.innerHTML=`<span style="font-weight:700;color:var(--navy)">Quant + Verbal &middot; ${FT_N} questions</span><span class="clock-time" id="ftTime">30:00</span>`;
+  form.prepend(bar);
+  clearInterval(testTimerId);
+  testTimerId=setInterval(()=>{
+    testSecs--;
+    const t=document.getElementById('ftTime');
+    if(t){ t.textContent=fmtTime(testSecs); if(testSecs<=60) t.style.background='var(--red)'; }
+    if(testSecs===60) beep([880,660],0.14,'triangle',0.14);
+    if(testSecs>0 && testSecs<=5) playTick();
+    if(testSecs<=0){ clearInterval(testTimerId); showToast('Time! Scoring your test…'); grade(true); }
+  },1000);
+}
+function fmtTime(s){ return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); }
+function estScaled(raw){ return Math.round(500 + Math.max(0, raw)/FT_N*300); }
+
+function renderTestResults(correct, wrongChosen, blanks, perSection){
+  clearInterval(testTimerId);
+  const raw = correct - 0.25*wrongChosen;
+  const est = estScaled(raw);
+  const used = Math.min(FT_SECS, Math.round((Date.now()-testStartAt)/1000));
+  let best=false;
+  if (account && est > account.stats.bestScaled){ account.stats.bestScaled = est; best = true; saveStore(); }
+  const res=document.getElementById('results');
+  res.innerHTML=`
+    <div class="card">
+      <div class="score-ring"><div class="score-big">&asymp; ${est}</div><div class="score-sub">estimated SSAT score (500–800 scale)</div></div>
+      ${best?`<div class="verdict v-strong">★ New personal best!</div>`:''}
+      <div class="stats">
+        <div class="stat"><b>${correct}</b><span>correct</span></div>
+        <div class="stat"><b>${wrongChosen}</b><span>wrong</span></div>
+        <div class="stat"><b>${blanks}</b><span>blank</span></div>
+      </div>
+      <div style="font-weight:700;color:var(--navy);margin:14px 0 4px">By section</div>
+      ${(perSection||[]).map(s=>{ const pct=Math.round((s.got/s.total)*100);
+        return `<div class="bar-row"><div class="bar-label">${s.name}</div>
+          <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+          <div style="width:38px;text-align:right">${s.got}/${s.total}</div></div>`; }).join('')}
+      <p style="text-align:center;color:var(--gray);font-size:13.5px;margin-top:10px">Raw score: ${correct} − ¼&times;${wrongChosen} = <b>${raw.toFixed(2).replace(/\.?0+$/,'')}</b> of ${FT_N} &middot; time used ${fmtTime(used)}</p>
+      <p style="color:var(--gray);font-size:12.5px;text-align:center">Rough estimate — the real test scales scores against everyone who took it. Treat &plusmn;30 as the honest range.</p>
+      <p style="color:var(--gray);font-size:13.5px;margin-top:10px">Scroll up to review — explanations show under every question you missed, with a lesson link.</p>
+      <button class="btn" onclick="closeFullTestToIntro()">Take another test &rarr;</button>
+      <button class="btn secondary" onclick="goHome()">Back to menu</button>
+    </div>`;
+  res.classList.remove('hidden');
+  res.scrollIntoView({behavior:'smooth', block:'start'});
+}
+function closeFullTestToIntro(){
+  goHome();
+  openFullTest();
+}
+
+/* ================= Set builder ================= */
+let QUIZ = [], qIndexMap = [], TOTAL = 0, setsDone = 0, bestScore = -1;
+
+function drawAnalogies(n){ const out=[]; for (let i=0;i<n;i++) out.push(unseen(()=>Math.random()<0.12?choice(POOL.analogies):genAnalogy())); return out; }
+function drawSynonyms(n){ const out=[]; for (let i=0;i<n;i++) out.push(unseen(()=>choice(POOL.synonyms))); return out; }
+function buildSet(n){
+  n = n || 14;
+  let qs, ana, syn;
+  if (fullTest){
+    // real-test difficulty on the quant side: hard-leaning 20/44/36 over 15 Qs, plus 6 analogies + 4 synonyms
+    const nq = n-10, n1=Math.round(nq*0.2), n3=Math.round(nq*0.36), n2=nq-n1-n3;
+    qs = shuffle(takeFrom(L1_GENS,n1).concat(takeFrom(L2_GENS,n2), takeFrom(L3_GENS,n3)));
+    ana = drawAnalogies(6); syn = drawSynonyms(4);
+  } else {
+    qs = genQuant(n-5);
+    ana = drawAnalogies(3); syn = drawSynonyms(2);
+  }
+  const wrongCost = fullTest ? " Wrong answers cost ¼ point; blanks cost nothing." : "";
+  QUIZ = [
+    { section:"Quantitative (Math)", instr: (fullTest ? "Choose the best answer." : "Choose the best answer. No calculator.") + wrongCost, questions: qs },
+    { section:"Analogies", instr: "Pick the pair with the same relationship as the first pair." + wrongCost, questions: ana },
+    { section:"Synonyms", instr: "Pick the word closest in meaning to the word in capitals." + wrongCost, questions: syn }
+  ];
+  TOTAL = QUIZ.reduce((s,sec)=>s+sec.questions.length,0);
+  qIndexMap = [];
+}
+
+/* ================= Render ================= */
+function start(){ document.getElementById('intro').classList.add('hidden'); newSet(); }
+
+/* ---------- Study Mode: one question at a time, instant feedback ---------- */
+let studySection='mixed', studyTotal=0, studyCorrect=0, studyCurrent=null, studyAnswered=false, studyMode='math';
+
+function openStudy(){
+  studyMode='math';
+  document.getElementById('intro').classList.add('hidden');
+  studySection='mixed'; studyTotal=0; studyCorrect=0;
+  loadStudy();
+  document.getElementById('study').classList.remove('hidden');
+}
+let verbalKind='mixed';
+function openVerbal(){
+  document.getElementById('intro').classList.add('hidden');
+  document.getElementById('study').innerHTML = `
+    <div class="card">
+      <div class="section-title">${ico('alpha',18)} Verbal</div>
+      <p class="section-instr">Pick a section — analogies are generated fresh every time; reading draws from the passage library.</p>
+      <div class="tier-row" style="cursor:pointer" onclick="startVerbal('analogies')"><span><b>Analogies</b><br><span style="font-weight:400;font-size:12.5px;color:var(--gray)">A is to B as C is to —</span></span><span class="tier-rp">${ico('bulb',12)} ${(account?(account.verbalSkill.analogies||2):2).toFixed(1)}</span></div>
+      <div class="tier-row" style="cursor:pointer" onclick="startVerbal('reading')"><span><b>Reading</b><br><span style="font-weight:400;font-size:12.5px;color:var(--gray)">passages with comprehension questions</span></span><span class="tier-rp">${ico('bulb',12)} ${(account?(account.verbalSkill.reading||2):2).toFixed(1)}</span></div>
+      <div class="tier-row" style="cursor:pointer" onclick="startVerbal('synonyms')"><span><b>Synonyms</b><br><span style="font-weight:400;font-size:12.5px;color:var(--gray)">pick the closest meaning</span></span><span class="tier-rp">${ico('bulb',12)} ${(account?(account.verbalSkill.synonyms||2):2).toFixed(1)}</span></div>
+      <div class="tier-row" style="cursor:pointer" onclick="startVerbal('mixed')"><span><b>Mixed</b><br><span style="font-weight:400;font-size:12.5px;color:var(--gray)">all three, shuffled</span></span><span class="tier-rp">&rarr;</span></div>
+      <button class="btn secondary" onclick="studyHome()">Back to menu</button>
+    </div>`;
+  document.getElementById('study').classList.remove('hidden');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function startVerbal(kind){
+  verbalKind=kind; studyMode='verbal';
+  studyTotal=0; studyCorrect=0;
+  loadStudy();
+}
+function setStudySection(sec){ studySection=sec; loadStudy(); }
+function vShortQ(){
+  if (Math.random()<0.6){
+    const q = Math.random()<0.12 ? choice(POOL.analogies) : genAnalogy();
+    return { q, vkind:'analogies', label:'Analogies' };
+  }
+  return { q: choice(POOL.synonyms), vkind:'synonyms', label:'Synonyms' };
+}
+function getStudyQuestion(shortOnly){
+  // merged serving: gap-fixing first, then ~40% verbal, probes, then leveled math
+  const gaps=gapTopics(), unk=unknownTopics();
+  if (gaps.length && Math.random()<0.2){
+    const ti=choice(gaps.slice(0,3));
+    const g=drawBag(TOPICS[ti].gens,'gapfix_'+TOPICS[ti].id); const q=unseen(g); q._gen=g;
+    return { q, label:'Math · closing a gap: '+TOPICS[ti].title, tier:1 };
+  }
+  if (Math.random()<0.45){
+    if (!shortOnly && Math.random()<0.35){
+      const q=unseen(()=>{ const p=choice(POOL.reading); const qq=choice(p.questions); qq._passage=p.passage; return qq; });
+      return { q, passage:q._passage, vkind:'reading', label:'Reading' };
+    }
+    const q=unseen(()=>{ const v=vShortQ(); v.q._vk=v.vkind; v.q._lab=v.label; return v.q; });
+    return { q, vkind:q._vk, label:q._lab };
+  }
+  if (unk.length && Math.random()<0.15){
+    const ti=choice(unk);
+    const g=drawBag(TOPICS[ti].gens,'probe_'+TOPICS[ti].id); const q=unseen(g); q._gen=g;
+    return { q, label:'Math', tier:1 };
+  }
+  const g = pickGen(); const q = unseen(g); q._gen = g; return { q, label:'Math', tier: lastPickTier };
+}
+/* Verbal preview: analogies + reading from the hand-written pool (small on purpose — it's a taste test) */
+function getVerbalQuestion(){
+  const kind = verbalKind==='mixed' ? choice(['analogies','reading','synonyms']) : verbalKind;
+  if (kind==='analogies'){
+    const q = Math.random()<0.12 ? choice(POOL.analogies) : genAnalogy();
+    return { q, label:'Analogies', vkind:'analogies' };
+  }
+  if (kind==='synonyms') return { q: unseen(()=>choice(POOL.synonyms)), label:'Synonyms', vkind:'synonyms' };
+  const q = unseen(()=>{ const p=choice(POOL.reading); const qq=choice(p.questions); qq._passage=p.passage; return qq; });
+  return { q, passage:q._passage, label:'Reading', vkind:'reading' };
+}
+function updateVerbalSkill(kind, ok){
+  if (!account || !kind) return;
+  const v = account.verbalSkill;
+  v[kind] = Math.min(10, Math.max(1, (v[kind]||2) + (ok ? 0.08 : -0.10)));
+  saveStore();
+}
+function loadStudy(){
+  if (studyMode==='review' && (!account || !reviewQueue().length)){ openReview(); return; }
+  studyAnswered=false;
+  studyCurrent = studyMode==='verbal' ? getVerbalQuestion() : studyMode==='topic' ? getTopicQuestion() : studyMode==='review' ? getReviewQuestion() : getStudyQuestion();
+  renderStudy();
+}
+function renderStudy(){
+  const q=studyCurrent.q;
+  const choices=q.choices.map((c,i)=>`<label class="choice" id="sc-${i}" onclick="answerStudy(${i})"><span>${String.fromCharCode(65+i)}. ${c}</span></label>`).join('');
+  document.getElementById('study').innerHTML=`
+    <div class="card">
+      <div class="study-head"><span>${studyCurrent.label}${studyMode==='topic'?` · ${Math.min(topicScore(topicId),TOPIC_MASTERY)}/${TOPIC_MASTERY} mastered`:``}${account&&studyCurrent.vkind?` · Skill ${(account.verbalSkill[studyCurrent.vkind]||2).toFixed(1)}`:(account&&studyMode!=='topic'?` · Skill ${(account.skill||2).toFixed(1)}`:``)} · <span id="studyLvl">★ Lvl ${level}</span></span> <span class="study-score">${studyCorrect}/${studyTotal} correct</span></div>
+      ${studyCurrent.passage?`<div class="passage">${studyCurrent.passage}</div>`:''}
+      <div class="q-stem">${q.q}</div>
+      ${figHTML(q)}
+      ${choices}
+      <div id="studyExplain"></div>
+      <div id="studyNav"></div>
+      ${reportLineHTML('study')}
+    </div>
+    <button class="btn secondary" onclick="studyHome()">Back to menu</button>`;
+  drawFigs();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function answerStudy(i){
+  if (studyAnswered) return;
+  studyAnswered=true;
+  const q=studyCurrent.q, right=q.answer;
+  q.choices.forEach((c,idx)=>{
+    const lab=document.getElementById('sc-'+idx);
+    lab.classList.add('locked'); lab.onclick=null;
+    if (idx===right) lab.classList.add('correct');
+    else if (idx===i) lab.classList.add('wrong');
+  });
+  studyTotal++;
+  const ok = i===right;
+  let leveled=false;
+  if (ok){ studyCorrect++; leveled = addXP(10); }
+  if (ok && studyMode==='topic' && account){ account.topics[topicId] = topicScore(topicId) + 1; }
+  if (studyCurrent.vkind) updateVerbalSkill(studyCurrent.vkind, ok);
+  noteTopicResult(q, ok);
+  if (!ok && studyMode!=='review') recordMiss(q, studyCurrent.passage);
+  if (studyMode==='review' && account && studyCurrent._mm){
+    const mm=studyCurrent._mm;
+    if (ok){
+      mm.box=(mm.box||0)+1;
+      if (mm.box>=3){ const ix=account.misses.indexOf(mm); if(ix>=0) account.misses.splice(ix,1); showToast('Beaten for good — that one graduates!'); }
+      else mm.due=addDays([1,3][mm.box-1]);
+    } else { mm.box=0; mm.due=dateStr(new Date()); }
+  }
+  recordAnswer(ok); rpForAnswer(ok); updateSkill(ok, studyCurrent.tier); markActivity(); checkAchievements(); saveStore();
+  if (ok) playCorrect(); else playWrong();
+  answerFX(ok, document.getElementById('sc-'+i));
+  if (leveled) celebrate();
+  const exp=document.getElementById('studyExplain');
+  exp.className='explain'+(ok?' ok':'');
+  exp.innerHTML = (ok?`<b>Correct! +10 XP</b> `:`<b style="color:var(--red)">Not quite.</b> `)
+    + `<b>Why:</b> ${q.why}`
+    + (ok?'':`<div class="explain-ans">Correct answer: ${String.fromCharCode(65+right)}. ${q.choices[right]}</div>`+lessonLinkHTML(q)+coachBtnHTML());
+  if (!ok) coachSetContext(q, i);
+  const sc=document.querySelector('.study-score'); if (sc) sc.textContent=`${studyCorrect}/${studyTotal} correct`;
+  const lv=document.getElementById('studyLvl'); if (lv) lv.textContent='★ Lvl '+level;
+  if (leveled) showToast(`Level up! You reached Level ${level}`);
+  document.getElementById('studyNav').innerHTML=`<button class="btn" onclick="loadStudy()">Next question →</button>`;
+}
+function studyHome(){
+  const s=document.getElementById('study'); s.classList.add('hidden'); s.innerHTML='';
+  renderHome();
+  document.getElementById('intro').classList.remove('hidden');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+function newSet(n){
+  const form = document.getElementById('quiz');
+  form.innerHTML = '';
+  const res = document.getElementById('results');
+  res.innerHTML = ''; res.classList.add('hidden');
+  buildSet(n);
+
+  let num = 0;
+  QUIZ.forEach((sec, si) => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `<div class="section-title">${sec.section}</div>
+      <p class="section-instr">${sec.instr}</p>` + (sec.passage ? `<div class="passage">${sec.passage}</div>` : '');
+    sec.questions.forEach((qq, qi) => {
+      num++; const gnum = num;
+      qIndexMap.push({si, qi, gnum});
+      const qDiv = document.createElement('div');
+      qDiv.className = 'q'; qDiv.id = `q-${gnum}`;
+      let html = `<div class="q-stem"><span class="q-num">${gnum}.</span> ${qq.q}</div>` + figHTML(qq);
+      qq.choices.forEach((c, ci) => {
+        html += `<label class="choice"><input type="radio" name="q${gnum}" value="${ci}"><span>${String.fromCharCode(65+ci)}. ${c}</span></label>`;
+      });
+      html += reportLineHTML('practice', gnum);
+      qDiv.innerHTML = html;
+      card.appendChild(qDiv);
+    });
+    form.appendChild(card);
+  });
+  form.classList.remove('hidden');
+  drawFigs();
+  document.getElementById('submitBtn').classList.remove('hidden');
+  document.getElementById('backBtn').classList.remove('hidden');
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+/* ================= Grade ================= */
+function grade(force){
+  if (!fullTest){
+    for (let n=1; n<=TOTAL; n++){
+      if (!document.querySelector(`input[name="q${n}"]:checked`)){
+        document.getElementById('formError').classList.remove('hidden');
+        document.getElementById(`q-${n}`).scrollIntoView({behavior:'smooth', block:'center'});
+        return;
+      }
+    }
+  }
+  document.getElementById('formError').classList.add('hidden');
+  clearInterval(testTimerId);
+
+  let correct = 0, wrongChosen = 0, blanks = 0;
+  const perSection = QUIZ.map(s => ({name:s.section, got:0, total:s.questions.length}));
+
+  qIndexMap.forEach(({si, qi, gnum}) => {
+    const chosenEl = document.querySelector(`input[name="q${gnum}"]:checked`);
+    const chosen = chosenEl ? parseInt(chosenEl.value) : -1;
+    const right = QUIZ[si].questions[qi].answer;
+    document.querySelectorAll(`#q-${gnum} label.choice`).forEach((lab,i)=>{
+      lab.classList.add('locked');
+      lab.querySelector('input').disabled = true;
+      if (i === right) lab.classList.add('correct');
+      else if (chosen >= 0 && i === chosen) lab.classList.add('wrong');
+    });
+    if (chosen !== -1) noteTopicResult(QUIZ[si].questions[qi], chosen === right);
+    if (chosen === right){ correct++; perSection[si].got++; }
+    else if (chosen === -1){ blanks++; }
+    else {
+      wrongChosen++;
+      recordMiss(QUIZ[si].questions[qi], QUIZ[si].passage);
+      const ex = document.createElement('div');
+      ex.className = 'explain';
+      const correctText = QUIZ[si].questions[qi].choices[right];
+      ex.innerHTML = `<b>Why:</b> ${QUIZ[si].questions[qi].why}`
+        + `<div class="explain-ans">Correct answer: ${String.fromCharCode(65+right)}. ${correctText}</div>`
+        + lessonLinkHTML(QUIZ[si].questions[qi]);
+      document.getElementById(`q-${gnum}`).appendChild(ex);
+    }
+  });
+
+  setsDone++;
+  if (correct > bestScore) bestScore = correct;
+  const gained = correct*10, bonus = (correct===TOTAL) ? (fullTest?100:50) : 0;
+  const leveled = addXP(gained + bonus);
+  renderHomeLevel();
+  if (account){ account.stats.answered += (TOTAL - blanks); account.stats.correct += correct; if (correct===TOTAL) account.stats.perfectSets++; saveStore(); }
+  markActivity();
+  checkAchievements();
+  const rpS = rpScale();
+  awardRP(correct*rpS.gain - wrongChosen*rpS.loss);   // scaled by tier; blanks are neutral
+  if (leveled) showToast(`Level up! You reached Level ${level}`);
+  if (leveled || correct===TOTAL) celebrate(); else playCorrect();
+  if (fullTest){ fullTest=false; applyAssessmentUI(); osend({t:'assess_end'}); renderTestResults(correct, wrongChosen, blanks, perSection); }
+  else renderResults(correct, perSection, {gained, bonus});
+}
+
+function renderResults(correct, perSection, xpInfo){
+  document.getElementById('submitBtn').classList.add('hidden');
+  document.getElementById('backBtn').classList.add('hidden');
+  let verdict, vclass;
+  if (correct >= 12){ verdict="Strong work — keep sharpening timing and stretch into harder material."; vclass="v-strong"; }
+  else if (correct >= 8){ verdict="On track — focus on the weakest section over the next few sets."; vclass="v-mid"; }
+  else { verdict="Lots of upside — keep at it; improvement comes fast with steady practice."; vclass="v-low"; }
+
+  const bars = perSection.map(s => {
+    const pct = Math.round((s.got/s.total)*100);
+    return `<div class="bar-row"><div class="bar-label">${s.name}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+      <div style="width:38px;text-align:right">${s.got}/${s.total}</div></div>`;
+  }).join('');
+
+  const res = document.getElementById('results');
+  res.innerHTML = `
+    <div class="card">
+      <div class="score-ring"><div class="score-big">${correct}/${TOTAL}</div><div class="score-sub">questions correct</div></div>
+      <div class="verdict ${vclass}">${verdict}</div>
+      <div style="text-align:center;color:var(--amber);font-weight:700;margin:2px 0 10px">+${xpInfo.gained} XP${xpInfo.bonus?` &nbsp;·&nbsp; +${xpInfo.bonus} perfect-score bonus!`:''}</div>
+      <div class="level-panel" style="margin-bottom:8px">${levelBarHTML()}</div>
+      <div class="stats">
+        <div class="stat"><b>${setsDone}</b><span>sets done</span></div>
+        <div class="stat"><b>${bestScore}/${TOTAL}</b><span>your best</span></div>
+      </div>
+      <div style="font-weight:700;color:var(--navy);margin:14px 0 4px">By section</div>
+      ${bars}
+      <p style="color:var(--gray);font-size:13.5px;margin-top:14px">Scroll up to review each question — explanations show for any you missed.</p>
+      <button class="btn" onclick="newSet()">Take a new set →</button>
+      <button class="btn secondary" onclick="goHome()">Back to menu</button>
+    </div>`;
+  res.classList.remove('hidden');
+  res.scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function goHome(){
+  clearInterval(testTimerId); fullTest=false;
+  document.getElementById('quiz').classList.add('hidden');
+  document.getElementById('quiz').innerHTML = '';
+  document.getElementById('results').classList.add('hidden');
+  document.getElementById('results').innerHTML = '';
+  document.getElementById('submitBtn').classList.add('hidden');
+  document.getElementById('backBtn').classList.add('hidden');
+  renderHome();
+  document.getElementById('intro').classList.remove('hidden');
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+/* ================= Question reports (flag bad questions for review) ================= */
+let pendingReport = null, clearArmed = false;
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function reportLineHTML(mode, gnum){
+  const suf = gnum ? '-'+gnum : '';
+  return `<div class="rpt-line" id="rptLine${suf}"><button class="rpt-btn" onclick="openReport('${mode}'${gnum?','+gnum:''})">${ico('flag',12)} Report this question</button></div>`;
+}
+function reportTarget(mode, gnum){
+  if (mode==='study')    return studyCurrent && { q:studyCurrent.q, passage:studyCurrent.passage };
+  if (mode==='clock')    return clockCurrent && { q:clockCurrent.q, passage:clockCurrent.passage };
+  if (mode==='survival') return survCurrent  && { q:survCurrent.q,  passage:survCurrent.passage };
+  if (mode==='daily')    return dailyQs[dailyIdx] && { q:dailyQs[dailyIdx].q, passage:dailyQs[dailyIdx].passage };
+  if (mode==='versus')   return vsCurrent    && { q:vsCurrent.q,    passage:vsCurrent.passage };
+  if (mode==='practice'){ const m=qIndexMap.find(x=>x.gnum===gnum); return m && { q:QUIZ[m.si].questions[m.qi], passage:QUIZ[m.si].passage }; }
+  return null;
+}
+function openReport(mode, gnum){
+  const t = reportTarget(mode, gnum);
+  if (!t || !t.q) return;
+  pendingReport = { mode, t };
+  const el = document.getElementById('rptLine'+(gnum?'-'+gnum:'')); if (!el) return;
+  el.innerHTML = `<span class="rpt-chips"><span style="color:var(--gray)">What's wrong?</span>`
+    + ['Wrong answer','Confusing','Typo','Too hard/easy'].map(r=>`<button class="seg" onclick="submitReport('${r}','${gnum||''}')">${r}</button>`).join('')
+    + `</span>`;
+}
+function submitReport(reason, suf){
+  if (!pendingReport) return;
+  const { mode, t } = pendingReport, q = t.q;
+  store.reports.push({
+    date: new Date().toISOString().slice(0,16).replace('T',' '),
+    who: account ? account.name : '?',
+    mode, reason,
+    diff: (account && account.diff) || 'standard',
+    q: q.q, choices: q.choices.slice(),
+    answer: String.fromCharCode(65+q.answer)+'. '+q.choices[q.answer],
+    why: q.why, passage: t.passage || ''
+  });
+  saveStore(); pendingReport = null;
+  const el = document.getElementById('rptLine'+(suf?'-'+suf:''));
+  if (el) el.innerHTML = '<span class="rpt-done">✓ Reported</span>';
+  showToast('Question reported');
+  renderReportFoot();
+}
+function renderReportFoot(){
+  const el = document.getElementById('rptFoot'); if (!el) return;
+  const n = (store.reports||[]).length;
+  el.innerHTML = n ? `· <a onclick="openReports()">${ico('flag',11)} ${n} reported question${n>1?'s':''}</a>` : '';
+}
+function openReports(){
+  document.getElementById('intro').classList.add('hidden');
+  clearArmed = false;
+  const cards = (store.reports||[]).map((r,i)=>`
+    <div class="rpt-card">
+      <div class="rpt-meta">#${i+1} · ${r.date} · ${esc(r.who)} · ${r.mode} · ${r.diff} · <b>${r.reason}</b></div>
+      ${r.passage?`<div class="passage">${esc(r.passage)}</div>`:''}
+      <div class="q-stem" style="font-size:14px">${esc(r.q)}</div>
+      <div>${r.choices.map((c,ci)=>String.fromCharCode(65+ci)+'. '+esc(c)).join(' &nbsp; ')}</div>
+      <div style="color:var(--green);font-weight:600;margin-top:4px">Marked correct: ${esc(r.answer)}</div>
+      <div style="color:var(--gray);margin-top:2px">Why: ${esc(r.why)}</div>
+    </div>`).join('');
+  document.getElementById('reports').innerHTML = `
+    <div class="card">
+      <div class="section-title">${ico('flag',16)} Reported questions — ${(store.reports||[]).length}</div>
+      <p class="section-instr">Questions flagged during practice.</p>
+      ${cards || '<div class="acct-empty">Nothing reported yet.</div>'}
+      ${(store.reports||[]).length ? `<button class="btn" onclick="copyReports()">Copy all</button>
+      <button class="btn secondary" id="clearRptBtn" onclick="clearReports()">Clear all</button>` : ''}
+      <button class="btn secondary" onclick="closeReports()">Back to menu</button>
+    </div>`;
+  document.getElementById('reports').classList.remove('hidden');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function copyReports(){
+  const txt = 'QUIZARD REPORTED QUESTIONS ('+store.reports.length+')\n\n' + store.reports.map((r,i)=>
+`#${i+1} [${r.date} · ${r.who} · ${r.mode} · ${r.diff} · ${r.reason}]${r.passage?'\nPassage: '+r.passage:''}
+Q: ${r.q}
+${r.choices.map((c,ci)=>String.fromCharCode(65+ci)+'. '+c).join('  ')}
+Marked correct: ${r.answer}
+Explanation: ${r.why}`).join('\n\n');
+  const done = ()=>showToast('Copied');
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(done).catch(()=>fallbackCopy(txt, done));
+  } else fallbackCopy(txt, done);
+}
+function fallbackCopy(txt, done){
+  const ta=document.createElement('textarea'); ta.value=txt; document.body.appendChild(ta);
+  ta.select(); try{ document.execCommand('copy'); done(); }catch(e){ showToast('Copy failed'); }
+  document.body.removeChild(ta);
+}
+function clearReports(){
+  const b=document.getElementById('clearRptBtn');
+  if (!clearArmed){ clearArmed=true; if(b) b.textContent='Tap again to clear for good'; return; }
+  store.reports = []; saveStore();
+  renderReportFoot(); openReports();
+  showToast('Reports cleared');
+}
+function closeReports(){
+  const el=document.getElementById('reports'); el.classList.add('hidden'); el.innerHTML='';
+  renderHome();
+  document.getElementById('intro').classList.remove('hidden');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+/* ================= Feature vote (early users pick what gets built next) ================= */
+const VOTE_OPTIONS = [
+  {id:'battle',  title:'Math battle game',   desc:'A real game mode — right answers attack, streaks power you up.'},
+  {id:'tourney', title:'Online tournaments', desc:'Bracket competitions — win your way to the crown.'},
+  {id:'vocab',   title:'Vocabulary trainer', desc:'Daily SSAT word lists, reviewed right before you forget them.'},
+  {id:'friends', title:'Friends',            desc:'Add friends, compare progress, challenge them to a race.'}
+];
+/* Live tallies come from the Quizard server: one vote per online player, tied to their account. */
+function fillVoteLocal(){
+  if (!voteScreenVisible()) return;
+  const counts={}; store.accounts.forEach(a=>{ if(a.vote) counts[a.vote]=(counts[a.vote]||0)+1; });
+  VOTE_OPTIONS.forEach(o=>{
+    const el=document.getElementById('voteCount-'+o.id);
+    if(el){ const c=counts[o.id]||0; el.textContent = c+' vote'+(c===1?'':'s'); }
+  });
+  const n=document.getElementById('voteNote'); if(n) n.textContent='Offline — showing votes from this device only.';
+}
+function refreshVoteCounts(){
+  if (ows && ows.readyState===1 && oMe){ osend({t:'vote_counts'}); return; }
+  if (account) ensureOnlineIdentity();   // connects quietly; auth handler pushes our vote + fetches counts
+}
+function openVote(){
+  document.getElementById('intro').classList.add('hidden');
+  const mine = account ? account.vote : '';
+  const rows = VOTE_OPTIONS.map(o=>`
+    <div class="tier-row ${mine===o.id?'tier-on':''}" style="cursor:pointer" onclick="castVote('${o.id}')">
+      <span><b>${o.title}</b><br><span style="font-weight:400;font-size:12.5px;color:var(--gray)">${o.desc}</span></span>
+      <span class="tier-rp" id="voteCount-${o.id}">&hellip;</span>
+    </div>`).join('');
+  document.getElementById('vote').innerHTML = `
+    <div class="card">
+      <div class="section-title">${ico('ballot',17)} What should we build next?</div>
+      <p class="section-instr">You're an early user, so you get a say. Tap an option to vote — tap again to take it back.
+        <span style="display:block;margin-top:4px">Everything on the last ballot — verbal, Full Test, parent reports, miss review — got built and is live. New ballot:</span>
+        <span id="voteNote" style="display:block;margin-top:4px">Loading live totals&hellip;</span></p>
+      ${rows}
+      ${mine?`<p class="section-instr" style="margin-top:10px">Your vote: <b>${(VOTE_OPTIONS.find(o=>o.id===mine)||{}).title||''}</b></p>`:''}
+      <button class="btn secondary" onclick="closeVote()">Back to menu</button>
+    </div>`;
+  document.getElementById('vote').classList.remove('hidden');
+  refreshVoteCounts();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function castVote(id){
+  if(!account){ showToast('Log in to vote'); return; }
+  account.vote = (account.vote===id) ? '' : id;
+  saveStore();
+  openVote();   // re-renders; refreshVoteCounts inside will push or connect
+  if (ows && ows.readyState===1 && oMe) osend({t:'set_vote', vote:account.vote});
+  if(account.vote) showToast('Vote counted — thanks!');
+}
+function closeVote(){
+  const el=document.getElementById('vote'); el.classList.add('hidden'); el.innerHTML='';
+  renderHome();
+  document.getElementById('intro').classList.remove('hidden');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+/* ================= Online competitions (accounts + live races via server/) ================= */
+let ows=null, oState='idle', oMe=null, oOpp=null, oRound=0, oRaceQ=null, oAnswered=false, oScore={you:0,opp:0};
+
+function serverUrl(){ return store.serverUrl || 'wss://quizard-server.quizard.workers.dev'; }
+
+function openOnline(){
+  if (premiumGate('Online racing')) return;
+  document.getElementById('intro').classList.add('hidden');
+  document.getElementById('online').classList.remove('hidden');
+  renderOnlineHome();
+  if (!oMe) ensureOnlineIdentity();
+}
+/* Your device account IS your online identity — no second login.
+   Ladder: saved session token -> saved secret -> auto-register (name auto-suffixed if taken). */
+let oAuthStage = 0;
+function randSecret(){ let s=''; while(s.length<32) s+=Math.random().toString(36).slice(2); return s.slice(0,32); }
+function sanitizeOnlineName(n){
+  let s=(n||'').replace(/[^A-Za-z0-9_]/g,'').slice(0,12);
+  return s.length>=3 ? s : 'Wizard';
+}
+function autoOnline(){   // every account quietly gets its online identity — token is always there when a feature needs it
+  if (account && (!account.onlineToken || !ows || ows.readyState!==1)) ensureOnlineIdentity();
+}
+function ensureOnlineIdentity(){
+  if (!account){ if(onlineScreenVisible()) renderOnlineHome('Log into an account on this device first.'); return; }
+  oAuthStage = 0;
+  oconnect(onlineAuthAttempt);
+}
+function onlineAuthAttempt(){
+  if (!account) return;
+  if (oAuthStage===0){
+    if (account.onlineToken && account.onlineName) return osend({t:'token_login', name:account.onlineName, token:account.onlineToken});
+    oAuthStage = 1;
+  }
+  if (oAuthStage===1){
+    if (account.onlineSecret && account.onlineName) return osend({t:'login', name:account.onlineName, pass:account.onlineSecret});
+    oAuthStage = 2;
+  }
+  if (!account.onlineSecret){ account.onlineSecret = randSecret(); saveStore(); }
+  osend({t:'register', name:sanitizeOnlineName(account.name), pass:account.onlineSecret, auto:true});
+}
+function closeOnline(){
+  if (ows){ try{ ows.close(); }catch(e){} ows=null; }
+  oState='idle';
+  const el=document.getElementById('online'); el.classList.add('hidden'); el.innerHTML='';
+  renderHome();
+  document.getElementById('intro').classList.remove('hidden');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function onlineScreenVisible(){ const el=document.getElementById('online'); return el && !el.classList.contains('hidden'); }
+function voteScreenVisible(){ const el=document.getElementById('vote'); return el && !el.classList.contains('hidden'); }
+function renderOnlineHome(msg){
+  const o=document.getElementById('online'); if(!o) return;
+  if(!onlineScreenVisible()) return;
+  o.innerHTML=`
+  <div class="card">
+    <div class="section-title">${ico('globe',17)} Online — live races</div>
+    <p class="section-instr">Race a real opponent on the same question — first correct answer takes the point, first to 3 points wins the match. Wrong answers lock you out of the round, so accuracy beats speed-guessing.</p>
+    ${oMe ? `
+      <div class="acct-row" style="margin-bottom:10px"><span>${ico('person',14)} Playing as <b>${esc(oMe.name)}</b> &middot; ${oMe.rating} rating</span>
+        <span class="tier-rp">${oMe.wins}W &ndash; ${oMe.losses}L</span></div>
+      <div class="tier-row" style="margin-bottom:10px"><span>Show my rating to other players</span>
+        <button class="seg ${oMe.showRating?'seg-on':''}" style="flex:none;min-width:64px" onclick="osend({t:'set_privacy', showRating:${oMe.showRating?'false':'true'}})">${oMe.showRating?'On':'Off'}</button></div>
+      <p class="section-instr" style="margin:0 0 10px">Progress backs up to the cloud automatically.</p>
+      <button class="btn" onclick="findMatch()">Find a match &rarr;</button>
+      <button class="btn secondary" onclick="showLeaderboard()">Leaderboard</button>
+    ` : `
+      <p class="section-instr" style="text-align:center">${msg ? '' : 'Connecting&hellip;'}</p>
+      ${msg ? `<div class="err">${esc(msg)}</div>
+      <button class="btn" style="margin-top:10px" onclick="ensureOnlineIdentity()">Try again</button>
+      <p class="section-instr" style="margin:12px 0 4px">Server address:</p>
+      <input id="onServer" value="${esc(serverUrl())}" onchange="store.serverUrl=this.value.trim(); saveStore()" />` : ''}
+    `}
+    <button class="btn secondary" onclick="closeOnline()">Back to menu</button>
+  </div>`;
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function oconnect(cb){
+  if (ows && ows.readyState===1) return cb();
+  try { ows = new WebSocket(serverUrl()); }
+  catch(e){ return renderOnlineHome("That server address doesn't look right."); }
+  ows.onopen = cb;
+  ows.onerror = ()=>{ renderOnlineHome("Can't reach the server. Is it running at " + serverUrl() + "?"); fillVoteLocal(); };
+  ows.onclose = ()=>{ if (oState==='racing'||oState==='queued'){ oState='idle'; renderOnlineHome('Connection lost.'); } ows=null; };
+  ows.onmessage = (ev)=>{ let m; try{ m=JSON.parse(ev.data); }catch(e){ return; } onlineMsg(m); };
+}
+function osend(obj){ if (ows && ows.readyState===1) ows.send(JSON.stringify(obj)); }
+function findMatch(){
+  oState='queued';
+  oconnect(()=>osend({t:'queue'}));
+  document.getElementById('online').innerHTML=`
+    <div class="card" style="text-align:center">
+      <div class="section-title" style="justify-content:center">${ico('globe',17)} Searching&hellip;</div>
+      <p class="section-instr">Waiting for an opponent. Anyone else searching right now gets matched with you.</p>
+      <button class="btn secondary" onclick="osend({t:'cancel_queue'}); oState='idle'; renderOnlineHome()">Cancel</button>
+    </div>`;
+}
+function showLeaderboard(){ oconnect(()=>osend({t:'leaderboard'})); }
+
+/* Progress sync: when logged into Online, this device's current account backs up to the server. */
+let syncTimer=null;
+function syncPayload(){ const a=account; return { xp:a.xp, rp:a.rp, streak:a.streak, bestStreak:a.bestStreak,
+  lastPlayed:a.lastPlayed, achievements:a.achievements, stats:a.stats, bestRun:a.bestRun,
+  lastDaily:a.lastDaily, weekPoints:a.weekPoints, weekId:a.weekId, diff:a.diff, vote:a.vote, skill:a.skill, topics:a.topics, misses:a.misses, verbalSkill:a.verbalSkill, lessonsDone:a.lessonsDone, tstats:a.tstats, diagAt:a.diagAt, hist:a.hist, tourDone:a.tourDone, premium:a.premium, premiumPlan:a.premiumPlan, familyCode:a.familyCode||'', theme:a.theme||'' }; }
+function syncUp(){ if(!oMe || !account) return; osend({t:'sync_up', data:syncPayload(), updatedAt:account.updatedAt||Date.now()}); }
+function scheduleSync(){ if(!oMe || !account || !ows || ows.readyState!==1) return; clearTimeout(syncTimer); syncTimer=setTimeout(syncUp, 3000); }
+function applySync(data){ if(!account || !data) return; Object.assign(account, data); ensureFields(account); syncXPFromAccount(); saveStore(); }
+
+/* Both players generate the identical question from the server's seed. */
+function genRaceQuestion(seed){ return withSeed(seed, ()=>{ if (Math.random()<0.3) return vShortQ().q; return raceChoice()(); }); }
+
+function renderRace(){
+  const q=oRaceQ;
+  const choicesHtml=q.choices.map((c,i)=>`<label class="choice" id="rc-${i}" onclick="raceAnswer(${i})"><span>${String.fromCharCode(65+i)}. ${c}</span></label>`).join('');
+  document.getElementById('online').innerHTML=`
+    <div class="clock-bar"><span class="clock-time">Round ${oRound}</span><span class="clock-score" id="raceScore">${oScore.you} &ndash; ${oScore.opp}</span></div>
+    <div class="card">
+      <div class="vs-turn">You vs ${esc(oOpp?oOpp.name:'?')} &mdash; first correct answer wins the point</div>
+      <div class="q-stem">${q.q}</div>
+      ${figHTML(q)}
+      ${choicesHtml}
+      <div id="raceStatus" style="text-align:center;margin-top:10px;min-height:20px;font-size:13.5px;color:var(--gray)"></div>
+    </div>
+    <button class="btn secondary" onclick="closeOnline()">Quit match</button>`;
+  drawFigs();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function lockRaceChoices(){
+  if(!oRaceQ) return;
+  oRaceQ.choices.forEach((c,idx)=>{ const l=document.getElementById('rc-'+idx); if(l){ l.classList.add('locked'); l.onclick=null; } });
+}
+function raceAnswer(i){
+  if (oAnswered || oState!=='racing' || !oRaceQ) return;
+  oAnswered=true;
+  const ok = (i===oRaceQ.answer);
+  const lab=document.getElementById('rc-'+i);
+  if (lab) lab.classList.add(ok?'correct':'wrong');
+  lockRaceChoices();
+  answerFX(ok, lab, '+1');
+  if (ok) playCorrect(); else playWrong();
+  osend({t:'answer', n:oRound, correct:ok, key:oRaceQ.answer});
+  const bar=document.getElementById('raceStatus');
+  if (bar) bar.textContent = ok ? 'Correct — checking who was first…' : 'Locked out this round — waiting for your opponent…';
+}
+function onlineMsg(m){
+  if (m.t==='auth'){
+    if (!m.ok){
+      if (oAuthStage < 2){ oAuthStage++; onlineAuthAttempt(); return; }
+      fillVoteLocal();
+      return renderOnlineHome(m.msg||'Could not connect');
+    }
+    oAuthStage = 0;
+    oMe={name:m.name, rating:m.rating, wins:m.wins, losses:m.losses, showRating:m.showRating!==false};
+    if (account){
+      account.onlineName=m.name;
+      account.onlineRating=m.rating;
+      if (m.token) account.onlineToken=m.token;
+      if (m.data && (m.dataUpdatedAt||0) > (account.updatedAt||0)) applySync(m.data);
+      else syncUp();
+      saveStore();
+      osend({t:'set_vote', vote:account.vote||''});   // keep the server tally in step; reply carries live counts
+    }
+    renderOnlineHome();
+  }
+  else if (m.t==='match_start'){
+    oState='racing'; applyAssessmentUI(); oOpp=m.opp; oScore={you:0,opp:0};
+    document.getElementById('online').innerHTML=`
+      <div class="card" style="text-align:center">
+        <div class="section-title" style="justify-content:center">${ico('swords',17)} Matched!</div>
+        <p class="section-instr">You vs <b>${esc(oOpp.name)}</b>${oOpp.rating!=null?` (${oOpp.rating} rating)`:''}. First to ${m.winPoints} points. Get ready&hellip;</p>
+      </div>`;
+  }
+  else if (m.t==='round'){
+    oRound=m.n; oAnswered=false; if(m.score) oScore=m.score;
+    oRaceQ=genRaceQuestion(m.seed);
+    renderRace();
+  }
+  else if (m.t==='round_result'){
+    if(m.score) oScore=m.score;
+    const sc=document.getElementById('raceScore'); if(sc) sc.innerHTML=`${oScore.you} &ndash; ${oScore.opp}`;
+    const bar=document.getElementById('raceStatus');
+    if(bar) bar.innerHTML = m.winner
+      ? (m.youWon ? '<b style="color:var(--green)">You took the point!</b>' : `<b style="color:var(--red)">${esc(m.winner)} got it first</b>`)
+      : '<b>Nobody got it — next question…</b>';
+    if (m.winner) (m.youWon ? playRoundWin() : playRoundLose());
+    if (!oAnswered) lockRaceChoices();
+    oAnswered=true;
+  }
+  else if (m.t==='match_end'){
+    oState='idle'; applyAssessmentUI();
+    if(m.score) oScore=m.score;
+    if(oMe){ oMe.rating=m.rating; if(m.won) oMe.wins++; else oMe.losses++; }
+    if(account){ account.onlineRating=m.rating; saveStore(); renderRankChip(); }
+    if(m.won) celebrate(); else playRoundLose();
+    document.getElementById('online').innerHTML=`
+      <div class="card" style="text-align:center">
+        <div style="color:${m.won?'var(--gold)':'var(--gray)'}">${ico(m.won?'trophy':'swords',44)}</div>
+        <div class="score-big" style="font-size:26px">${m.won?'Victory!':'Defeat'}</div>
+        <div class="score-sub">${oScore.you} &ndash; ${oScore.opp} vs ${esc(oOpp?oOpp.name:'opponent')} &middot; ${m.delta>0?'+':''}${m.delta} rating &rarr; ${m.rating}</div>
+        <button class="btn" onclick="findMatch()">Race again &rarr;</button>
+        <button class="btn secondary" onclick="renderOnlineHome()">Online home</button>
+      </div>`;
+  }
+  else if (m.t==='leaderboard'){
+    const rows=(m.top||[]).map((u,i)=>`<div class="tier-row ${oMe&&u.name===oMe.name?'tier-on':''}"><span>${i+1}. ${u.flair?ico('crown',12)+' ':''}${esc(u.name)}</span><span class="tier-rp">${u.rating!=null?u.rating:'&mdash;'} &middot; ${u.wins}W&ndash;${u.losses}L</span></div>`).join('');
+    document.getElementById('online').innerHTML=`
+      <div class="card">
+        <div class="section-title">${ico('trophy',17)} Leaderboard</div>
+        ${rows||'<div class="acct-empty">No players yet.</div>'}
+        <button class="btn secondary" onclick="renderOnlineHome()">Back</button>
+      </div>`;
+  }
+  else if (m.t==='family_code'){
+    if (account){ account.familyCode=m.code; saveStore(); }
+    const el=document.getElementById('famCode'); if(el) el.textContent=m.code;
+  }
+  else if (m.t==='family_join'){
+    if (m.ok){
+      account.premium=true; account.premiumPlan='family-member'; saveStore();
+      celebrate(); showToast('Welcome to the family plan!');
+      openPremium(); renderHome(); document.getElementById('intro').classList.add('hidden');
+    } else showToast(m.msg||'That code did not work');
+  }
+  else if (m.t==='vote_counts'){
+    VOTE_OPTIONS.forEach(o=>{
+      const el=document.getElementById('voteCount-'+o.id);
+      if(el){ const c=(m.counts&&m.counts[o.id])||0; el.textContent = c+' vote'+(c===1?'':'s'); }
+    });
+    const n=document.getElementById('voteNote'); if(n) n.textContent='Live totals from every Quizard player.';
+  }
+  else if (m.t==='privacy'){ if(oMe) oMe.showRating=m.showRating; renderOnlineHome(); showToast(m.showRating?'Rating visible to others':'Rating hidden from others'); }
+  else if (m.t==='error'){ renderOnlineHome(m.msg||'Server error'); }
+}
+
+/* ================= Learn mode: lesson -> targeted drill ================= */
+let topicGens=null, topicTitle='', topicId='';
+const TOPIC_MASTERY = 10;
+function topicScore(id){ return (account && account.topics && account.topics[id]) || 0; }
+function openLearn(){
+  document.getElementById('intro').classList.add('hidden');
+  const cards = COURSES.map((c,ci)=>{
+    const p = Math.round(courseProgress(c)*100);
+    const mastered = c.topics.filter(id=>topicScore(id)>=TOPIC_MASTERY).length;
+    return `
+    <div class="tier-row" style="cursor:pointer;padding:13px 12px" onclick="openCourse(${ci})">
+      <span style="display:flex;align-items:center;gap:12px">
+        <span style="width:46px;height:46px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:conic-gradient(#2f9150 ${p}%, #e8e0c9 0)">
+          <span style="width:34px;height:34px;border-radius:50%;background:var(--card);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--navy)">${p}%</span>
+        </span>
+        <span><b>${c.title}</b><br><span style="font-weight:400;font-size:12.5px;color:var(--gray)">${c.desc}</span></span>
+      </span>
+      <span class="tier-rp">${mastered}/${c.topics.length}</span>
+    </div>`;}).join('');
+  const banner = pathComplete() ? `<div class="verdict v-strong" style="margin-bottom:10px">${ico('trophy',16)} Every course complete — you are SSAT-ready.</div>` : '';
+  document.getElementById('learn').innerHTML = `
+    <div class="card">
+      <div class="section-title">${ico('bulb',18)} Courses</div>
+      <p class="section-instr">Each course is a path of short lessons. Master a topic (${TOPIC_MASTERY} correct) to unlock the next one.</p>
+      ${account && account.misses.length ? `<div class="tier-row" style="cursor:pointer;border-color:var(--amber)" onclick="navTo('review')"><span><b>Review your misses</b><br><span style="font-weight:400;font-size:12.5px;color:var(--gray)">beat the ${account.misses.length} question${account.misses.length===1?'':'s'} that beat you</span></span><span class="tier-rp">${ico('refresh',15)}</span></div>` : ''}
+      ${banner}${cards}
+      <button class="btn secondary" onclick="closeLearn()">Back to menu</button>
+    </div>`;
+  document.getElementById('learn').classList.remove('hidden');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function openCourse(ci){
+  const c = COURSES[ci];
+  const rows = c.topics.map(id=>{
+    const i = topicIdxById(id), t = TOPICS[i];
+    const cnt = Math.min(topicScore(id), TOPIC_MASTERY), pctv = Math.round(cnt/TOPIC_MASTERY*100), done = cnt >= TOPIC_MASTERY;
+    if (!topicUnlocked(i)){
+      const prev = TOPICS[topicIdxById(c.topics[c.topics.indexOf(id)-1])];
+      return `<div class="tier-row" style="opacity:.45;cursor:pointer" onclick="showToast('Master ${prev.title} first (${Math.min(topicScore(prev.id),TOPIC_MASTERY)}/${TOPIC_MASTERY})')">
+        <span><b>${t.title}</b><br><span style="font-weight:400;font-size:12.5px;color:var(--gray)">${t.sub}</span></span>
+        <span class="tier-rp">${ico('lock',14)}</span></div>`;
+    }
+    return `<div class="tier-row" style="cursor:pointer;background:linear-gradient(to right, rgba(47,145,80,.16) ${pctv}%, transparent ${pctv}%);${done?'border-color:var(--green);':''}" onclick="openLesson(${i})">
+      <span><b>${t.title}</b><br><span style="font-weight:400;font-size:12.5px;color:var(--gray)">${t.sub}</span></span>
+      <span class="tier-rp" style="${done?'color:var(--green);font-weight:700;':''}">${done?'✓ mastered':(cnt>0?cnt+'/'+TOPIC_MASTERY:'&rarr;')}</span></div>`;
+  }).join('');
+  document.getElementById('learn').innerHTML = `
+    <div class="card">
+      <div class="section-title">${ico('bulb',18)} ${c.title}</div>
+      <p class="section-instr">${c.desc}</p>
+      ${rows}
+      <button class="btn secondary" onclick="openLearn()">All courses</button>
+    </div>`;
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+/* Brilliant-style lesson: one bite at a time, with check questions woven in */
+let lsTopic=-1, lsSteps=[], lsStep=0, lsAnswered=false;
+function lessonSteps(t){
+  const parts = t.lesson.split(/(?=<p>|<div class="passage")/).map(x=>x.trim()).filter(Boolean);
+  const steps = parts.map(p=>({type:'text', html:p}));
+  if (account && account.lessonsDone && account.lessonsDone[t.id]) return steps;   // finished lessons re-read without the quick checks
+  steps.splice(Math.min(2, steps.length), 0, {type:'check'});
+  steps.push({type:'check'});
+  return steps;
+}
+function openLesson(i){
+  lsTopic=i; lsSteps=lessonSteps(TOPICS[i]); lsStep=0; lsAnswered=false;
+  renderLessonStep();
+  document.getElementById('learn').classList.remove('hidden');
+}
+function renderLessonStep(){
+  const t = TOPICS[lsTopic], st = lsSteps[lsStep];
+  const pctv = Math.round(lsStep/(lsSteps.length)*100);
+  if (st.type==='check' && !st.q){
+    const g = drawBag(t.gens, 'ls_'+t.id); const q = g(); q._gen = g; st.q = q;
+  }
+  let body, nav;
+  if (st.type==='text'){
+    body = `<div style="font-size:15px">${st.html}</div>`;
+    nav = `<button class="btn" style="margin-top:14px" onclick="lessonContinue()">Continue &rarr;</button>`;
+  } else {
+    const q = st.q;
+    const choicesHtml = q.choices.map((c,i)=>`<label class="choice" id="lc-${i}" onclick="lessonAnswer(${i})"><span>${String.fromCharCode(65+i)}. ${c}</span></label>`).join('');
+    body = `<p class="section-instr" style="margin-bottom:8px">Quick check:</p><div class="q-stem">${q.q}</div>${figHTML(q)}${choicesHtml}<div id="lsExplain"></div>`;
+    nav = `<div id="lsNav"></div>`;
+  }
+  document.getElementById('learn').innerHTML = `
+    <div class="card">
+      <div class="study-head"><span>${t.title}</span><span class="study-score">step ${lsStep+1} of ${lsSteps.length}</span></div>
+      <div class="xp-track" style="margin-bottom:14px"><div style="height:100%;border-radius:999px;background:var(--green);width:${pctv}%"></div></div>
+      ${body}${nav}
+      <button class="btn secondary" onclick="openCourse(${courseOfTopic(lsTopic)})">Back to course</button>
+    </div>`;
+  drawFigs();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function lessonAnswer(i){
+  const st = lsSteps[lsStep];
+  if (st.type!=='check' || lsAnswered) return;
+  lsAnswered = true;
+  const q = st.q, ok = (i===q.answer);
+  q.choices.forEach((c,idx)=>{ const l=document.getElementById('lc-'+idx); if(l){ l.classList.add('locked'); l.onclick=null; if(idx===q.answer) l.classList.add('correct'); else if(idx===i) l.classList.add('wrong'); } });
+  answerFX(ok, document.getElementById('lc-'+i), '+5 XP');
+  if (ok) playCorrect(); else playWrong();
+  if (account){
+    noteTopicResult(q, ok);
+    if (ok){ account.topics[TOPICS[lsTopic].id] = topicScore(TOPICS[lsTopic].id) + 1; addXP(5); }
+    else recordMiss(q, '');
+    saveStore();
+  }
+  const exp=document.getElementById('lsExplain');
+  if(exp){ exp.className='explain'+(ok?' ok':''); exp.innerHTML=(ok?'<b>Correct!</b> ':'<b style="color:var(--red)">Not quite.</b> ')+`<b>Why:</b> ${q.why}`; }
+  const nav=document.getElementById('lsNav');
+  if(nav) nav.innerHTML = `<button class="btn" style="margin-top:10px" onclick="lessonContinue()">Continue &rarr;</button>`;
+}
+function lessonContinue(){
+  lsAnswered = false;
+  lsStep++;
+  if (lsStep >= lsSteps.length){
+    const t = TOPICS[lsTopic];
+    if (account){ account.lessonsDone[t.id] = true; saveStore(); }
+    document.getElementById('learn').innerHTML = `
+      <div class="card" style="text-align:center">
+        <div style="color:var(--gold)">${ico('star',40)}</div>
+        <div class="section-title" style="justify-content:center">Lesson complete</div>
+        <div style="margin:12px 0">
+          <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--gray);margin-bottom:4px"><span>Mastery</span><span>${Math.min(topicScore(t.id),TOPIC_MASTERY)}/${TOPIC_MASTERY}</span></div>
+          <div class="xp-track"><div style="height:100%;border-radius:999px;background:var(--green);width:${Math.min(100,Math.round(topicScore(t.id)/TOPIC_MASTERY*100))}%"></div></div>
+        </div>
+        <button class="btn" onclick="practiceTopic(${lsTopic})">Drill ${t.title} &rarr;</button>
+        <button class="btn secondary" onclick="openCourse(${courseOfTopic(lsTopic)})">Back to course</button>
+      </div>`;
+    window.scrollTo({top:0,behavior:'smooth'});
+    return;
+  }
+  renderLessonStep();
+}
+function practiceTopic(i){
+  if (!topicUnlocked(i)){ showToast('That topic is still locked'); return; }
+  studyMode='topic'; topicGens=TOPICS[i].gens; topicTitle=TOPICS[i].title; topicId=TOPICS[i].id;
+  const el=document.getElementById('learn'); el.classList.add('hidden'); el.innerHTML='';
+  studyTotal=0; studyCorrect=0;
+  loadStudy();
+  document.getElementById('study').classList.remove('hidden');
+}
+function openReview(){
+  if (premiumGate('Review Misses')) return;
+  reviewEarly=false;
+  if (account && account.misses.length && !dueMisses().length){
+    const next=account.misses.map(m=>m.due).sort()[0];
+    document.getElementById('intro').classList.add('hidden');
+    document.getElementById('study').innerHTML = `
+      <div class="card" style="text-align:center">
+        <div style="color:var(--green)">${ico('star',40)}</div>
+        <div class="section-title" style="justify-content:center">All caught up</div>
+        <p class="section-instr">Spaced repetition at work: ${account.misses.length} question${account.misses.length===1?'':'s'} are scheduled to come back right before you'd forget them. Next review: <b>${next}</b>.</p>
+        <button class="btn" onclick="reviewEarly=true; studyMode='review'; studyTotal=0; studyCorrect=0; loadStudy(); document.getElementById('study').classList.remove('hidden');">Review early anyway</button>
+        <button class="btn secondary" onclick="studyHome()">Back to menu</button>
+      </div>`;
+    document.getElementById('study').classList.remove('hidden');
+    return;
+  }
+  if (!account || !account.misses.length){
+    document.getElementById('intro').classList.add('hidden');
+    document.getElementById('study').innerHTML = `
+      <div class="card" style="text-align:center">
+        <div style="color:var(--green)">${ico('star',40)}</div>
+        <div class="section-title" style="justify-content:center">No misses to review</div>
+        <p class="section-instr">Every question you get wrong lands here so you can beat it. Right now the pile is empty — nice.</p>
+        <button class="btn secondary" onclick="studyHome()">Back to menu</button>
+      </div>`;
+    document.getElementById('study').classList.remove('hidden');
+    return;
+  }
+  studyMode='review';
+  document.getElementById('intro').classList.add('hidden');
+  studyTotal=0; studyCorrect=0;
+  loadStudy();
+  document.getElementById('study').classList.remove('hidden');
+}
+/* Gap hunting: rank the weakest measured topics and the unmeasured ones to probe. */
+function gapTopics(){
+  if (!account) return [];
+  const out=[];
+  TOPICS.forEach((t,i)=>{ const v=topicVerdict(i); if (v.cat==='gap') out.push({ i, s:(v.acc==null?0.5:v.acc) - v.missCount*0.1 }); });
+  return out.sort((a,b)=>a.s-b.s).map(x=>x.i);
+}
+function unknownTopics(){
+  if (!account) return [];
+  return TOPICS.map((t,i)=>i).filter(i=>topicVerdict(i).cat==='unknown');
+}
+let reviewEarly=false;
+function reviewQueue(){ return reviewEarly ? account.misses : dueMisses(); }
+function getReviewQuestion(){
+  const list = reviewQueue();
+  const mm = list[0];
+  const q = { q:mm.q, choices:mm.choices, answer:mm.answer, why:mm.why, draw:mm.draw, _ti:mm.ti };
+  return { q, passage:mm.passage, label:'Review · '+list.length+' due', tier:1, _mm:mm };
+}
+function getTopicQuestion(){
+  const g = drawBag(topicGens, 'topic_'+topicTitle); const q = unseen(g); q._gen = g;
+  return { q, label: topicTitle, tier: 1 };
+}
+function closeLearn(){
+  const el=document.getElementById('learn'); el.classList.add('hidden'); el.innerHTML='';
+  renderHome();
+  document.getElementById('intro').classList.remove('hidden');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+/* ================= Sidebar navigation ================= */
+const MODE_DIVS = ['quiz','results','study','clock','versus','survival','daily','compete','achievements','reports','online','learn','vote','fulltest','coachpage','parentreport','gaps','premium','about','focus'];
+function resetToHome(){
+  const wasAssessing = fullTest || diagActive;
+  clearInterval(clockTimer); clearTimeout(clockTimer);
+  clearInterval(testTimerId); fullTest=false;
+  clearInterval(focusTimer);
+  if (oState==='queued'){ osend({t:'cancel_queue'}); oState='idle'; }
+  if (oState==='racing'){ try{ ows.close(); }catch(e){} ows=null; oState='idle'; }
+  MODE_DIVS.forEach(id=>{ const el=document.getElementById(id); if(el){ el.classList.add('hidden'); el.innerHTML=''; }});
+  document.getElementById('submitBtn').classList.add('hidden');
+  document.getElementById('backBtn').classList.add('hidden');
+  document.getElementById('formError').classList.add('hidden');
+  coachClose();
+  if (wasAssessing) osend({t:'assess_end'});
+  diagActive=false; applyAssessmentUI();
+  renderHome();
+  document.getElementById('intro').classList.remove('hidden');
+}
+function toggleSidenav(){ document.body.classList.toggle('snav-open'); }
+function navTo(mode){
+  playSwoosh();
+  document.body.classList.remove('snav-open');
+  resetToHome();
+  const map = { learn:openLearn, daily:openDaily, practice:start, fulltest:openFullTest, study:openStudy, verbal:openVerbal, review:openReview, coach:openCoachPage, report:openReport, gaps:openGaps, premium:openPremium, about:openAbout, focus:openFocus,
+                clock:openClock, survival:openSurvival, versus:openVersus, online:openOnline,
+                compete:openCompete, achievements:openAchievements, vote:openVote };
+  if (mode !== 'home' && map[mode]) map[mode]();
+  highlightNav(mode);
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+function highlightNav(mode){
+  document.querySelectorAll('.snav').forEach(b=>b.classList.toggle('on', b.dataset.mode===mode));
+}
+function renderSidebar(){
+  const nav=document.getElementById('sidebar'); if(!nav) return;
+  const item = (mode, icon, label) => `<button class="snav" data-mode="${mode}" onclick="navTo('${mode}')">${ico(icon,16)} ${label}</button>`;
+  nav.innerHTML = `
+    <div class="sbrand">Quizard</div>
+    ${item('home','home','Home')}
+    <div class="sdiv"></div>
+    ${item('learn','bulb','Learn')}
+    ${item('daily','calendar','Daily')}
+    ${item('practice','paper','Practice Test')}
+    ${item('fulltest','hourglass','Full Test')}
+    ${item('study','book','Study')}
+    ${item('focus','flame','Focus Sprint')}
+    ${item('verbal','alpha','Verbal')}
+    ${item('review','refresh','Review Misses')}
+    ${item('gaps','flag','Knowledge Map')}
+    ${item('coach','chat','Coach')}
+    <div class="sdiv"></div>
+    ${item('clock','hourglass','Beat the Clock')}
+    ${item('survival','sword','Survival')}
+    ${item('versus','swords','Versus')}
+    ${item('online','globe','Online')}
+    <div class="sdiv"></div>
+    ${item('compete','trophy','Rank & League')}
+    ${item('achievements','medal','Achievements')}
+    ${item('report','paper','Parent Report')}
+    ${item('vote','ballot','Vote')}
+    <div class="sdiv"></div>
+    ${item('premium','crown','Premium')}
+    ${item('about','shield','About')}`;
+  highlightNav('home');
+}
+
+/* ================= Coach: open-ended AI tutor, anchored to the missed question ================= */
+let coachCtx=null, coachMsgs=[], coachBusy=false, coachTarget='panel', coachLiveAns=null;
+function coachHost(){
+  if (coachTarget==='page'){ const d=document.getElementById('coachDock'); if (d) return d; coachTarget='panel'; }
+  return document.getElementById('coachPanel');
+}
+function openCoachPage(){
+  if (!account){ showToast('Log into an account first'); return; }
+  if (assessmentActive()){ showToast("Sage sits out during tests — show what YOU know"); return; }
+  document.getElementById('intro').classList.add('hidden');
+  const el=document.getElementById('coachpage');
+  el.classList.remove('hidden');
+  el.innerHTML = '<div id="coachDock"></div>';
+  coachTarget='page';
+  if (!account.onlineToken || !ows || ows.readyState!==1) ensureOnlineIdentity();
+  coachCtx = coachProgressCtx(); coachMsgs = [];
+  if (!account.coachConsent){ renderCoachConsent(); return; }
+  renderCoach();
+}
+function tutorUrl(){ return serverUrl().replace(/^ws/,'http') + '/tutor'; }
+function coachBtnHTML(){ return `<div style="margin-top:8px"><button class="seg" style="flex:none" onclick="coachOpen()">${ico('chat',13)} Ask the Coach</button></div>`; }
+function coachProgressCtx(){
+  const t = TOPICS.map(x=>{
+    const i = topicIdxById(x.id);
+    return x.title+' '+Math.min(topicScore(x.id),TOPIC_MASTERY)+'/'+TOPIC_MASTERY+(topicUnlocked(i)?'':' (locked)');
+  }).join('; ');
+  const missCounts = {};
+  (account.misses||[]).forEach(mm=>{ if(mm.ti!=null && TOPICS[mm.ti]) missCounts[TOPICS[mm.ti].title]=(missCounts[TOPICS[mm.ti].title]||0)+1; });
+  const courses = COURSES.map(c=>c.title+': '+c.topics.map(id=>TOPICS[topicIdxById(id)].title).join(', ')).join(' | ');
+  return { general:true, progress:
+    'Skill '+((account.skill||2).toFixed(1))+'/10; streak '+(account.streak||0)+' days; best full-test estimate '+(account.stats.bestScaled||'none yet')+
+    '. Courses: '+courses+'. Mastery: '+t+'. Recent miss topics: '+(Object.entries(missCounts).map(([k,v])=>k+' x'+v).join(', ')||'none')+'.' };
+}
+function coachOpenGeneral(){
+  coachLiveAns=null;
+  if (!account){ showToast('Log into an account first'); return; }
+  if (assessmentActive()){ showToast("Sage sits out during tests — show what YOU know"); return; }
+  if (!account.onlineToken || !ows || ows.readyState!==1) ensureOnlineIdentity();   // coach needs your online identity; connect quietly
+  coachCtx = coachProgressCtx(); coachMsgs = [];
+  if (!account.coachConsent){ renderCoachConsent(); return; }
+  renderCoach();
+}
+function screenQ(){
+  const vis = id => { const e=document.getElementById(id); return e && !e.classList.contains('hidden'); };
+  if (vis('study') && studyCurrent && studyCurrent.q) return { q:studyCurrent.q, passage:studyCurrent.passage };
+  if (vis('clock') && clockCurrent && clockCurrent.q) return { q:clockCurrent.q, passage:clockCurrent.passage };
+  if (vis('survival') && survCurrent && survCurrent.q) return { q:survCurrent.q, passage:survCurrent.passage };
+  if (vis('focus') && focusCurrent) return { q:focusCurrent };
+  if (vis('daily') && dailyAnswered && dailyQs.length && dailyQs[dailyIdx]) return { q:dailyQs[dailyIdx].q, passage:dailyQs[dailyIdx].passage };   // after answering — the Daily's bonus XP stays earned
+  return null;
+}
+function coachOpenSmart(){   // the corner button: "explain THIS to me"
+  if (!account){ showToast('Log into an account first'); return; }
+  if (assessmentActive()){ showToast("Sage sits out during tests — show what YOU know"); return; }
+  const cur = screenQ();
+  if (cur && cur.q && cur.q.choices){
+    const q = cur.q;
+    coachCtx = {
+      q: q.q + (cur.passage ? '\n\nPassage: ' + String(cur.passage).slice(0,700) : ''),
+      choices: q.choices.map((c,i)=>String.fromCharCode(65+i)+'. '+c).join('  '),
+      live: true    // no correct answer sent — Sage can't spoil what it was never told
+    };
+    coachLiveAns = String(q.choices[q.answer]);   // client-only: powers the redaction net below
+    coachMsgs = [];
+    if (!account.onlineToken || !ows || ows.readyState!==1) ensureOnlineIdentity();
+    if (!account.coachConsent){ renderCoachConsent(); return; }
+    renderCoach();
+    return;
+  }
+  if (coachCtx && !coachCtx.general){ coachOpen(); return; }   // a freshly-missed question is loaded
+  coachOpenGeneral();
+}
+function coachOpen(){
+  if (!account){ showToast('Log into an account first'); return; }
+  if (assessmentActive()){ showToast("Sage sits out during tests — show what YOU know"); return; }
+  if (!coachCtx){ showToast('Miss a question first — the Coach helps with the problem on screen'); return; }
+  if (!account.onlineToken || !ows || ows.readyState!==1) ensureOnlineIdentity();
+  if (!account.coachConsent){ renderCoachConsent(); return; }
+  renderCoach();
+}
+function renderCoachConsent(){
+  const p=coachHost();
+  p.classList.remove('hidden');
+  p.innerHTML=`
+    <div class="coach-head"><span>${ico('chat',15)} Quizard Coach</span><button onclick="coachClose()">close</button></div>
+    <div style="padding:14px;font-size:13.5px">
+      <b>For a parent or guardian:</b>
+      <p style="margin:8px 0">The Coach is an AI tutor (Claude, by Anthropic) your child can talk to about the math problem they're working on. We instruct it to discuss only the math, to never ask for personal details, and to redirect anything off-topic. Quizard does not store the conversations; messages are processed by Anthropic to generate each reply.</p>
+      <p style="margin:8px 0">Please decide whether your child may use it.</p>
+      <button class="btn" onclick="coachConsent()">I'm a parent/guardian — approve the Coach</button>
+      <button class="btn secondary" onclick="coachClose()">Not now</button>
+    </div>`;
+}
+function coachConsent(){
+  account.coachConsent = true; saveStore();
+  if (ows && ows.readyState===1 && oMe) osend({t:'coach_consent'});
+  else if (account) ensureOnlineIdentity();
+  renderCoach();
+}
+function renderCoach(){
+  const p=coachHost();
+  p.classList.remove('hidden');
+  const fmt = s => esc(s).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>');
+  const msgs = coachMsgs.map(m=>`<div class="cmsg ${m.role==='user'?'you':'coach'}">${fmt(m.content)}</div>`).join('');
+  p.innerHTML=`
+    <div class="coach-head"><span style="display:flex;align-items:center;gap:8px"><span class="coach-ava">${ico('chat',16)}</span><span>Sage<br><span style="font-weight:400;font-size:10.5px;opacity:.75">your Coach &middot; study wizard</span></span></span><button onclick="coachClose()">close</button></div>
+    <div class="coach-msgs" id="coachMsgs">
+      <div class="cmsg coach">${coachCtx && coachCtx.general ? "Hi! I can teach you any topic, quiz you, or look at your progress and tell you exactly what to work on next. What do you want to do?" : (coachCtx && coachCtx.live ? "This one's on your screen right now. I'll explain how to attack it — the final answer stays yours to find. Ready?" : "I saw that one! Want a hint, or should I walk you through it? You can also just ask me anything about this problem.")}</div>
+      ${msgs}
+      ${coachBusy?'<div class="cmsg coach">thinking&hellip;</div>':''}
+    </div>
+    <div class="chiprow">${(coachCtx && coachCtx.general
+      ? (hasPerks() ? ['Plan my week','What should I work on?','Quiz me'] : ['What should I work on?','Teach me something new','Quiz me'])
+      : (coachCtx && coachCtx.live
+        ? ['Explain this to me','Give me a hint','Walk me through it']
+        : ['Give me a hint','Why is my answer wrong?','Walk me through it'])
+    ).map(c=>`<button class="chip" onclick="coachChip('${c.replace(/'/g,"\\'")}')">${c}</button>`).join('')}</div>
+    <div class="coach-in">
+      <input id="coachInput" maxlength="300" placeholder="${coachCtx && coachCtx.general ? 'Ask me anything about SSAT math&hellip;' : 'Ask about this problem&hellip;'}" onkeydown="if(event.key==='Enter')coachSend()" />
+      <button class="btn" style="width:auto;padding:9px 16px" onclick="coachSend()">Send</button>
+    </div>`;
+  const box=document.getElementById('coachMsgs'); if(box) box.scrollTop = box.scrollHeight;
+  const inp=document.getElementById('coachInput'); if(inp && !coachBusy) inp.focus();
+}
+function coachSetContext(q, chosenIdx){
+  coachLiveAns=null;   // question was answered — full explanations allowed again
+  coachCtx = {
+    q: q.q,
+    choices: q.choices.map((c,i)=>String.fromCharCode(65+i)+'. '+c).join('  '),
+    correct: String.fromCharCode(65+q.answer)+'. '+q.choices[q.answer],
+    chosen: chosenIdx>=0 ? String.fromCharCode(65+chosenIdx)+'. '+q.choices[chosenIdx] : 'left it blank'
+  };
+  coachMsgs = [];
+}
+function coachSend(){
+  if (coachBusy) return;
+  const inp=document.getElementById('coachInput');
+  const text=(inp && inp.value || '').trim();
+  if (!text) return;
+  coachMsgs.push({role:'user', content:text});
+  coachBusy=true; renderCoach();
+  fetch(tutorUrl(), {
+    method:'POST', headers:{'content-type':'application/json'},
+    body: JSON.stringify({ name:account.onlineName, token:account.onlineToken, context:coachCtx, messages:coachMsgs })
+  }).then(r=>r.json().then(d=>({s:r.status, d})))
+    .then(({s,d})=>{
+      coachBusy=false;
+      if (d.reply){
+        if (coachCtx && coachCtx.live && coachLiveAns){
+          const escd = coachLiveAns.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+          const re = new RegExp('(^|[^0-9A-Za-z])'+escd+'(?![0-9A-Za-z])','gi');
+          if (re.test(d.reply)){
+            d.reply = d.reply.replace(re, '$1▢') + "\n\nI keep the final answer covered until you lock one in — that part's yours!";
+          }
+        }
+        coachMsgs.push({role:'assistant', content:d.reply}); playCoachChime();
+      }
+      else if (d.error==='inactive') coachMsgs.push({role:'assistant', content:'The Coach is not switched on yet — soon!'});
+      else if (d.error==='limit') coachMsgs.push({role:'assistant', content:"That's all my energy for today — I reset tomorrow. Try the Teach me lesson meanwhile!"});
+      else if (d.error==='assessment') coachMsgs.push({role:'assistant', content:"You're in the middle of a test — I sit those out, even over here. Finish up and I'm all yours!"});
+      else if (d.error==='consent'){ account.coachConsent=false; saveStore(); renderCoachConsent(); return; }
+      else if (d.error==='auth'){
+        coachMsgs.pop();   // don't double-send their question on retry
+        ensureOnlineIdentity();
+        coachMsgs.push({role:'assistant', content:'One second — connecting you… press Send again.'});
+        setTimeout(()=>{ const inp2=document.getElementById('coachInput'); if(inp2) inp2.value=text; }, 50);
+      }
+      else coachMsgs.push({role:'assistant', content:'Something went wrong — try again in a moment.'});
+      renderCoach();
+    })
+    .catch(()=>{ coachBusy=false; coachMsgs.push({role:'assistant', content:"I can't reach the server right now — are you online?"}); renderCoach(); });
+}
+function coachChip(text){
+  const inp=document.getElementById('coachInput');
+  if(inp){ inp.value=text; coachSend(); }
+}
+
+/* ===== Knowledge Map + Diagnostic: what you know, where the gaps are ===== */
+function drawHistChart(id){
+  const c=document.getElementById(id); if(!c || !account) return;
+  const h=(account.hist||[]).slice();
+  const today=dateStr(new Date());
+  const now={ d:today, sk:+(account.skill||2), va:+(account.verbalSkill.analogies||2),
+              vr:+(account.verbalSkill.reading||2), vs:+(account.verbalSkill.synonyms||2),
+              ans:account.stats.answered||0 };
+  if (!h.length || h[h.length-1].d!==today) h.push(now); else h[h.length-1]=now;
+  const W=c.clientWidth||540, H=c.clientHeight||180, dpr=window.devicePixelRatio||1;
+  c.width=W*dpr; c.height=H*dpr;
+  const x=c.getContext('2d'); if(!x) return;
+  x.scale(dpr,dpr); x.clearRect(0,0,W,H);
+  const padL=24,padR=6,padT=8,padB=16, iw=W-padL-padR, ih=H-padT-padB, n=h.length;
+  const X=i=> padL + (n===1 ? iw/2 : i*(iw/(n-1)));
+  const Y=v=> padT + ih - ((Math.min(10,Math.max(1,v))-1)/9)*ih;
+  x.strokeStyle='#e8e0c9'; x.fillStyle='#8a815f'; x.font='10px sans-serif'; x.lineWidth=1;
+  [2,4,6,8,10].forEach(v=>{ x.beginPath(); x.moveTo(padL,Y(v)); x.lineTo(W-padR,Y(v)); x.stroke(); x.fillText(v, 6, Y(v)+3); });
+  const deltas=h.map((p,i)=> i ? Math.max(0,(p.ans||0)-(h[i-1].ans||0)) : 0);
+  const mxD=Math.max(1,...deltas);
+  x.fillStyle='rgba(202,152,39,.28)';
+  deltas.forEach((d,i)=>{ if(!d) return; const bh=(d/mxD)*ih*0.5; x.fillRect(X(i)-3, padT+ih-bh, 6, bh); });
+  const line=(get,color)=>{ x.strokeStyle=color; x.lineWidth=2; x.beginPath();
+    h.forEach((p,i)=>{ const yy=Y(get(p)); i ? x.lineTo(X(i),yy) : x.moveTo(X(i),yy); }); x.stroke();
+    h.forEach((p,i)=>{ x.fillStyle=color; x.beginPath(); x.arc(X(i),Y(get(p)),2.5,0,7); x.fill(); }); };
+  line(p=>((p.sk||2)+(p.va||2)+(p.vr||2)+(p.vs||2))/4, '#2f9150');
+  line(p=>p.sk||2, '#263048');
+  x.fillStyle='#8a815f';
+  x.fillText(h[0].d.slice(5), padL, H-4);
+  if(n>1) x.fillText(h[n-1].d.slice(5), W-padR-32, H-4);
+}
+function chartBlockHTML(cid){
+  const days=(account.hist||[]).length;
+  return `
+    <canvas id="${cid}" style="width:100%;height:180px;display:block"></canvas>
+    <div style="display:flex;gap:14px;font-size:11.5px;color:var(--gray);margin:4px 0 2px">
+      <span><span style="display:inline-block;width:10px;height:3px;background:#2f9150;vertical-align:middle"></span> average skill</span>
+      <span><span style="display:inline-block;width:10px;height:3px;background:#263048;vertical-align:middle"></span> math skill</span>
+      <span><span style="display:inline-block;width:8px;height:8px;background:rgba(202,152,39,.4);vertical-align:middle"></span> questions that day</span>
+    </div>
+    ${days<2?'<p class="section-instr" style="margin-top:4px">The graph fills in as you practice on more days.</p>':''}`;
+}
+function topicVerdict(i){
+  const t=TOPICS[i], s=(account.tstats||{})[i], m=Math.min(topicScore(t.id),TOPIC_MASTERY);
+  const missCount=(account.misses||[]).filter(mm=>mm.ti===i).length;
+  const acc = (s && s[0]>=3) ? s[1]/s[0] : null;
+  let cat;
+  if ((acc!=null && acc<0.6) || missCount>=2) cat='gap';
+  else if (acc==null && m===0) cat='unknown';
+  else if (m>=TOPIC_MASTERY || (acc!=null && acc>=0.8)) cat='strong';
+  else cat='mid';
+  return { cat, acc, m, missCount, answered: s?s[0]:0 };
+}
+function gapRowHTML(i, v){
+  const t=TOPICS[i];
+  const bits=[];
+  if (v.acc!=null) bits.push(Math.round(v.acc*100)+'% right');
+  if (v.m>0) bits.push('mastery '+v.m+'/'+TOPIC_MASTERY);
+  if (v.missCount) bits.push(v.missCount+' recent miss'+(v.missCount===1?'':'es'));
+  if (!bits.length) bits.push('no data yet');
+  const colors={gap:'var(--red)', mid:'var(--gold)', strong:'var(--green)', unknown:'var(--gray)'};
+  const btn = v.cat==='strong'
+    ? `<button class="seg" style="flex:none" onclick="jumpToLesson(${i})">Review</button>`
+    : `<button class="seg" style="flex:none" onclick="jumpToLesson(${i})">${ico('bulb',13)} Work on it</button>`;
+  return `<div class="tier-row" style="border-left:4px solid ${colors[v.cat]}">
+    <span><b>${t.title}</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">${bits.join(' · ')}</span></span>${btn}</div>`;
+}
+function openGaps(){
+  if (!account){ showToast('Log into an account first'); return; }
+  document.getElementById('intro').classList.add('hidden');
+  const el=document.getElementById('gaps');
+  el.classList.remove('hidden');
+  const groups={gap:[], mid:[], strong:[], unknown:[]};
+  TOPICS.forEach((t,i)=>{ const v=topicVerdict(i); groups[v.cat].push(gapRowHTML(i,v)); });
+  const section=(title,color,rows,note)=> rows.length
+    ? `<div class="mlabel" style="color:${color}">${title}</div>${rows.join('')}` 
+    : (note?`<div class="mlabel" style="color:${color}">${title}</div><p class="section-instr">${note}</p>`:'');
+  const vs=account.verbalSkill;
+  const vRow=(kind,label)=>{ const sk=vs[kind]||2;
+    const col = sk<3.5?'var(--red)':sk<6?'var(--gold)':'var(--green)';
+    return `<div class="tier-row" style="border-left:4px solid ${col}">
+      <span><b>${label}</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">skill ${sk.toFixed(1)} / 10</span></span>
+      <button class="seg" style="flex:none" onclick="navTo('verbal');startVerbal('${kind}')">Practice</button></div>`; };
+  el.innerHTML=`
+    <div class="card">
+      <div class="section-title">${ico('flag',17)} Knowledge Map</div>
+      <p class="section-instr">${account.diagAt
+        ? 'Built from your diagnostic ('+account.diagAt+') and everything you answer, in every mode. It updates as you play.'
+        : 'Take the diagnostic — 26 questions, two from each topic — and Quizard maps what you know and what to work on.'}</p>
+      ${account.diagAt
+        ? `<button class="btn secondary" onclick="startDiag()">Retake the diagnostic</button>`
+        : `<button class="btn" onclick="startDiag()">Start the diagnostic (26 questions)</button>`}
+      <div class="mlabel">Everything so far</div>
+      ${chartBlockHTML('gapChart')}
+      ${reportFactsRows(reportFacts())}
+      ${section('Gaps to close','var(--red)',groups.gap)}
+      ${section('Getting there','var(--gold)',groups.mid)}
+      ${section('Strong','var(--green)',groups.strong)}
+      ${section('Not measured yet','var(--gray)',groups.unknown, groups.gap.length||groups.mid.length||groups.strong.length?'Answer a few questions in these topics and they join the map.':'')}
+      <div class="mlabel">Verbal</div>
+      ${vRow('analogies','Analogies')}${vRow('reading','Reading')}${vRow('synonyms','Synonyms')}
+    </div>`;
+  drawHistChart('gapChart');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+/* Diagnostic: 2 questions from every topic, shuffled, no XP — pure measurement. */
+let diagQs=[], diagIdx=0, diagAnswered=false, diagActive=false;
+/* Sage is banned wherever the score is supposed to measure the KID. */
+function assessmentActive(){ return !!(fullTest || diagActive || oState==='racing'); }
+function applyAssessmentUI(){ document.body.classList.toggle('assessing', assessmentActive()); }
+function startDiag(){
+  if (!account){ showToast('Log into an account first'); return; }
+  diagActive=true; applyAssessmentUI();
+  osend({t:'assess_start', mins:20});
+  diagQs=[];
+  TOPICS.forEach((t,i)=>{ for(let k=0;k<2;k++){ const g=drawBag(t.gens,'dg_'+t.id); const q=g(); q._gen=g; q._ti=i; diagQs.push(q); } });
+  shuffle(diagQs); diagIdx=0; diagAnswered=false;
+  renderDiagQ();
+}
+function renderDiagQ(){
+  const el=document.getElementById('gaps');
+  const q=diagQs[diagIdx];
+  const pct=Math.round(diagIdx/diagQs.length*100);
+  el.innerHTML=`
+    <div class="card">
+      <div class="study-head"><span>Diagnostic</span><span class="study-score">${diagIdx+1} of ${diagQs.length}</span></div>
+      <div class="xp-track" style="margin-bottom:14px"><div style="height:100%;border-radius:999px;background:var(--gold);width:${pct}%"></div></div>
+      <div class="q-stem">${q.q}</div>${figHTML(q)}
+      ${q.choices.map((c,i)=>`<label class="choice" id="dg-${i}" onclick="diagAnswer(${i})"><span>${String.fromCharCode(65+i)}. ${c}</span></label>`).join('')}
+      <p class="section-instr" style="margin-top:10px">No points, no pressure — this just finds what to work on.</p>
+    </div>`;
+  drawFigs();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function diagAnswer(i){
+  if (diagAnswered) return;
+  diagAnswered=true;
+  const q=diagQs[diagIdx], ok=(i===q.answer);
+  q.choices.forEach((c,idx)=>{ const l=document.getElementById('dg-'+idx); if(l){ l.classList.add('locked'); l.onclick=null; if(idx===q.answer) l.classList.add('correct'); else if(idx===i) l.classList.add('wrong'); } });
+  noteTopicResult(q, ok);
+  if (ok) playCorrect(); else playWrong();
+  answerFX(ok, document.getElementById('dg-'+i));
+  markActivity(); saveStore();
+  setTimeout(()=>{
+    diagAnswered=false; diagIdx++;
+    if (diagIdx>=diagQs.length){
+      diagActive=false; applyAssessmentUI();
+      osend({t:'assess_end'});
+      account.diagAt=dateStr(new Date()); saveStore();
+      celebrate(); showToast('Diagnostic complete — here is your map');
+      openGaps(); renderNextUp();
+    } else renderDiagQ();
+  }, ok?650:1400);
+}
+
+/* ===== About: version, platform, what's new ===== */
+const CHANGELOG = [
+  ['0.21.2','Spoof-proofing: server-enforced test locks (even second devices) and race answer verification'],
+  ['0.21.1','Sage sits out during the diagnostic, Full Test, and races — assessments measure YOU'],
+  ['0.21.0','Free gets more: 3 Sage chats a day + the Knowledge Map. Unlimited gets Deep Explanations and the Daybreak theme'],
+  ['0.20.3','Family plan is $349'],
+  ['0.20.2','Family outranks everything: all perks (crown, weekly plans, Midnight) included for the whole family'],
+  ['0.20.1','Midnight theme now included with Family plans too'],
+  ['0.20.0','Unlimited perks: Midnight theme, gold crown online, and Sage weekly study plans'],
+  ['0.19.6','Share your family plan by email, message, or copy — one tap from the Premium page'],
+  ['0.19.5','Unlimited lifts every limit; Full Test results score each section separately'],
+  ['0.19.4','Every skill shown on its own: Math, Analogies, Reading, Synonyms — on home and in every drill header'],
+  ['0.19.3','Answer redaction: even if Sage slips, the app blanks the answer out of its reply before you see it'],
+  ['0.19.2','Sage keeps the answer secret until you commit — hints and method only'],
+  ['0.19.1','Questions say what they are: Analogies, Synonyms, Reading — own sections on every test'],
+  ['0.19.0','Math and verbal merged everywhere; the corner Sage button now explains the question on your screen'],
+  ['0.18.1','New logo — the hat got an upgrade'],
+  ['0.18.0','Focus Sprint: 25 minutes aimed at your weakest topic; study mode now hunts and fixes gaps on its own'],
+  ['0.17.0','Review Misses is now spaced repetition: beat a question 3 times over growing gaps and it graduates'],
+  ['0.16.1','Pricing math sealed: no plan can lose money at any usage level'],
+  ['0.16.0','Premium features actually lock now; family plans share with a code on any device; family price covers its costs'],
+  ['0.15.0','Progress graph on the Knowledge Map and Parent Report; 16 new question types, 75 new synonyms, and no more repeat questions'],
+  ['0.14.2','Family plan priced right: $199, every kid keeps their own 30 Sage chats a day'],
+  ['0.14.0','Unlimited Sage plan, About page, family plan covers each member'],
+  ['0.13.0','Windows app, Android install page, Solo & Family plans'],
+  ['0.12.x','Premium storefront, family subscription'],
+  ['0.11.0','One-time app tour; Sage double-checks its math'],
+  ['0.10.x','Knowledge Map + 26-question diagnostic; report shows growth and every skill'],
+  ['0.9.x','Sage the coach got a name and a page; parent reports; verbal skill levels; sounds everywhere']
+];
+function appPlatform(){
+  if (window.webkit && window.webkit.messageHandlers) return 'Mac app';
+  if (/Electron/i.test(navigator.userAgent)) return 'Windows app';
+  if (typeof isStandalone==='function' && isStandalone()) return 'Installed web app';
+  return 'Web browser';
+}
+function openAbout(){
+  document.getElementById('intro').classList.add('hidden');
+  const el=document.getElementById('about');
+  el.classList.remove('hidden');
+  const online = (ows && ows.readyState===1) ? '<span style="color:var(--green)">connected</span>' : '<span style="color:var(--gray)">not connected</span>';
+  el.innerHTML=`
+    <div class="card">
+      <div class="section-title">${ico('shield',17)} About Quizard</div>
+      <div class="tier-row"><span>Version</span><span class="tier-rp">v${APP_VERSION}</span></div>
+      <div class="tier-row"><span>Running as</span><span class="tier-rp">${appPlatform()}</span></div>
+      <div class="tier-row"><span>Online server</span><span class="tier-rp">${online}</span></div>
+      ${account?`<div class="tier-row"><span>Plan</span><span class="tier-rp">${isPremium()?(account.premiumPlan||'family member'):'free'}</span></div>`:''}
+      <div class="mlabel">What's new</div>
+      ${CHANGELOG.map(([v,d])=>`<div class="tier-row"><span style="flex-shrink:0"><b>v${v}</b></span><span style="font-weight:400;font-size:12.5px;color:var(--gray);text-align:right">${d}</span></div>`).join('')}
+      <div class="mlabel">SamTech</div>
+      <p class="section-instr">Quizard is founded and run by middle schoolers working toward college. Questions are procedurally generated and hand-checked; spot a bad one, tap Report and we fix it.</p>
+      <p class="section-instr">Play anywhere: <b>spaceballtwo.github.io/quizard</b> &middot; Downloads &amp; code: <b>github.com/spaceballtwo/quizard</b></p>
+      <p class="section-instr" style="font-size:11.5px">Not affiliated with or endorsed by SSATB.</p>
+    </div>`;
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+/* ===== Focus Sprint: 25 minutes, one goal — close your weakest gap ===== */
+let focusTimer=null, focusLeft=0, focusScore=0, focusTotal=0, focusTarget=-1, focusCurrent=null, focusAnswered=false, focusXP=0;
+function openFocus(){
+  if (!account){ showToast('Log into an account first'); return; }
+  document.getElementById('intro').classList.add('hidden');
+  const el=document.getElementById('focus');
+  el.classList.remove('hidden');
+  const gaps=gapTopics();
+  focusTarget = gaps.length ? gaps[0] : -1;
+  el.innerHTML=`
+    <div class="card" style="text-align:center">
+      <div style="color:var(--gold)">${ico('flame',40)}</div>
+      <div class="section-title" style="justify-content:center">Focus Sprint</div>
+      <p class="section-instr" style="text-align:center">25 minutes. Phone down, brain on.<br>
+        ${focusTarget>=0
+          ? `One goal: close your weakest gap — <b>${TOPICS[focusTarget].title}</b>. Half the questions aim right at it.`
+          : `No open gaps right now, so this sprint is a full-power mixed session at your level.`}</p>
+      <p class="section-instr" style="text-align:center">Every question counts toward XP, RP, skill, and your Knowledge Map.</p>
+      <button class="btn" onclick="startFocus()">Start the sprint</button>
+      <button class="btn secondary" onclick="goHome()">Back to menu</button>
+    </div>`;
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function startFocus(){
+  focusLeft=25*60; focusScore=0; focusTotal=0; focusXP=0;
+  clearInterval(focusTimer);
+  focusTimer=setInterval(()=>{
+    focusLeft--;
+    const t=document.getElementById('focusTime');
+    if (t){ t.textContent=fmtTime(focusLeft); if (focusLeft<=60) t.style.color='var(--red)'; }
+    if (focusLeft>0 && focusLeft<=5) playTick();
+    if (focusLeft<=0) endFocus();
+  },1000);
+  nextFocusQuestion();
+}
+function nextFocusQuestion(){
+  focusAnswered=false;
+  let q, label;
+  if (focusTarget>=0 && Math.random()<0.5){
+    const g=drawBag(TOPICS[focusTarget].gens,'fs_'+TOPICS[focusTarget].id); q=unseen(g); q._gen=g;
+    label='Gap: '+TOPICS[focusTarget].title;
+  } else {
+    const s=getStudyQuestion(true); q=s.q; label=s.label.replace('Math','Mixed'); q._vkind=s.vkind;
+  }
+  focusCurrent=q;
+  const el=document.getElementById('focus');
+  el.innerHTML=`
+    <div class="card">
+      <div class="study-head"><span>${ico('flame',14)} Focus Sprint · <span id="focusTime">${fmtTime(focusLeft)}</span></span>
+        <span class="study-score">${focusScore}/${focusTotal} correct</span></div>
+      <div style="font-size:12px;color:var(--gray);margin-bottom:8px">${label}</div>
+      <div class="q-stem">${q.q}</div>${figHTML(q)}
+      ${q.choices.map((c,i)=>`<label class="choice" id="fc-${i}" onclick="focusAnswer(${i})"><span>${String.fromCharCode(65+i)}. ${c}</span></label>`).join('')}
+      <div id="fsExplain"></div>
+      <button class="btn secondary" style="margin-top:12px" onclick="endFocus()">End sprint early</button>
+    </div>`;
+  drawFigs();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function focusAnswer(i){
+  if (focusAnswered) return;
+  focusAnswered=true;
+  const q=focusCurrent, ok=(i===q.answer);
+  q.choices.forEach((c,idx)=>{ const l=document.getElementById('fc-'+idx); if(l){ l.classList.add('locked'); l.onclick=null; if(idx===q.answer) l.classList.add('correct'); else if(idx===i) l.classList.add('wrong'); } });
+  recordAnswer(ok); rpForAnswer(ok); updateSkill(ok, 1); noteTopicResult(q, ok);
+  if (q._vkind) updateVerbalSkill(q._vkind, ok);
+  if (!ok) recordMiss(q, '');
+  answerFX(ok, document.getElementById('fc-'+i), ok?'+10 XP':'');
+  if (ok){ focusScore++; focusXP+=10; addXP(10); playCorrect(); } else playWrong();
+  focusTotal++;
+  markActivity(); checkAchievements(); saveStore();
+  if (!ok){
+    const exp=document.getElementById('fsExplain');
+    if (exp){ exp.className='explain'; exp.innerHTML=`<b>Why:</b> ${q.why}`; }
+    setTimeout(nextFocusQuestion, 2600);
+  } else setTimeout(nextFocusQuestion, 900);
+}
+function endFocus(){
+  clearInterval(focusTimer);
+  const el=document.getElementById('focus'); if(!el) return;
+  const acc = focusTotal ? Math.round(focusScore/focusTotal*100) : 0;
+  const gapNote = focusTarget>=0 ? (()=>{ const v=topicVerdict(focusTarget);
+    return `<div class="tier-row"><span><b>${TOPICS[focusTarget].title}</b> after this sprint</span><span class="tier-rp">${v.acc!=null?Math.round(v.acc*100)+'% right':'measuring'} · ${v.cat==='gap'?'still a gap — keep at it':'gap closing!'}</span></div>`; })() : '';
+  if (focusTotal>=10 && acc>=80) celebrate();
+  el.innerHTML=`
+    <div class="card" style="text-align:center">
+      <div style="color:var(--gold)">${ico('flame',40)}</div>
+      <div class="section-title" style="justify-content:center">Sprint done</div>
+      <div class="score-big">${focusScore}/${focusTotal}</div>
+      <div class="score-sub">${acc}% correct · +${focusXP} XP</div>
+      ${gapNote}
+      <button class="btn" onclick="openFocus()">Another sprint</button>
+      <button class="btn secondary" onclick="goHome()">Back to menu</button>
+    </div>`;
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+/* ===== The gate: premium features send free accounts to the storefront ===== */
+function premiumGate(name){
+  if (isPremium()) return false;
+  showToast(name + ' is a Premium feature');
+  navTo('premium');
+  return true;
+}
+
+/* ===== Premium: the season pass. Beta preview — the button unlocks instantly, Stripe comes later. ===== */
+function openPremium(){
+  document.getElementById('intro').classList.add('hidden');
+  const el=document.getElementById('premium');
+  el.classList.remove('hidden');
+  const isP = isPremium();
+  const rowF=(name)=>`<div class="tier-row"><span>${name}</span><span class="tier-rp" style="color:var(--green)">free</span></div>`;
+  const rowP=(name,desc)=>`<div class="tier-row"><span><b>${name}</b>${desc?`<br><span style="font-weight:400;font-size:12px;color:var(--gray)">${desc}</span>`:''}</span><span class="tier-rp" style="color:var(--gold)">${ico('crown',12)}</span></div>`;
+  el.innerHTML=`
+    <div class="card">
+      <div class="section-title">${ico('crown',17)} Quizard Premium</div>
+      ${isP ? `
+        <div class="explain ok" style="margin-top:4px"><b>You're Premium.</b> Everything is unlocked — thanks for backing a small team.</div>
+        ${hasPerks() ? `
+          <div class="mlabel">${isUnlimited()?'Unlimited perks':'Family perks'}</div>
+          <div class="tier-row"><span><b>Midnight theme</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">the academy after dark</span></span>
+            <button class="seg" style="flex:none" onclick="toggleMidnight()">${account.theme==='midnight'?'Turn off':'Turn on'}</button></div>
+          <div class="tier-row"><span><b>Gold crown online</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">shows by your name in races and on the leaderboard</span></span><span class="tier-rp">${ico('crown',14)}</span></div>
+          <div class="tier-row"><span><b>Weekly plans from Sage</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">"Plan my week" — a day-by-day plan built from your numbers</span></span>
+            <button class="seg" style="flex:none" onclick="navTo('coach')">Open Sage</button></div>
+          ${isUnlimited() ? `
+          <div class="tier-row"><span><b>Deep Explanations</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">Sage thinks harder and answers longer — the why, not just the how</span></span><span class="tier-rp">${ico('bulb',14)}</span></div>
+          <div class="tier-row"><span><b>Daybreak theme</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">cool morning light — Unlimited only</span></span>
+            <button class="seg" style="flex:none" onclick="toggleDaybreak()">${account.theme==='daybreak'?'Turn off':'Turn on'}</button></div>` : ``}` : ``}
+        ${account.premiumPlan==='family' ? `
+          <div class="mlabel">Share with your family</div>
+          <p class="section-instr">Your plan covers up to 6 accounts on any device. Family members open Premium on their device and enter this code:</p>
+          <div style="text-align:center;margin:8px 0 12px"><span id="famCode" style="font-size:26px;font-weight:800;letter-spacing:5px;color:var(--navy)">${account.familyCode||'……'}</span></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-bottom:8px">
+            <button class="seg" style="flex:none" onclick="shareFamilyEmail()">${ico('paper',13)} Email the invite</button>
+            <button class="seg" style="flex:none" onclick="shareFamily()">Share&hellip;</button>
+            <button class="seg" style="flex:none" onclick="copyFamilyCode()">Copy code</button>
+          </div>` : ``}`
+      : `
+        <p class="section-instr">Everything included on both plans — pick the size that fits.</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0 6px">
+          <div style="border:1.5px solid var(--line);border-radius:12px;padding:14px 10px;text-align:center">
+            <div style="font-weight:700;color:var(--navy)">Solo</div>
+            <div style="margin:6px 0"><span style="font-size:26px;font-weight:800;color:var(--navy)">$75</span><span style="color:var(--gray);font-size:12px"> / 3 mo</span></div>
+            <div style="color:var(--gray);font-size:12px;margin-bottom:10px">1 account<br>Sage: 25 chats a day</div>
+            <button class="btn" style="margin:0" onclick="buyPremium('solo')">Get Solo</button>
+          </div>
+          <div style="border:1.5px solid var(--line);border-radius:12px;padding:14px 10px;text-align:center">
+            <div style="font-weight:700;color:var(--navy)">Unlimited</div>
+            <div style="margin:6px 0"><span style="font-size:26px;font-weight:800;color:var(--navy)">$100</span><span style="color:var(--gray);font-size:12px"> / 3 mo</span></div>
+            <div style="color:var(--gray);font-size:12px;margin-bottom:10px">1 account<br><b>unlimited everything</b><br>+ all perks + Deep Explanations</div>
+            <button class="btn" style="margin:0" onclick="buyPremium('unlimited')">Get Unlimited</button>
+          </div>
+          <div style="border:1.5px solid var(--gold);border-radius:12px;padding:14px 10px;text-align:center;position:relative">
+            <div style="position:absolute;top:-9px;left:50%;transform:translateX(-50%);background:var(--gold);color:#1a2136;font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;white-space:nowrap">BEST VALUE</div>
+            <div style="font-weight:700;color:var(--navy)">Family</div>
+            <div style="margin:6px 0"><span style="font-size:26px;font-weight:800;color:var(--navy)">$349</span><span style="color:var(--gray);font-size:12px"> / 3 mo</span></div>
+            <div style="color:var(--gray);font-size:12px;margin-bottom:10px">up to 6 accounts, each kid their own<br>all perks: crown, Midnight, weekly plans</div>
+            <button class="btn" style="margin:0" onclick="buyPremium('family')">Get Family</button>
+          </div>
+        </div>
+        <p class="section-instr" style="text-align:center;margin-top:6px">Beta preview: no card needed yet — tapping unlocks instantly while we're in beta.</p>
+        <div class="mlabel">Have a family code?</div>
+        <div style="display:flex;gap:6px">
+          <input id="famJoinCode" maxlength="8" placeholder="ABC123" style="flex:1;padding:9px 12px;border:1.5px solid var(--line);border-radius:8px;font-size:15px;letter-spacing:2px;text-transform:uppercase" />
+          <button class="btn" style="width:auto;padding:9px 16px;margin:0" onclick="joinFamily()">Join</button>
+        </div>`}
+      <div class="mlabel">Always free</div>
+      ${rowF('Study mode')}${rowF('Daily Challenge')}${rowF('Verbal practice')}${rowF('Diagnostic & Knowledge Map')}${rowF('Sage — 3 chats a day')}
+      <div class="mlabel">Premium</div>
+      ${rowP('Full Test','real SSAT rules with a score estimate')}
+      ${rowP('Sage, full strength','25 chats/day per kid — unlimited with Deep Explanations on the $100 plan')}
+      ${rowP('Parent Reports','progress, growth, and gaps — written out')}
+      ${rowP('Online races','live head-to-head with ratings')}
+      ${rowP('Review Misses','every wrong answer waits for revenge')}
+      <p class="section-instr" style="margin-top:12px">Founded and run by middle schoolers working toward college.</p>
+    </div>`;
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function familyInviteText(){
+  return 'You\'re invited to our Quizard family plan!\n\n'
+    + '1. Open Quizard: https://spaceballtwo.github.io/quizard/\n'
+    + '2. Create your own account (any name you like)\n'
+    + '3. Go to Premium in the sidebar and find "Have a family code?"\n'
+    + '4. Enter this code: ' + (account.familyCode||'') + '\n\n'
+    + 'That unlocks everything — your own progress, your own Sage coach, all of it.';
+}
+function shareFamilyEmail(){
+  if (!account || !account.familyCode){ showToast('Your family code is still being minted — one second'); osend({t:'family_create'}); return; }
+  location.href = 'mailto:?subject=' + encodeURIComponent('Join our Quizard family plan')
+    + '&body=' + encodeURIComponent(familyInviteText());
+}
+function shareFamily(){
+  if (!account || !account.familyCode){ showToast('Your family code is still being minted — one second'); osend({t:'family_create'}); return; }
+  if (navigator.share){ navigator.share({ title:'Join our Quizard family plan', text: familyInviteText() }).catch(()=>{}); }
+  else shareFamilyEmail();
+}
+function toggleMidnight(){
+  if (!hasMidnight()){ showToast('Midnight comes with Family and Unlimited plans'); return; }
+  account.theme = account.theme==='midnight' ? '' : 'midnight';
+  saveStore(); applyTheme(); openPremium();
+}
+function toggleDaybreak(){
+  if (!isUnlimited()){ showToast('Daybreak is an Unlimited perk'); return; }
+  account.theme = account.theme==='daybreak' ? '' : 'daybreak';
+  saveStore(); applyTheme(); openPremium();
+}
+function copyFamilyCode(){
+  if (!account || !account.familyCode){ showToast('Your family code is still being minted — one second'); osend({t:'family_create'}); return; }
+  try { navigator.clipboard.writeText(account.familyCode).then(()=>showToast('Code copied: '+account.familyCode)); }
+  catch(e){ showToast('Your code: '+account.familyCode); }
+}
+function joinFamily(){
+  if (!account){ showToast('Log into an account first'); return; }
+  const inp=document.getElementById('famJoinCode');
+  const code=(inp&&inp.value||'').trim().toUpperCase();
+  if (!code){ showToast('Enter your family code'); return; }
+  if (!account.onlineToken || !ows || ows.readyState!==1){ ensureOnlineIdentity(); showToast('Connecting — press Join again in a second'); return; }
+  osend({t:'family_join', code});
+}
+function buyPremium(plan){
+  if (!account){ showToast('Log into an account first'); return; }
+  account.premium = true; account.premiumPlan = plan||'solo';
+  if (plan==='family'){
+    store.familyPremium = true;                          // every account on this device
+    if (!account.onlineToken || !ows || ows.readyState!==1) ensureOnlineIdentity();
+    setTimeout(()=>osend({t:'family_create'}), 800);     // mint the shareable code once we're connected
+  }
+  saveStore();
+  celebrate();
+  showToast('Welcome to Premium!');
+  openPremium();
+  renderHome();
+  document.getElementById('intro').classList.add('hidden');
+}
+
+/* ===== One-time tour: every account gets walked through the app once ===== */
+let tourStep=0, tourOn=false;
+function tourSteps(){
+  const wide = window.innerWidth>=980;
+  return [
+    {t:'Welcome to Quizard', x:"Your SSAT training ground. Here's the 30-second tour — skip any time."},
+    {sel:'#nextUp', t:'Next up', x:'Quizard always picks your smartest next move and puts it right here. When in doubt, tap this.'},
+    {sel:'.koji-card', t:'Meet Sage', x:'Your coach. Ask for a hint, a lesson, or "what should I work on?" — a parent approves it once, then Sage lives bottom-left on every screen.'},
+    {sel:'#homeCourses', t:'Courses', x:'Lessons that build mastery topic by topic. The rings fill up as you go.'},
+    {sel:'#allModesBtn', t:'Everything else', x:'Full tests, practice, games, online races, the Knowledge Map, and settings all live under this button.'},
+    {sel:'.scratch-fab', t:'Scratch paper', x:'Bottom-right on every screen — work it out before you answer.'},
+    {sel: wide?'#sidebar':'.menu-fab', t:'Jump anywhere', x: wide?'The sidebar takes you straight to any mode.':'This menu button opens the sidebar from any screen.'},
+    {t:'One smart first move', x:'Take the 26-question diagnostic so Quizard can map what you already know and where the gaps are.', cta:true}
+  ];
+}
+function maybeTour(){
+  if (!account || account.tourDone || tourOn) return;
+  const main=document.getElementById('homeMain');
+  if (!main || main.classList.contains('hidden')) return;
+  tourOn=true; tourStep=0; renderTourStep();
+}
+function renderTourStep(){
+  clearTourHi();
+  const steps=tourSteps(), s=steps[tourStep];
+  let veil=document.getElementById('tourVeil');
+  if(!veil){ veil=document.createElement('div'); veil.id='tourVeil'; veil.onclick=tourNext; document.body.appendChild(veil); }
+  let card=document.getElementById('tourCard');
+  if(!card){ card=document.createElement('div'); card.id='tourCard'; document.body.appendChild(card); }
+  if(s.sel){ const el=document.querySelector(s.sel); if(el){ el.classList.add('tour-hi'); if(el.scrollIntoView) el.scrollIntoView({block:'center', behavior:'smooth'}); } }
+  card.innerHTML=`
+    <div style="font-weight:800;font-size:16px;color:var(--navy)">${s.t}</div>
+    <p style="font-size:13.5px;margin:6px 0 10px">${s.x}</p>
+    <div style="display:flex;align-items:center;gap:8px">
+      <span style="flex:1;font-size:11.5px;color:var(--gray)">${tourStep+1} of ${steps.length}</span>
+      <button class="seg" style="flex:none" onclick="endTour(false)">Skip</button>
+      ${s.cta?`<button class="btn" style="width:auto;padding:9px 16px" onclick="endTour(true)">Find my gaps</button>`
+             :`<button class="btn" style="width:auto;padding:9px 16px" onclick="tourNext()">Next</button>`}
+    </div>`;
+}
+function clearTourHi(){ document.querySelectorAll('.tour-hi').forEach(e=>e.classList.remove('tour-hi')); }
+function tourNext(){ tourStep++; if(tourStep>=tourSteps().length) endTour(false); else renderTourStep(); }
+function endTour(goDiag){
+  tourOn=false; clearTourHi();
+  const v=document.getElementById('tourVeil'); if(v) v.remove();
+  const c=document.getElementById('tourCard'); if(c) c.remove();
+  if(account && !account.tourDone){ account.tourDone=true; saveStore(); }
+  if(goDiag){ navTo('gaps'); if (isPremium() && !account.diagAt) startDiag(); }
+}
+
+/* ===== Windows install gate: web visitors on a PC get the download-the-app page ===== */
+let deferredInstall=null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall=e; });
+window.addEventListener('appinstalled', () => { igDismiss(); });
+function isStandalone(){ return matchMedia('(display-mode: standalone)').matches || window.navigator.standalone===true; }
+function installGate(){
+  if (location.protocol!=='https:' || isStandalone()) return;
+  const isWin=/Windows/i.test(navigator.userAgent);
+  const isIOS=/iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
+  const isAndroid=/Android/i.test(navigator.userAgent);
+  if (!isWin && !isIOS && !isAndroid) return;
+  let done=false; try{ done=!!localStorage.getItem('q_ig_done'); }catch(e){}
+  if (done) return;
+  const g=document.createElement('div');
+  g.id='installGate';
+  g.style.cssText='position:fixed;inset:0;z-index:80;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:20px;overflow:auto';
+  const winBody=`
+    <p class="section-instr" style="text-align:center">Quizard installs as a real Windows app — its own window, its own Start-menu icon, works offline.</p>
+    <button class="btn" id="igBtn" onclick="igInstall()">Install Quizard</button>
+    <div style="text-align:left;font-size:13.5px;margin:14px 0 4px">
+      <b>If the button doesn't do it:</b>
+      <p style="margin:6px 0">1. Look for the <b>install icon</b> at the right end of the address bar (Edge and Chrome show a tiny screen with a down arrow).</p>
+      <p style="margin:6px 0">2. Or open the browser menu (&hellip;) and choose <b>Apps &rarr; Install Quizard</b>.</p>
+      <p style="margin:6px 0">3. Open Quizard from your Start menu like any other app.</p>
+    </div>`;
+  const androidBody=`
+    <p class="section-instr" style="text-align:center">Quizard installs as a real Android app — home-screen icon, full screen, works offline.</p>
+    <button class="btn" id="igBtn" onclick="igInstall()">Install Quizard</button>
+    <div style="text-align:left;font-size:13.5px;margin:14px 0 4px">
+      <b>If the button doesn't do it:</b>
+      <p style="margin:6px 0">1. Open the Chrome menu (the three dots, top right).</p>
+      <p style="margin:6px 0">2. Tap <b>Install app</b> (or <b>Add to Home screen</b>), then confirm.</p>
+      <p style="margin:6px 0">3. Open <b>Quizard</b> from your home screen like any app.</p>
+    </div>`;
+  const iosBody=`
+    <p class="section-instr" style="text-align:center">Quizard installs on your home screen — full screen, its own icon, works offline.</p>
+    <div style="text-align:left;font-size:13.5px;margin:14px 0 4px">
+      <p style="margin:6px 0">1. Open this page in <b>Safari</b> (this only works there).</p>
+      <p style="margin:6px 0">2. Tap the <b>Share</b> button — the square with the arrow pointing up.</p>
+      <p style="margin:6px 0">3. Scroll down and tap <b>Add to Home Screen</b>, then <b>Add</b>.</p>
+      <p style="margin:6px 0">4. Open <b>Quizard</b> from your home screen like any app.</p>
+    </div>`;
+  g.innerHTML=`<div class="card" style="max-width:540px;text-align:center">
+    <h2 style="letter-spacing:1px">${isIOS?'Get Quizard on your iPhone or iPad':(isAndroid?'Get Quizard on your Android':'Get Quizard on your PC')}</h2>
+    ${isIOS?iosBody:(isAndroid?androidBody:winBody)}
+    <button class="btn secondary" onclick="igDismiss()">Keep playing in the browser</button>
+  </div>`;
+  document.body.appendChild(g);
+}
+function igInstall(){
+  if (deferredInstall){ deferredInstall.prompt(); deferredInstall.userChoice.then(()=>{ deferredInstall=null; igDismiss(); }); }
+  else showToast('Use the install icon in the address bar, or menu → Apps → Install Quizard');
+}
+function igDismiss(){ try{ localStorage.setItem('q_ig_done','1'); }catch(e){} const g=document.getElementById('installGate'); if(g) g.remove(); }
+
+/* ===== Parent Report — app computes the numbers, AI only writes the prose ===== */
+function reportUrl(){ return serverUrl().replace(/^ws/,'http') + '/report'; }
+function reportFacts(){
+  const a=account, s=a.stats;
+  const mastered = TOPICS.filter(t=>topicScore(t.id)>=TOPIC_MASTERY).map(t=>t.title);
+  const inProgress = TOPICS.filter(t=>{const v=topicScore(t.id); return v>0 && v<TOPIC_MASTERY;})
+    .map(t=>t.title+' ('+Math.min(topicScore(t.id),TOPIC_MASTERY)+'/'+TOPIC_MASTERY+')');
+  const missCounts={};
+  (a.misses||[]).forEach(m=>{ if(m.ti!=null && TOPICS[m.ti]) missCounts[TOPICS[m.ti].title]=(missCounts[TOPICS[m.ti].title]||0)+1; });
+  const focus=Object.entries(missCounts).sort((x,y)=>y[1]-x[1]).slice(0,3).map(([k,v])=>k+' ('+v+' recent misses)');
+  const verdicts = TOPICS.map((t,i)=>({t, v:topicVerdict(i)}));
+  const today = dateStr(new Date());
+  const base = (a.hist||[]).find(h=>h.d!==today) ? a.hist[0] : null;
+  const avgNow = ((a.skill||2)+(a.verbalSkill.analogies||2)+(a.verbalSkill.reading||2)+(a.verbalSkill.synonyms||2))/4;
+  const growth = (base && base.d!==today) ? {
+    since: base.d,
+    mathSkillChange:+(((a.skill||2)-base.sk).toFixed(1)),
+    analogiesChange:+(((a.verbalSkill.analogies||2)-base.va).toFixed(1)),
+    readingChange:+(((a.verbalSkill.reading||2)-base.vr).toFixed(1)),
+    synonymsChange:+(((a.verbalSkill.synonyms||2)-base.vs).toFixed(1)),
+    averageSkillChange:+((avgNow-(base.sk+base.va+base.vr+base.vs)/4).toFixed(1)),
+    questionsAnsweredSince:(s.answered||0)-base.ans,
+    estimatedScoreChange:(s.bestScaled && base.sc) ? s.bestScaled-base.sc : null
+  } : null;
+  return {
+    growth,
+    knowledgeGaps: verdicts.filter(x=>x.v.cat==='gap').map(x=>x.t.title),
+    strongTopics: verdicts.filter(x=>x.v.cat==='strong').map(x=>x.t.title),
+    tookDiagnostic: account.diagAt||null,
+    questionsAnswered:s.answered||0, correctAnswers:s.correct||0,
+    accuracyPct: s.answered ? Math.round(s.correct/s.answered*100) : 0,
+    currentStreakDays:a.streak||0, bestStreakDays:a.bestStreak||0,
+    mathSkillOutOf10:+((a.skill||2).toFixed(1)),
+    verbalSkillOutOf10:{ analogies:+((a.verbalSkill.analogies||2).toFixed(1)), reading:+((a.verbalSkill.reading||2).toFixed(1)), synonyms:+((a.verbalSkill.synonyms||2).toFixed(1)) },
+    averageSkillOutOf10:+((((a.skill||2)+(a.verbalSkill.analogies||2)+(a.verbalSkill.reading||2)+(a.verbalSkill.synonyms||2))/4).toFixed(1)),
+    topicsMastered:mastered, topicsInProgress:inProgress,
+    recentTroubleSpots:focus,
+    bestFullTestEstimate:s.bestScaled||null,
+    perfectPracticeSets:s.perfectSets||0
+  };
+}
+function reportFactsRows(f){
+  const row=(k,v)=>`<div class="tier-row"><span>${k}</span><span class="tier-rp" style="text-align:right">${v}</span></div>`;
+  return row('Questions answered', f.questionsAnswered+' ('+f.accuracyPct+'% correct)')
+    + row('Practice streak', f.currentStreakDays+' days &middot; best '+f.bestStreakDays)
+    + row('Estimated SSAT score', f.bestFullTestEstimate ? f.bestFullTestEstimate : 'no Full Test taken yet')
+    + row('Math skill', f.mathSkillOutOf10+' / 10')
+    + row('Analogies skill', f.verbalSkillOutOf10.analogies+' / 10')
+    + row('Reading skill', f.verbalSkillOutOf10.reading+' / 10')
+    + row('Synonyms skill', f.verbalSkillOutOf10.synonyms+' / 10')
+    + row('Average skill', f.averageSkillOutOf10+' / 10')
+    + (f.growth ? row('Growth since '+f.growth.since,
+        (f.growth.averageSkillChange>=0?'+':'')+f.growth.averageSkillChange+' average skill &middot; '
+        +(f.growth.mathSkillChange>=0?'+':'')+f.growth.mathSkillChange+' math &middot; '
+        +f.growth.questionsAnsweredSince+' questions answered'
+        +(f.growth.estimatedScoreChange!=null?' &middot; '+(f.growth.estimatedScoreChange>=0?'+':'')+f.growth.estimatedScoreChange+' est. score':'')) : '')
+    + row('Topics mastered', f.topicsMastered.length+' of '+TOPICS.length+(f.topicsMastered.length?': '+esc(f.topicsMastered.join(', ')):''))
+    + (f.topicsInProgress.length ? row('In progress', esc(f.topicsInProgress.join(', '))) : '')
+    + (f.knowledgeGaps.length ? row('Knowledge gaps', esc(f.knowledgeGaps.join(', '))) : '')
+    + (f.strongTopics.length ? row('Strengths', esc(f.strongTopics.join(', '))) : '')
+    + (f.recentTroubleSpots.length ? row('Trouble spots', esc(f.recentTroubleSpots.join(', '))) : '')
+    + (f.perfectPracticeSets ? row('Perfect practice sets', f.perfectPracticeSets) : '');
+}
+function openReport(){
+  if (!account){ showToast('Log into an account first'); return; }
+  if (premiumGate('Parent Report')) return;
+  if (!account.onlineToken || !ows || ows.readyState!==1) ensureOnlineIdentity();
+  document.getElementById('intro').classList.add('hidden');
+  const el=document.getElementById('parentreport');
+  el.classList.remove('hidden');
+  el.innerHTML=`
+    <div class="card">
+      <div class="section-title">${ico('paper',17)} Parent Report</div>
+      <p class="section-instr">For parents: every number below is computed by the app from your child's practice. The written summary is drafted by AI from those numbers only — nothing else is shared with it.</p>
+      ${account.coachConsent
+        ? `<button class="btn" id="repBtn" onclick="generateReport()">Write this week's report</button>`
+        : `<p class="section-instr"><b>A parent or guardian must approve AI features first.</b> The write-up is generated by Claude (Anthropic) from the stats below; reports are not stored.</p>
+           <button class="btn" onclick="reportConsent()">I'm a parent/guardian — approve</button>`}
+      <div id="reportOut"></div>
+      <div class="mlabel" style="margin-top:16px">Progress over time</div>
+      ${chartBlockHTML('repChart')}
+      <div class="mlabel" style="margin-top:12px">The numbers</div>
+      ${reportFactsRows(reportFacts())}
+    </div>`;
+  drawHistChart('repChart');
+}
+function reportConsent(){
+  account.coachConsent=true; saveStore();
+  if (ows && ows.readyState===1 && oMe) osend({t:'coach_consent'}); else ensureOnlineIdentity();
+  openReport();
+}
+function generateReport(){
+  const btn=document.getElementById('repBtn'); if(btn){ btn.disabled=true; btn.textContent='Writing…'; }
+  const done=()=>{ const b=document.getElementById('repBtn'); if(b){ b.disabled=false; b.textContent="Write this week's report"; } };
+  fetch(reportUrl(), { method:'POST', headers:{'content-type':'application/json'},
+    body: JSON.stringify({ name:account.onlineName, token:account.onlineToken, facts:reportFacts() }) })
+  .then(r=>r.json())
+  .then(d=>{
+    const out=document.getElementById('reportOut'); done(); if(!out) return;
+    if (d.reply){
+      const fm=s=>esc(s).replace(/\n\n/g,'</p><p style="margin-top:8px">').replace(/\n/g,'<br>');
+      out.innerHTML=`<div class="explain ok" style="margin-top:12px"><p>${fm(d.reply)}</p>
+        <div style="font-size:11px;color:var(--gray);margin-top:10px">Written by AI from the numbers below &middot; ${new Date().toLocaleDateString()}</div></div>`;
+    }
+    else if (d.error==='limit') out.innerHTML='<div class="explain" style="margin-top:12px">Report limit reached for today — try again tomorrow.</div>';
+    else if (d.error==='consent'){ account.coachConsent=false; saveStore(); openReport(); }
+    else if (d.error==='auth'){ ensureOnlineIdentity(); out.innerHTML='<div class="explain" style="margin-top:12px">Reconnecting your account — press the button again in a moment.</div>'; }
+    else if (d.error==='inactive') out.innerHTML='<div class="explain" style="margin-top:12px">Reports aren’t switched on yet — soon!</div>';
+    else out.innerHTML='<div class="explain" style="margin-top:12px">Something went wrong — try again in a moment.</div>';
+  })
+  .catch(()=>{ done(); const out=document.getElementById('reportOut'); if(out) out.innerHTML='<div class="explain" style="margin-top:12px">Can’t reach the server — are you online?</div>'; });
+}
+function coachClose(){
+  const page = coachTarget==='page';
+  coachTarget='panel';
+  const p=document.getElementById('coachPanel'); p.classList.add('hidden'); p.innerHTML='';
+  if (page) navTo('home');
+}
+
+/* ================= Scratch paper ================= */
+function toggleScratch(){
+  const p=document.getElementById('scratchPad');
+  p.classList.toggle('hidden');
+  if (!p.classList.contains('hidden')){ const t=document.getElementById('scratchText'); if(t) t.focus(); }
+}
+function clearScratch(){ const t=document.getElementById('scratchText'); if(t){ t.value=''; t.focus(); } }
+
+/* PWA: only when properly hosted (https) — the Mac app and file:// are untouched */
+if ('serviceWorker' in navigator && location.protocol === 'https:'){
+  navigator.serviceWorker.register('sw.js').catch(()=>{});
+}
+
+/* ---------- Init ---------- */
+document.querySelectorAll('[data-ico]').forEach(el => { el.innerHTML = ico(el.dataset.ico, +(el.dataset.sz||24)); });
+document.addEventListener('click', e => { if (e.target.closest('button, .choice, .chip, .tile, .mbtn, .snav, .tier-row')) playTap(); }, true);
+renderSidebar();
+loadStore();
+renderHome();
+autoOnline();
+installGate();
