@@ -249,6 +249,7 @@ export class QuizardLobby {
 
     const general = !ctx.q && ctx.progress;
     const deep = plan === 'unlimited' && (u.tutorSeason || 0) < 1500;   // Unlimited perk: deeper answers
+    const model = deep ? 'claude-sonnet-5' : 'claude-haiku-4-5-20251001'; // margins live here: Haiku ~5x cheaper
     const system = general ? `You are Coach, the friendly math tutor inside Quizard, an SSAT prep app used by students in grades 8-11.
 
 THE STUDENT'S CURRENT PROGRESS:
@@ -285,7 +286,9 @@ ${ctx.live ? `- THE STUDENT HAS NOT ANSWERED YET, so these rules override everyt
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'x-api-key': this.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-      body: JSON.stringify({ model: 'claude-sonnet-5', max_tokens: 2500, thinking: { type: 'adaptive' }, output_config: { effort: deep ? 'high' : 'medium' }, system, messages: msgs })
+      body: JSON.stringify(deep
+        ? { model, max_tokens: 2500, thinking: { type: 'adaptive' }, output_config: { effort: 'high' }, system, messages: msgs }
+        : { model, max_tokens: 2200, thinking: { type: 'enabled', budget_tokens: 1024 }, system, messages: msgs })
     });
     if (!resp.ok) return json({ error: 'upstream', status: resp.status, detail: (await resp.text()).slice(0, 300) }, 502);
     const data = await resp.json();
@@ -332,7 +335,7 @@ Warm and professional, like a good tutor's note home. Refer to the student as "y
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'x-api-key': this.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-      body: JSON.stringify({ model: 'claude-sonnet-5', max_tokens: 450, thinking: { type: 'disabled' }, system, messages: [{ role: 'user', content: 'Fact sheet: ' + facts }] })
+      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 450, thinking: { type: 'disabled' }, system, messages: [{ role: 'user', content: 'Fact sheet: ' + facts }] })
     });
     if (!resp.ok) return json({ error: 'upstream', status: resp.status, detail: (await resp.text()).slice(0, 300) }, 502);
     const data = await resp.json();
