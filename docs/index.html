@@ -233,6 +233,7 @@
   .coach-fab:hover { transform:scale(1.06); }
   @media (min-width:980px){ .coach-fab { left:196px; } #coachPanel { left:196px; } }
   .coach-fab:active { transform:scale(0.94); }
+  body.assessing .coach-fab { display:none; }
   .chiprow { display:flex; gap:6px; flex-wrap:wrap; padding:0 10px 10px; }
   .chip { background:#f4ebd0; border:1px solid var(--line); border-radius:999px; padding:6px 12px;
           font-size:12px; font-weight:600; color:var(--navy); cursor:pointer; }
@@ -434,7 +435,7 @@
 </div>
 
 <script>
-const APP_VERSION = '0.21.0';
+const APP_VERSION = '0.21.1';
 /* ===== Local accounts: each person has their own on-device SSAT account ===== */
 let store = { accounts: [], currentId: null };
 function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
@@ -2460,7 +2461,7 @@ function closeFullTest(){
   window.scrollTo({top:0,behavior:'smooth'});
 }
 function startFullTest(){
-  fullTest=true;
+  fullTest=true; applyAssessmentUI();
   const el=document.getElementById('fulltest'); el.classList.add('hidden'); el.innerHTML='';
   newSet(FT_N);
   testSecs=FT_SECS; testStartAt=Date.now();
@@ -2790,7 +2791,7 @@ function grade(force){
   awardRP(correct*rpS.gain - wrongChosen*rpS.loss);   // scaled by tier; blanks are neutral
   if (leveled) showToast(`Level up! You reached Level ${level}`);
   if (leveled || correct===TOTAL) celebrate(); else playCorrect();
-  if (fullTest){ fullTest=false; renderTestResults(correct, wrongChosen, blanks, perSection); }
+  if (fullTest){ fullTest=false; applyAssessmentUI(); renderTestResults(correct, wrongChosen, blanks, perSection); }
   else renderResults(correct, perSection, {gained, bonus});
 }
 
@@ -3170,7 +3171,7 @@ function onlineMsg(m){
     renderOnlineHome();
   }
   else if (m.t==='match_start'){
-    oState='racing'; oOpp=m.opp; oScore={you:0,opp:0};
+    oState='racing'; applyAssessmentUI(); oOpp=m.opp; oScore={you:0,opp:0};
     document.getElementById('online').innerHTML=`
       <div class="card" style="text-align:center">
         <div class="section-title" style="justify-content:center">${ico('swords',17)} Matched!</div>
@@ -3194,7 +3195,7 @@ function onlineMsg(m){
     oAnswered=true;
   }
   else if (m.t==='match_end'){
-    oState='idle';
+    oState='idle'; applyAssessmentUI();
     if(m.score) oScore=m.score;
     if(oMe){ oMe.rating=m.rating; if(m.won) oMe.wins++; else oMe.losses++; }
     if(account){ account.onlineRating=m.rating; saveStore(); renderRankChip(); }
@@ -3463,6 +3464,7 @@ function resetToHome(){
   document.getElementById('backBtn').classList.add('hidden');
   document.getElementById('formError').classList.add('hidden');
   coachClose();
+  diagActive=false; applyAssessmentUI();
   renderHome();
   document.getElementById('intro').classList.remove('hidden');
 }
@@ -3522,6 +3524,7 @@ function coachHost(){
 }
 function openCoachPage(){
   if (!account){ showToast('Log into an account first'); return; }
+  if (assessmentActive()){ showToast("Sage sits out during tests — show what YOU know"); return; }
   document.getElementById('intro').classList.add('hidden');
   const el=document.getElementById('coachpage');
   el.classList.remove('hidden');
@@ -3549,6 +3552,7 @@ function coachProgressCtx(){
 function coachOpenGeneral(){
   coachLiveAns=null;
   if (!account){ showToast('Log into an account first'); return; }
+  if (assessmentActive()){ showToast("Sage sits out during tests — show what YOU know"); return; }
   if (!account.onlineToken || !ows || ows.readyState!==1) ensureOnlineIdentity();   // coach needs your online identity; connect quietly
   coachCtx = coachProgressCtx(); coachMsgs = [];
   if (!account.coachConsent){ renderCoachConsent(); return; }
@@ -3565,6 +3569,7 @@ function screenQ(){
 }
 function coachOpenSmart(){   // the corner button: "explain THIS to me"
   if (!account){ showToast('Log into an account first'); return; }
+  if (assessmentActive()){ showToast("Sage sits out during tests — show what YOU know"); return; }
   const cur = screenQ();
   if (cur && cur.q && cur.q.choices){
     const q = cur.q;
@@ -3585,6 +3590,7 @@ function coachOpenSmart(){   // the corner button: "explain THIS to me"
 }
 function coachOpen(){
   if (!account){ showToast('Log into an account first'); return; }
+  if (assessmentActive()){ showToast("Sage sits out during tests — show what YOU know"); return; }
   if (!coachCtx){ showToast('Miss a question first — the Coach helps with the problem on screen'); return; }
   if (!account.onlineToken || !ows || ows.readyState!==1) ensureOnlineIdentity();
   if (!account.coachConsent){ renderCoachConsent(); return; }
@@ -3792,9 +3798,13 @@ function openGaps(){
   window.scrollTo({top:0,behavior:'smooth'});
 }
 /* Diagnostic: 2 questions from every topic, shuffled, no XP — pure measurement. */
-let diagQs=[], diagIdx=0, diagAnswered=false;
+let diagQs=[], diagIdx=0, diagAnswered=false, diagActive=false;
+/* Sage is banned wherever the score is supposed to measure the KID. */
+function assessmentActive(){ return !!(fullTest || diagActive || oState==='racing'); }
+function applyAssessmentUI(){ document.body.classList.toggle('assessing', assessmentActive()); }
 function startDiag(){
   if (!account){ showToast('Log into an account first'); return; }
+  diagActive=true; applyAssessmentUI();
   diagQs=[];
   TOPICS.forEach((t,i)=>{ for(let k=0;k<2;k++){ const g=drawBag(t.gens,'dg_'+t.id); const q=g(); q._gen=g; q._ti=i; diagQs.push(q); } });
   shuffle(diagQs); diagIdx=0; diagAnswered=false;
@@ -3827,6 +3837,7 @@ function diagAnswer(i){
   setTimeout(()=>{
     diagAnswered=false; diagIdx++;
     if (diagIdx>=diagQs.length){
+      diagActive=false; applyAssessmentUI();
       account.diagAt=dateStr(new Date()); saveStore();
       celebrate(); showToast('Diagnostic complete — here is your map');
       openGaps(); renderNextUp();
@@ -3836,6 +3847,7 @@ function diagAnswer(i){
 
 /* ===== About: version, platform, what's new ===== */
 const CHANGELOG = [
+  ['0.21.1','Sage sits out during the diagnostic, Full Test, and races — assessments measure YOU'],
   ['0.21.0','Free gets more: 3 Sage chats a day + the Knowledge Map. Unlimited gets Deep Explanations and the Daybreak theme'],
   ['0.20.3','Family plan is $349'],
   ['0.20.2','Family outranks everything: all perks (crown, weekly plans, Midnight) included for the whole family'],
