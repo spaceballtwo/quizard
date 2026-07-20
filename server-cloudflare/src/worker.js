@@ -157,8 +157,23 @@ export class QuizardLobby {
       this.queue = this.queue.filter(c => c !== conn);
       this.send(conn, { t: 'queue_cancelled' });
     }
+    else if (m.t === 'assess_start'){
+      if (!conn.user) return;
+      const u = await this.getUser(conn.user);
+      const mins = Math.min(45, Math.max(5, Number(m.mins) || 35));
+      u.assessUntil = Date.now() + mins * 60e3;
+      await this.putUser(conn.user, u);
+      this.send(conn, { t: 'assess', on: true });
+    }
+    else if (m.t === 'assess_end'){
+      if (!conn.user) return;
+      const u = await this.getUser(conn.user);
+      u.assessUntil = 0;
+      await this.putUser(conn.user, u);
+      this.send(conn, { t: 'assess', on: false });
+    }
     else if (m.t === 'answer'){
-      if (conn.match && m.n === conn.match.round) await this.roundAnswer(conn.match, conn, !!m.correct);
+      if (conn.match && m.n === conn.match.round) await this.roundAnswer(conn.match, conn, !!m.correct, m.key);
     }
     else if (m.t === 'set_vote'){
       if (!conn.user) return;
@@ -215,6 +230,7 @@ export class QuizardLobby {
     const u = await this.getUser(key);
     if (!u || !u.tokenHash || u.tokenHash !== await sha256(String(body.token || ''))) return json({ error: 'auth' }, 401);
     if (!u.coachConsent) return json({ error: 'consent' }, 403);
+    if (u.assessUntil && u.assessUntil > Date.now()) return json({ error: 'assessment' }, 403);
     const day = new Date().toISOString().slice(0, 10);
     if (u.tutorDay !== day){ u.tutorDay = day; u.tutorCount = 0; }
     // Caps sized so no plan can lose money even at the ceiling on the worst sales channel.
@@ -353,9 +369,13 @@ Warm and professional, like a good tutor's note home. Refer to the student as "y
     return counts;
   }
 
+  async lockForMatch(keys, on){
+    for (const k of keys){ const u = await this.getUser(k); if (u){ u.assessUntil = on ? Date.now() + 10 * 60e3 : 0; await this.putUser(k, u); } }
+  }
   async startMatch(a, b){
     const match = { id: this.nextMatchId++, players: [a, b], score: [0, 0], round: 0, answered: new Set(), roundWon: false, done: false, timer: null };
     a.match = b.match = match;
+    await this.lockForMatch([a.user, b.user], true);
     const ua = await this.getUser(a.user), ub = await this.getUser(b.user);
     this.send(a, { t: 'match_start', opp: { name: ub.name, rating: this.visibleRating(ub), flair: !!(ub.data && ['unlimited','family','family-member'].includes(ub.data.premiumPlan)) }, winPoints: WIN_POINTS });
     this.send(b, { t: 'match_start', opp: { name: ua.name, rating: this.visibleRating(ua), flair: !!(ua.data && ['unlimited','family','family-member'].includes(ua.data.premiumPlan)) }, winPoints: WIN_POINTS });
@@ -380,9 +400,15 @@ Warm and professional, like a good tutor's note home. Refer to the student as "y
     }, ROUND_TIMEOUT_MS);
   }
 
-  async roundAnswer(match, conn, correct){
+  async roundAnswer(match, conn, correct, key){
     if (match.done || match.roundWon || match.answered.has(conn)) return;
     match.answered.add(conn);
+    // both clients generate the identical question, so they must agree on which
+    // choice is correct — a disagreement means someone's client is lying
+    if (key != null){
+      if (match.roundKey == null || match.roundKeyN !== match.round){ match.roundKey = key; match.roundKeyN = match.round; }
+      else if (match.roundKey !== key) match.suspect = true;
+    }
     const i = match.players.indexOf(conn);
     if (correct){
       match.roundWon = true;
@@ -407,7 +433,18 @@ Warm and professional, like a good tutor's note home. Refer to the student as "y
     match.done = true;
     clearTimeout(match.timer);
     const w = match.players[wi], l = match.players[1 - wi];
+    await this.lockForMatch([w.user, l.user], false);
     const uw = await this.getUser(w.user), ul = await this.getUser(l.user);
+    if (match.suspect){
+      // clients disagreed on an answer key — someone's client lied; nobody's rating moves
+      uw.flagged = (uw.flagged || 0) + 1;
+      ul.flagged = (ul.flagged || 0) + 1;
+      await this.putUser(w.user, uw);
+      await this.putUser(l.user, ul);
+      match.players.forEach(p => this.send(p, { t: 'match_end', won: p === w, delta: 0, rating: (p === w ? uw : ul).rating, score: this.scoreFor(match, p), voided: true }));
+      match.players.forEach(p => { p.match = null; });
+      return;
+    }
     const expected = 1 / (1 + Math.pow(10, (ul.rating - uw.rating) / 400));
     const delta = Math.max(1, Math.round(24 * (1 - expected)));
     uw.rating += delta;
