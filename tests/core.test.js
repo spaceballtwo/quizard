@@ -84,6 +84,22 @@ account.verbalSkill.analogies=2;
 updateVerbalSkill('analogies', true);
 T('verbal skill moves', account.verbalSkill.analogies>2);
 
+// --- sage banned during assessments ---
+T('no assessment by default', assessmentActive()===false);
+fullTest=true; applyAssessmentUI();
+T('full test = assessment', assessmentActive()===true);
+coachMsgs=['sentinel']; coachOpenSmart();
+T('coach blocked in full test', coachMsgs[0]==='sentinel');   // untouched = open refused
+fullTest=false;
+diagActive=true;
+T('diagnostic = assessment', assessmentActive()===true);
+diagActive=false;
+oState='racing';
+T('racing = assessment', assessmentActive()===true);
+oState='idle';
+T('all clear after', assessmentActive()===false);
+coachMsgs=[];
+
 // --- tour lifecycle ---
 account.tourDone=false; maybeTour();
 T('tour starts', tourOn===true);
