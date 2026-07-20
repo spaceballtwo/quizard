@@ -32,6 +32,8 @@ export class QuizardLobby {
     this.storage = state.storage;
     this.queue = [];        // conns waiting for a match
     this.nextMatchId = 1;
+    this.userConns = new Map();   // key -> live conn (best effort; only valid while the DO is warm)
+    this.pending = new Map();     // challenged key -> { from, conn, ts }
   }
 
   async fetch(request){
@@ -69,8 +71,10 @@ export class QuizardLobby {
 
   onClose(conn){
     this.queue = this.queue.filter(c => c !== conn);
+    if (conn.user && this.userConns.get(conn.user) === conn) this.userConns.delete(conn.user);
     if (conn.match) this.forfeit(conn.match, conn);
   }
+  liveConn(key){ const c = this.userConns.get(key); return (c && c.ws.readyState === 1) ? c : null; }
 
   async getUser(key){ return await this.storage.get('u:' + key); }
   async putUser(key, u){ await this.storage.put('u:' + key, u); }
@@ -102,6 +106,7 @@ export class QuizardLobby {
       const salt = randHex(16);
       const u = { name: finalName, salt, hash: await hashPass(pass, salt), wins: 0, losses: 0, rating: 1000 };
       conn.user = key;
+      this.userConns.set(key, conn);
       const token = await this.issueToken(key, u);
       this.send(conn, { t: 'auth', ok: true, name: finalName, token, data: null, dataUpdatedAt: 0, ...this.publicStats(u) });
     }
@@ -111,6 +116,7 @@ export class QuizardLobby {
       const u = await this.getUser(key);
       if (!u || u.hash !== await hashPass(String(m.pass || ''), u.salt)){ conn.authFails++; return this.send(conn, { t: 'auth', ok: false, msg: 'Wrong name or password' }); }
       conn.user = key;
+      this.userConns.set(key, conn);
       const token = await this.issueToken(key, u);
       this.send(conn, { t: 'auth', ok: true, name: u.name, token, data: u.data || null, dataUpdatedAt: u.dataUpdatedAt || 0, ...this.publicStats(u) });
     }
@@ -119,6 +125,7 @@ export class QuizardLobby {
       const u = await this.getUser(key);
       if (!u || !u.tokenHash || u.tokenHash !== await sha256(String(m.token || ''))) return this.send(conn, { t: 'auth', ok: false, msg: 'Session expired — log in again' });
       conn.user = key;
+      this.userConns.set(key, conn);
       this.send(conn, { t: 'auth', ok: true, name: u.name, token: String(m.token), data: u.data || null, dataUpdatedAt: u.dataUpdatedAt || 0, ...this.publicStats(u) });
     }
     else if (m.t === 'logout'){
@@ -156,6 +163,60 @@ export class QuizardLobby {
     else if (m.t === 'cancel_queue'){
       this.queue = this.queue.filter(c => c !== conn);
       this.send(conn, { t: 'queue_cancelled' });
+    }
+    else if (m.t === 'friend_add'){
+      if (!conn.user) return;
+      const fkey = String(m.name || '').trim().toLowerCase().slice(0, 16);
+      if (!fkey || fkey === conn.user) return this.send(conn, { t: 'friend_result', ok: false, msg: "That's you!" });
+      const target = await this.getUser(fkey);
+      if (!target) return this.send(conn, { t: 'friend_result', ok: false, msg: 'No player with that name' });
+      const u = await this.getUser(conn.user);
+      u.friends = u.friends || [];
+      if (!u.friends.includes(fkey)){
+        if (u.friends.length >= 20) return this.send(conn, { t: 'friend_result', ok: false, msg: 'Friend list is full (20)' });
+        u.friends.push(fkey);
+        await this.putUser(conn.user, u);
+      }
+      this.send(conn, { t: 'friend_result', ok: true, name: target.name });
+      await this.sendFriends(conn);
+    }
+    else if (m.t === 'friend_remove'){
+      if (!conn.user) return;
+      const fkey = String(m.name || '').trim().toLowerCase();
+      const u = await this.getUser(conn.user);
+      u.friends = (u.friends || []).filter(k => k !== fkey);
+      await this.putUser(conn.user, u);
+      await this.sendFriends(conn);
+    }
+    else if (m.t === 'friends'){
+      if (!conn.user) return;
+      await this.sendFriends(conn);
+    }
+    else if (m.t === 'challenge'){
+      if (!conn.user || conn.match) return;
+      const fkey = String(m.name || '').trim().toLowerCase();
+      const tconn = this.liveConn(fkey);
+      const me = await this.getUser(conn.user);
+      if (!tconn) return this.send(conn, { t: 'challenge_result', ok: false, msg: 'They are not online right now' });
+      if (tconn.match) return this.send(conn, { t: 'challenge_result', ok: false, msg: 'They are mid-race — try again in a minute' });
+      this.pending.set(fkey, { from: conn.user, conn, ts: Date.now() });
+      this.send(tconn, { t: 'challenged', from: me.name, rating: this.visibleRating(me) });
+      this.send(conn, { t: 'challenge_result', ok: true, msg: 'Challenge sent!' });
+    }
+    else if (m.t === 'challenge_accept'){
+      if (!conn.user || conn.match) return;
+      const p = this.pending.get(conn.user);
+      this.pending.delete(conn.user);
+      if (!p || Date.now() - p.ts > 120e3 || p.conn.ws.readyState !== 1 || p.conn.match)
+        return this.send(conn, { t: 'challenge_result', ok: false, msg: 'That challenge expired' });
+      this.queue = this.queue.filter(c => c !== conn && c !== p.conn);
+      await this.startMatch(p.conn, conn);
+    }
+    else if (m.t === 'challenge_decline'){
+      if (!conn.user) return;
+      const p = this.pending.get(conn.user);
+      this.pending.delete(conn.user);
+      if (p && p.conn.ws.readyState === 1) this.send(p.conn, { t: 'challenge_result', ok: false, msg: 'They passed on the race' });
     }
     else if (m.t === 'assess_start'){
       if (!conn.user) return;
@@ -367,6 +428,18 @@ Warm and professional, like a good tutor's note home. Refer to the student as "y
     const counts = {};
     for (const u of users.values()){ if (u.vote) counts[u.vote] = (counts[u.vote] || 0) + 1; }
     return counts;
+  }
+
+  async sendFriends(conn){
+    const u = await this.getUser(conn.user);
+    const out = [];
+    for (const fkey of (u.friends || []).slice(0, 20)){
+      const f = await this.getUser(fkey);
+      if (!f) continue;
+      out.push({ name: f.name, rating: this.visibleRating(f), online: !!this.liveConn(fkey),
+                 flair: !!(f.data && ['unlimited','family','family-member'].includes(f.data.premiumPlan)) });
+    }
+    this.send(conn, { t: 'friends', list: out });
   }
 
   async lockForMatch(keys, on){
