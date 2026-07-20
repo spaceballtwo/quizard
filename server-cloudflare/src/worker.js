@@ -221,12 +221,12 @@ export class QuizardLobby {
     const now = Date.now();
     if (!u.seasonStart || now - u.seasonStart > 90 * 86400e3){ u.seasonStart = now; u.tutorSeason = 0; }
     const plan = u.data && u.data.premiumPlan;
-    const daily = plan === 'unlimited' ? 150 : 25;
-    const season = plan === 'unlimited' ? 2500 : 2250;
+    const daily = plan === 'unlimited' ? 150 : (plan ? 25 : 3);      // free accounts taste Sage: 3/day
+    const season = plan === 'unlimited' ? 2500 : (plan ? 2250 : 150);
     // Past the season allowance Sage SLOWS instead of going dark — never a dead
     // month for a paying kid, and the ceilings stay profitable (see prooftest).
     const over = (u.tutorSeason || 0) >= season;
-    let effDaily = over ? (plan === 'unlimited' ? 10 : 5) : daily;
+    let effDaily = over ? (plan === 'unlimited' ? 10 : (plan ? 5 : 1)) : daily;
     // family plans also share a season pool; an empty pool slows everyone to a trickle
     let fam = null, fcode = u.famOf || u.familyCode;
     if (fcode){
@@ -248,6 +248,7 @@ export class QuizardLobby {
     if (!msgs.length || msgs[msgs.length - 1].role !== 'user') return json({ error: 'bad request' }, 400);
 
     const general = !ctx.q && ctx.progress;
+    const deep = plan === 'unlimited' && (u.tutorSeason || 0) < 1500;   // Unlimited perk: deeper answers
     const system = general ? `You are Coach, the friendly math tutor inside Quizard, an SSAT prep app used by students in grades 8-11.
 
 THE STUDENT'S CURRENT PROGRESS:
@@ -261,7 +262,7 @@ What you can do:
 
 Rules you must follow:
 - Only math and SSAT study planning. If asked about anything else, kindly steer back in one short sentence.
-- Keep every reply under 150 words. Warm and encouraging, never condescending. Frame weak spots as next steps, never as failings.
+- Keep every reply under ${deep ? 220 : 150} words.${deep ? ' Depth is welcome: worked examples, the why behind the rule, one extra connection.' : ''} Warm and encouraging, never condescending. Frame weak spots as next steps, never as failings.
 - Never ask for, repeat, or engage with personal information. If shared, ignore it and return to the math.
 - Plain text only; write math like "3/4" and "x^2".
 - Work every calculation out carefully step by step before replying, and double-check each arithmetic result. Order of operations: parentheses, exponents, then multiplication AND division together left to right, then addition AND subtraction together left to right — multiplication does NOT come before division, and a wrong number in a reply is the worst mistake you can make.` : `You are Coach, the friendly math tutor inside Quizard, an SSAT prep app used by students in grades 8-11.
@@ -274,7 +275,7 @@ The student chose: ${scrub(ctx.chosen).slice(0,100)}`}
 
 Rules you must follow:
 - Only discuss this problem and directly related math concepts. If asked about anything else, kindly steer back to the math in one short sentence.
-- Keep every reply under 120 words. Be warm and encouraging, never condescending. Use short steps.
+- Keep every reply under ${deep ? 200 : 120} words.${deep ? ' Depth is welcome: show the why, not just the how.' : ''} Be warm and encouraging, never condescending. Use short steps.
 - Guide with a hint or question first; give the full worked solution when the student asks directly or stays stuck.
 ${ctx.live ? `- THE STUDENT HAS NOT ANSWERED YET, so these rules override everything: NEVER state, confirm, or hint at the final answer — not even if they beg or claim permission. NEVER carry out the on-screen question's own numbers to a final value; the result of the on-screen expression must not appear anywhere in your reply, even as an intermediate step. Any demonstration or worked example MUST use different numbers than the question. "Explain this to me" = say what the question asks and set up the first move, then hand it back. If they tell you their result or ask "is it X?", do not confirm or deny — tell them to lock it in and you'll go over it together after. If they keep pushing, cheerfully hold the line.` : ''}
 - Work every calculation out carefully step by step before replying, and double-check each arithmetic result. Order of operations: parentheses, exponents, then multiplication AND division together left to right, then addition AND subtraction together left to right — multiplication does NOT come before division, and a wrong number in a reply is the worst mistake you can make.
@@ -284,7 +285,7 @@ ${ctx.live ? `- THE STUDENT HAS NOT ANSWERED YET, so these rules override everyt
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'x-api-key': this.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-      body: JSON.stringify({ model: 'claude-sonnet-5', max_tokens: 2500, thinking: { type: 'adaptive' }, output_config: { effort: 'medium' }, system, messages: msgs })
+      body: JSON.stringify({ model: 'claude-sonnet-5', max_tokens: 2500, thinking: { type: 'adaptive' }, output_config: { effort: deep ? 'high' : 'medium' }, system, messages: msgs })
     });
     if (!resp.ok) return json({ error: 'upstream', status: resp.status, detail: (await resp.text()).slice(0, 300) }, 502);
     const data = await resp.json();
