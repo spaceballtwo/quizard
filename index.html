@@ -435,7 +435,7 @@
 </div>
 
 <script>
-const APP_VERSION = '0.21.2';
+const APP_VERSION = '0.22.0';
 /* ===== Local accounts: each person has their own on-device SSAT account ===== */
 let store = { accounts: [], currentId: null };
 function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
@@ -1947,6 +1947,7 @@ function ensureFields(a){
   if(typeof a.tourDone!=='boolean') a.tourDone=false;
   if(typeof a.premium!=='boolean') a.premium=false;
   if(typeof a.premiumPlan!=='string') a.premiumPlan='';
+  if(typeof a.freeTestUsed!=='boolean') a.freeTestUsed=false;
 }
 function dateStr(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function markActivity(){
@@ -2435,7 +2436,7 @@ let fullTest=false, testTimerId=null, testSecs=0, testStartAt=0;
 const FT_N=25, FT_SECS=30*60;
 
 function openFullTest(){
-  if (premiumGate('The Full Test')) return;
+  if (!isPremium() && account && account.freeTestUsed){ premiumGate('Unlimited Full Tests'); return; }
   document.getElementById('intro').classList.add('hidden');
   const best = account ? account.stats.bestScaled : 0;
   document.getElementById('fulltest').innerHTML = `
@@ -2461,6 +2462,7 @@ function closeFullTest(){
   window.scrollTo({top:0,behavior:'smooth'});
 }
 function startFullTest(){
+  if (!isPremium() && account && !account.freeTestUsed){ account.freeTestUsed=true; saveStore(); showToast('Your free Full Test — make it count!'); }
   fullTest=true; applyAssessmentUI();
   osend({t:'assess_start', mins:35});
   const el=document.getElementById('fulltest'); el.classList.add('hidden'); el.innerHTML='';
@@ -3013,7 +3015,6 @@ let ows=null, oState='idle', oMe=null, oOpp=null, oRound=0, oRaceQ=null, oAnswer
 function serverUrl(){ return store.serverUrl || 'wss://quizard-server.quizard.workers.dev'; }
 
 function openOnline(){
-  if (premiumGate('Online racing')) return;
   document.getElementById('intro').classList.add('hidden');
   document.getElementById('online').classList.remove('hidden');
   renderOnlineHome();
@@ -3061,6 +3062,7 @@ function voteScreenVisible(){ const el=document.getElementById('vote'); return e
 function renderOnlineHome(msg){
   const o=document.getElementById('online'); if(!o) return;
   if(!onlineScreenVisible()) return;
+  if (oMe) setTimeout(()=>osend({t:'friends'}), 50);
   o.innerHTML=`
   <div class="card">
     <div class="section-title">${ico('globe',17)} Online — live races</div>
@@ -3073,6 +3075,12 @@ function renderOnlineHome(msg){
       <p class="section-instr" style="margin:0 0 10px">Progress backs up to the cloud automatically.</p>
       <button class="btn" onclick="findMatch()">Find a match &rarr;</button>
       <button class="btn secondary" onclick="showLeaderboard()">Leaderboard</button>
+      <div class="mlabel">Friends</div>
+      <div id="friendBox"><p class="section-instr">Loading friends&hellip;</p></div>
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <input id="friendName" maxlength="16" placeholder="Friend's player name" style="flex:1;padding:9px 12px;border:1.5px solid var(--line);border-radius:8px" />
+        <button class="btn" style="width:auto;padding:9px 14px;margin:0" onclick="addFriend()">Add</button>
+      </div>
     ` : `
       <p class="section-instr" style="text-align:center">${msg ? '' : 'Connecting&hellip;'}</p>
       ${msg ? `<div class="err">${esc(msg)}</div>
@@ -3094,6 +3102,15 @@ function oconnect(cb){
   ows.onmessage = (ev)=>{ let m; try{ m=JSON.parse(ev.data); }catch(e){ return; } onlineMsg(m); };
 }
 function osend(obj){ if (ows && ows.readyState===1) ows.send(JSON.stringify(obj)); }
+function addFriend(){
+  const inp=document.getElementById('friendName');
+  const name=(inp&&inp.value||'').trim();
+  if(!name){ showToast("Type your friend's player name"); return; }
+  osend({t:'friend_add', name});
+  if(inp) inp.value='';
+}
+function challengeFriend(name){ osend({t:'challenge', name}); }
+function removeFriend(name){ osend({t:'friend_remove', name}); }
 function findMatch(){
   oState='queued';
   oconnect(()=>osend({t:'queue'}));
@@ -3110,7 +3127,7 @@ function showLeaderboard(){ oconnect(()=>osend({t:'leaderboard'})); }
 let syncTimer=null;
 function syncPayload(){ const a=account; return { xp:a.xp, rp:a.rp, streak:a.streak, bestStreak:a.bestStreak,
   lastPlayed:a.lastPlayed, achievements:a.achievements, stats:a.stats, bestRun:a.bestRun,
-  lastDaily:a.lastDaily, weekPoints:a.weekPoints, weekId:a.weekId, diff:a.diff, vote:a.vote, skill:a.skill, topics:a.topics, misses:a.misses, verbalSkill:a.verbalSkill, lessonsDone:a.lessonsDone, tstats:a.tstats, diagAt:a.diagAt, hist:a.hist, tourDone:a.tourDone, premium:a.premium, premiumPlan:a.premiumPlan, familyCode:a.familyCode||'', theme:a.theme||'' }; }
+  lastDaily:a.lastDaily, weekPoints:a.weekPoints, weekId:a.weekId, diff:a.diff, vote:a.vote, skill:a.skill, topics:a.topics, misses:a.misses, verbalSkill:a.verbalSkill, lessonsDone:a.lessonsDone, tstats:a.tstats, diagAt:a.diagAt, hist:a.hist, tourDone:a.tourDone, premium:a.premium, premiumPlan:a.premiumPlan, familyCode:a.familyCode||'', theme:a.theme||'', freeTestUsed:a.freeTestUsed }; }
 function syncUp(){ if(!oMe || !account) return; osend({t:'sync_up', data:syncPayload(), updatedAt:account.updatedAt||Date.now()}); }
 function scheduleSync(){ if(!oMe || !account || !ows || ows.readyState!==1) return; clearTimeout(syncTimer); syncTimer=setTimeout(syncUp, 3000); }
 function applySync(data){ if(!account || !data) return; Object.assign(account, data); ensureFields(account); syncXPFromAccount(); saveStore(); }
@@ -3218,6 +3235,39 @@ function onlineMsg(m){
         ${rows||'<div class="acct-empty">No players yet.</div>'}
         <button class="btn secondary" onclick="renderOnlineHome()">Back</button>
       </div>`;
+  }
+  else if (m.t==='friends'){
+    const box=document.getElementById('friendBox');
+    if (box){
+      box.innerHTML = (m.list&&m.list.length) ? m.list.map(f=>`
+        <div class="tier-row"><span>${f.online?'<span style="color:var(--green)">●</span>':'<span style="color:var(--gray)">○</span>'} ${f.flair?ico('crown',12)+' ':''}<b>${esc(f.name)}</b>${f.rating!=null?` <span style="font-weight:400;font-size:12px;color:var(--gray)">${f.rating}</span>`:''}</span>
+          <span style="display:flex;gap:6px">${f.online?`<button class="seg" style="flex:none" onclick="challengeFriend('${esc(f.name)}')">Race</button>`:''}
+          <button class="seg" style="flex:none" onclick="removeFriend('${esc(f.name)}')">&times;</button></span></div>`).join('')
+        : '<p class="section-instr">No friends yet — add one by their player name and race them directly.</p>';
+    }
+  }
+  else if (m.t==='friend_result'){
+    showToast(m.ok ? 'Added '+m.name+'!' : (m.msg||'Could not add friend'));
+  }
+  else if (m.t==='challenge_result'){
+    showToast(m.msg || (m.ok?'Challenge sent!':'Challenge failed'));
+  }
+  else if (m.t==='challenged'){
+    const o=document.getElementById('online');
+    const vis = o && !o.classList.contains('hidden');
+    playCoachChime();
+    if (vis){
+      const box=document.getElementById('friendBox');
+      const bar=document.createElement('div');
+      bar.className='explain ok';
+      bar.innerHTML=`<b>${esc(m.from)}</b> challenges you to a race!${m.rating!=null?' ('+m.rating+' rating)':''}
+        <div style="display:flex;gap:6px;margin-top:8px">
+        <button class="btn" style="margin:0" onclick="osend({t:'challenge_accept'}); this.parentNode.parentNode.remove()">Race!</button>
+        <button class="btn secondary" style="margin:0" onclick="osend({t:'challenge_decline'}); this.parentNode.parentNode.remove()">Not now</button></div>`;
+      if (box && box.parentNode) box.parentNode.insertBefore(bar, box);
+    } else {
+      showToast(esc(m.from)+' challenged you to a race — open Online to accept!');
+    }
   }
   else if (m.t==='family_code'){
     if (account){ account.familyCode=m.code; saveStore(); }
@@ -3388,7 +3438,6 @@ function practiceTopic(i){
   document.getElementById('study').classList.remove('hidden');
 }
 function openReview(){
-  if (premiumGate('Review Misses')) return;
   reviewEarly=false;
   if (account && account.misses.length && !dueMisses().length){
     const next=account.misses.map(m=>m.due).sort()[0];
@@ -3853,6 +3902,7 @@ function diagAnswer(i){
 
 /* ===== About: version, platform, what's new ===== */
 const CHANGELOG = [
+  ['0.22.0','Free tier reborn: Review Misses + online racing free, friends & challenges, one free Full Test, parent numbers free'],
   ['0.21.2','Spoof-proofing: server-enforced test locks (even second devices) and race answer verification'],
   ['0.21.1','Sage sits out during the diagnostic, Full Test, and races — assessments measure YOU'],
   ['0.21.0','Free gets more: 3 Sage chats a day + the Knowledge Map. Unlimited gets Deep Explanations and the Daybreak theme'],
@@ -4077,13 +4127,11 @@ function openPremium(){
           <button class="btn" style="width:auto;padding:9px 16px;margin:0" onclick="joinFamily()">Join</button>
         </div>`}
       <div class="mlabel">Always free</div>
-      ${rowF('Study mode')}${rowF('Daily Challenge')}${rowF('Verbal practice')}${rowF('Diagnostic & Knowledge Map')}${rowF('Sage — 3 chats a day')}
+      ${rowF('Study mode')}${rowF('Daily Challenge')}${rowF('Verbal practice')}${rowF('Diagnostic & Knowledge Map')}${rowF('Review Misses (spaced repetition)')}${rowF('Online races, friends & challenges')}${rowF('One Full Test + your parent numbers')}${rowF('Sage — 3 chats a day')}
       <div class="mlabel">Premium</div>
-      ${rowP('Full Test','real SSAT rules with a score estimate')}
+      ${rowP('Unlimited Full Tests','score history and season tracking')}
       ${rowP('Sage, full strength','25 chats/day per kid — unlimited with Deep Explanations on the $100 plan')}
-      ${rowP('Parent Reports','progress, growth, and gaps — written out')}
-      ${rowP('Online races','live head-to-head with ratings')}
-      ${rowP('Review Misses','every wrong answer waits for revenge')}
+      ${rowP('Parent Reports, written','the AI-drafted narrative on top of your free numbers')}
       <p class="section-instr" style="margin-top:12px">Founded and run by middle schoolers working toward college.</p>
     </div>`;
   window.scrollTo({top:0,behavior:'smooth'});
@@ -4314,7 +4362,6 @@ function reportFactsRows(f){
 }
 function openReport(){
   if (!account){ showToast('Log into an account first'); return; }
-  if (premiumGate('Parent Report')) return;
   if (!account.onlineToken || !ows || ows.readyState!==1) ensureOnlineIdentity();
   document.getElementById('intro').classList.add('hidden');
   const el=document.getElementById('parentreport');
@@ -4323,7 +4370,10 @@ function openReport(){
     <div class="card">
       <div class="section-title">${ico('paper',17)} Parent Report</div>
       <p class="section-instr">For parents: every number below is computed by the app from your child's practice. The written summary is drafted by AI from those numbers only — nothing else is shared with it.</p>
-      ${account.coachConsent
+      ${!isPremium()
+        ? `<div class="tier-row" style="border-left:4px solid var(--gold)"><span><b>The written story</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">an AI-drafted narrative of wins, gaps, and this week's plan — plus season-long score tracking</span></span><span class="tier-rp">${ico('crown',14)}</span></div>
+           <button class="btn" onclick="navTo('premium')">Go Premium</button>`
+        : account.coachConsent
         ? `<button class="btn" id="repBtn" onclick="generateReport()">Write this week's report</button>`
         : `<p class="section-instr"><b>A parent or guardian must approve AI features first.</b> The write-up is generated by Claude (Anthropic) from the stats below; reports are not stored.</p>
            <button class="btn" onclick="reportConsent()">I'm a parent/guardian — approve</button>`}
