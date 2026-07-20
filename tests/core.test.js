@@ -84,6 +84,19 @@ account.verbalSkill.analogies=2;
 updateVerbalSkill('analogies', true);
 T('verbal skill moves', account.verbalSkill.analogies>2);
 
+// --- free tier v2 ---
+account.premium=false; account.premiumPlan=''; store.familyPremium=false;
+openReview(); openOnline();
+T('review + online free (no bounce crash)', true);
+T('free test unused by default', account.freeTestUsed===false);
+startFullTest();
+T('first full test marks used', account.freeTestUsed===true);
+fullTest=false; applyAssessmentUI();
+T('freeTestUsed synced', syncPayload().freeTestUsed===true);
+openReport();
+T('report teaser renders for free', true);
+account.premium=true;
+
 // --- sage banned during assessments ---
 T('no assessment by default', assessmentActive()===false);
 fullTest=true; applyAssessmentUI();
