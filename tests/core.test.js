@@ -84,6 +84,28 @@ account.verbalSkill.analogies=2;
 updateVerbalSkill('analogies', true);
 T('verbal skill moves', account.verbalSkill.analogies>2);
 
+// --- diagnostic v2 ---
+store.diagState=null;
+const di=buildDiagItems();
+T('diag: 46 items', di.length===TOPICS.length*2+18);
+T('diag: 2 per math topic', TOPICS.every((t,i)=>di.filter(x=>x.ti===i).length===2));
+T('diag: 6+6+6 verbal', di.filter(x=>x.kind==='analogies').length===6 && di.filter(x=>x.kind==='synonyms').length===6 && di.filter(x=>x.kind==='reading').length===6);
+T('diag: reading carries passages', di.filter(x=>x.kind==='reading').every(x=>x.passage && x.passage.length>50));
+T('diag: all valid serializable MCs', di.every(x=>x.q.q && x.q.choices.length>=4 && x.q.choices[x.q.answer]!=null && x.q.why));
+T('skill seeding curve', accToSkill(0,10)===1.5 && accToSkill(5,10)===4.5 && accToSkill(10,10)===7.5);
+store.diagState={ items: di, idx: di.length, m:[14,9], v:{analogies:[3,2],synonyms:[2,1],reading:[1,1]} };
+account.diagAt=''; account.skill=2; account.verbalSkill={analogies:2,reading:2,synonyms:2};
+finishDiag();
+T('finish seeds math skill', account.skill===accToSkill(9,14));
+T('finish seeds verbal skills', account.verbalSkill.analogies===accToSkill(2,3));
+T('finish clears resume state', store.diagState===null);
+T('finish stamps diagAt', account.diagAt===dateStr(new Date()));
+const before=account.skill;
+store.diagState={ items: buildDiagItems(), idx: 999, m:[10,10], v:{analogies:[6,6],synonyms:[6,6],reading:[6,6]} };
+finishDiag();
+T('retake averages not overwrites', account.skill===+(((before)+7.5)/2).toFixed(1));
+diagActive=false; applyAssessmentUI();
+
 // --- free tier v2 ---
 account.premium=false; account.premiumPlan=''; store.familyPremium=false;
 openReview(); openOnline();
