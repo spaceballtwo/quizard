@@ -1,5 +1,5 @@
 
-const APP_VERSION = '0.22.0';
+const APP_VERSION = '0.23.0';
 /* ===== Local accounts: each person has their own on-device SSAT account ===== */
 let store = { accounts: [], currentId: null };
 function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
@@ -1363,7 +1363,7 @@ function renderNextUp(){
   const el=document.getElementById('nextUp'); if(!el || !account) return;
   let mode, title, sub;
   if (!account.diagAt){
-    mode='gaps'; title='Find your gaps'; sub='26-question diagnostic maps what you know';
+    mode='gaps'; title='Find your gaps'; sub='46-question diagnostic maps all four skills';
   } else if (dueMisses().length){
     const d=dueMisses().length;
     mode='review'; title='Review your misses'; sub=d+' review'+(d===1?'':'s')+' due today · spaced just right';
@@ -3397,10 +3397,13 @@ function openGaps(){
       <div class="section-title">${ico('flag',17)} Knowledge Map</div>
       <p class="section-instr">${account.diagAt
         ? 'Built from your diagnostic ('+account.diagAt+') and everything you answer, in every mode. It updates as you play.'
-        : 'Take the diagnostic — 26 questions, two from each topic — and Quizard maps what you know and what to work on.'}</p>
-      ${account.diagAt
-        ? `<button class="btn secondary" onclick="startDiag()">Retake the diagnostic</button>`
-        : `<button class="btn" onclick="startDiag()">Start the diagnostic (26 questions)</button>`}
+        : 'Take the diagnostic — every math topic plus analogies, synonyms, and reading, about 30 minutes — and Quizard maps all four skills and every gap.'}</p>
+      ${store.diagState && store.diagState.idx>0 && store.diagState.idx<store.diagState.items.length
+        ? `<button class="btn" onclick="startDiag(true)">Resume the diagnostic (question ${store.diagState.idx+1} of ${store.diagState.items.length})</button>
+           <button class="btn secondary" onclick="startDiag()">Start over instead</button>`
+        : account.diagAt
+        ? `<button class="btn secondary" onclick="startDiag()">Retake the diagnostic (46 questions)</button>`
+        : `<button class="btn" onclick="startDiag()">Start the diagnostic (46 questions)</button>`}
       <div class="mlabel">Everything so far</div>
       ${chartBlockHTML('gapChart')}
       ${reportFactsRows(reportFacts())}
@@ -3415,30 +3418,52 @@ function openGaps(){
   window.scrollTo({top:0,behavior:'smooth'});
 }
 /* Diagnostic: 2 questions from every topic, shuffled, no XP — pure measurement. */
-let diagQs=[], diagIdx=0, diagAnswered=false, diagActive=false;
+let diagAnswered=false, diagActive=false;
 /* Sage is banned wherever the score is supposed to measure the KID. */
 function assessmentActive(){ return !!(fullTest || diagActive || oState==='racing'); }
 function applyAssessmentUI(){ document.body.classList.toggle('assessing', assessmentActive()); }
-function startDiag(){
+/* Diagnostic v2: every math topic AND every verbal section. Resumable (device-local),
+   seeds all four skills, ends in a placement summary. ~46 questions, ~30 min. */
+function buildDiagItems(){
+  const items=[];
+  TOPICS.forEach((t,i)=>{ for(let k=0;k<2;k++){
+    const g=drawBag(t.gens,'dg_'+t.id); const q=g();
+    items.push({ q:{q:q.q, choices:q.choices, answer:q.answer, why:q.why, draw:q.draw||null}, ti:i, kind:'math' });
+  }});
+  shuffle(items);
+  for(let k=0;k<6;k++){ const q=Math.random()<0.12?choice(POOL.analogies):genAnalogy();
+    items.push({ q:{q:q.q, choices:q.choices, answer:q.answer, why:q.why}, kind:'analogies' }); }
+  for(let k=0;k<6;k++){ const q=unseen(()=>choice(POOL.synonyms));
+    items.push({ q:{q:q.q, choices:q.choices, answer:q.answer, why:q.why}, kind:'synonyms' }); }
+  pick(POOL.reading, 2).forEach(p=>{ pick(p.questions, 3).forEach(q=>
+    items.push({ q:{q:q.q, choices:q.choices, answer:q.answer, why:q.why}, passage:p.passage, kind:'reading' })); });
+  return items;
+}
+function startDiag(resume){
   if (!account){ showToast('Log into an account first'); return; }
   diagActive=true; applyAssessmentUI();
-  osend({t:'assess_start', mins:20});
-  diagQs=[];
-  TOPICS.forEach((t,i)=>{ for(let k=0;k<2;k++){ const g=drawBag(t.gens,'dg_'+t.id); const q=g(); q._gen=g; q._ti=i; diagQs.push(q); } });
-  shuffle(diagQs); diagIdx=0; diagAnswered=false;
+  osend({t:'assess_start', mins:35});
+  const st=store.diagState;
+  if (!(resume && st && st.items && st.idx < st.items.length)){
+    store.diagState = { items: buildDiagItems(), idx: 0, m:[0,0], v:{analogies:[0,0], synonyms:[0,0], reading:[0,0]} };
+  }
+  diagAnswered=false;
+  saveStore();
   renderDiagQ();
 }
+function diagKindLabel(k){ return k==='math'?'Math':k==='analogies'?'Analogies':k==='synonyms'?'Synonyms':'Reading'; }
 function renderDiagQ(){
   const el=document.getElementById('gaps');
-  const q=diagQs[diagIdx];
-  const pct=Math.round(diagIdx/diagQs.length*100);
+  const st=store.diagState, item=st.items[st.idx], q=item.q;
+  const pct=Math.round(st.idx/st.items.length*100);
   el.innerHTML=`
     <div class="card">
-      <div class="study-head"><span>Diagnostic</span><span class="study-score">${diagIdx+1} of ${diagQs.length}</span></div>
+      <div class="study-head"><span>Diagnostic · ${diagKindLabel(item.kind)}</span><span class="study-score">${st.idx+1} of ${st.items.length}</span></div>
       <div class="xp-track" style="margin-bottom:14px"><div style="height:100%;border-radius:999px;background:var(--gold);width:${pct}%"></div></div>
+      ${item.passage?`<div class="passage">${item.passage}</div>`:''}
       <div class="q-stem">${q.q}</div>${figHTML(q)}
       ${q.choices.map((c,i)=>`<label class="choice" id="dg-${i}" onclick="diagAnswer(${i})"><span>${String.fromCharCode(65+i)}. ${c}</span></label>`).join('')}
-      <p class="section-instr" style="margin-top:10px">No points, no pressure — this just finds what to work on.</p>
+      <p class="section-instr" style="margin-top:10px">No points, no pressure — quit anytime and resume where you left off.</p>
     </div>`;
   drawFigs();
   window.scrollTo({top:0,behavior:'smooth'});
@@ -3446,26 +3471,68 @@ function renderDiagQ(){
 function diagAnswer(i){
   if (diagAnswered) return;
   diagAnswered=true;
-  const q=diagQs[diagIdx], ok=(i===q.answer);
+  const st=store.diagState, item=st.items[st.idx], q=item.q, ok=(i===q.answer);
   q.choices.forEach((c,idx)=>{ const l=document.getElementById('dg-'+idx); if(l){ l.classList.add('locked'); l.onclick=null; if(idx===q.answer) l.classList.add('correct'); else if(idx===i) l.classList.add('wrong'); } });
-  noteTopicResult(q, ok);
+  if (item.kind==='math'){ noteTopicResult({q:q.q, _ti:item.ti}, ok); st.m[0]++; if(ok) st.m[1]++; }
+  else { st.v[item.kind][0]++; if(ok) st.v[item.kind][1]++; updateVerbalSkill(item.kind, ok); }
   if (ok) playCorrect(); else playWrong();
   answerFX(ok, document.getElementById('dg-'+i));
-  markActivity(); saveStore();
+  markActivity();
+  st.idx++;
+  saveStore();
+  if (st.idx===Math.ceil(st.items.length/2)) showToast('Halfway there — keep it up!');
   setTimeout(()=>{
-    diagAnswered=false; diagIdx++;
-    if (diagIdx>=diagQs.length){
-      diagActive=false; applyAssessmentUI();
-      osend({t:'assess_end'});
-      account.diagAt=dateStr(new Date()); saveStore();
-      celebrate(); showToast('Diagnostic complete — here is your map');
-      openGaps(); renderNextUp();
-    } else renderDiagQ();
+    diagAnswered=false;
+    if (st.idx>=st.items.length) finishDiag();
+    else renderDiagQ();
   }, ok?650:1400);
+}
+/* Accuracy seeds a starting skill: 0% → 1.5, 50% → 4.5, 100% → 7.5 on the 1-10 scale. */
+function accToSkill(c, n){ return n ? +(1.5 + (c/n)*6).toFixed(1) : 2; }
+function finishDiag(){
+  const st=store.diagState;
+  diagActive=false; applyAssessmentUI();
+  osend({t:'assess_end'});
+  const first = !account.diagAt;
+  const mSkill = accToSkill(st.m[1], st.m[0]);
+  account.skill = first ? mSkill : +(((account.skill||2)+mSkill)/2).toFixed(1);
+  for (const k of ['analogies','synonyms','reading']){
+    const est = accToSkill(st.v[k][1], st.v[k][0]);
+    account.verbalSkill[k] = first ? est : +(((account.verbalSkill[k]||2)+est)/2).toFixed(1);
+  }
+  account.diagAt = dateStr(new Date());
+  const summary = { m:st.m.slice(), v:{analogies:st.v.analogies.slice(), synonyms:st.v.synonyms.slice(), reading:st.v.reading.slice()} };
+  store.diagState = null;
+  saveStore();
+  celebrate();
+  renderDiagDone(summary);
+  renderNextUp();
+}
+function renderDiagDone(s){
+  const el=document.getElementById('gaps');
+  const gaps=gapTopics().slice(0,3).map(i=>TOPICS[i].title);
+  const strong=TOPICS.map((t,i)=>({t,v:topicVerdict(i)})).filter(x=>x.v.cat==='strong').slice(0,3).map(x=>x.t.title);
+  const row=(k,v)=>`<div class="tier-row"><span>${k}</span><span class="tier-rp">${v}</span></div>`;
+  el.innerHTML=`
+    <div class="card" style="text-align:center">
+      <div style="color:var(--gold)">${ico('star',40)}</div>
+      <div class="section-title" style="justify-content:center">Your placement</div>
+      <div style="text-align:left">
+        ${row('Math', s.m[1]+'/'+s.m[0]+' · skill est. '+(account.skill||2).toFixed(1))}
+        ${row('Analogies', s.v.analogies[1]+'/'+s.v.analogies[0]+' · skill est. '+(account.verbalSkill.analogies||2).toFixed(1))}
+        ${row('Synonyms', s.v.synonyms[1]+'/'+s.v.synonyms[0]+' · skill est. '+(account.verbalSkill.synonyms||2).toFixed(1))}
+        ${row('Reading', s.v.reading[1]+'/'+s.v.reading[0]+' · skill est. '+(account.verbalSkill.reading||2).toFixed(1))}
+        ${strong.length?row('Strong', strong.join(', ')):''}
+        ${gaps.length?row('Work on', gaps.join(', ')):''}
+      </div>
+      <button class="btn" onclick="openGaps()">See my Knowledge Map &rarr;</button>
+    </div>`;
+  window.scrollTo({top:0,behavior:'smooth'});
 }
 
 /* ===== About: version, platform, what's new ===== */
 const CHANGELOG = [
+  ['0.23.0','The full diagnostic: 46 questions across every math topic AND analogies, synonyms, reading — resumable, and it seeds all your skills'],
   ['0.22.0','Free tier reborn: Review Misses + online racing free, friends & challenges, one free Full Test, parent numbers free'],
   ['0.21.2','Spoof-proofing: server-enforced test locks (even second devices) and race answer verification'],
   ['0.21.1','Sage sits out during the diagnostic, Full Test, and races — assessments measure YOU'],
@@ -3769,7 +3836,7 @@ function tourSteps(){
     {sel:'#allModesBtn', t:'Everything else', x:'Full tests, practice, games, online races, the Knowledge Map, and settings all live under this button.'},
     {sel:'.scratch-fab', t:'Scratch paper', x:'Bottom-right on every screen — work it out before you answer.'},
     {sel: wide?'#sidebar':'.menu-fab', t:'Jump anywhere', x: wide?'The sidebar takes you straight to any mode.':'This menu button opens the sidebar from any screen.'},
-    {t:'One smart first move', x:'Take the 26-question diagnostic so Quizard can map what you already know and where the gaps are.', cta:true}
+    {t:'One smart first move', x:'Take the diagnostic — every math topic plus analogies, synonyms, and reading — so Quizard can map exactly what you know.', cta:true}
   ];
 }
 function maybeTour(){
