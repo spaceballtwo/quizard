@@ -9,7 +9,7 @@ Until A is done, in-app purchases cannot go live.
 
 ## B. Create the app record
 My Apps > "+" > New App:
-- Platform: iOS (macOS later)
+- Platform: check BOTH iOS and macOS (App Store distribution on both)
 - Name: **Quizard — SSAT Prep**
 - Subtitle: **Master the math, ace the test**
 - Primary language: English (US) · Bundle ID: **com.quizard.app** · SKU: quizard-001
