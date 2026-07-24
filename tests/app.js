@@ -1,5 +1,5 @@
 
-const APP_VERSION = '0.23.1';
+const APP_VERSION = '0.23.2';
 /* ===== Local accounts: each person has their own on-device SSAT account ===== */
 let store = { accounts: [], currentId: null };
 function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
@@ -3537,6 +3537,7 @@ function renderDiagDone(s){
 
 /* ===== About: version, platform, what's new ===== */
 const CHANGELOG = [
+  ['0.23.2','Prices matched to the App Store: $79.99 / $99.99 / $349.99 per season'],
   ['0.23.1','Account deletion wipes cloud data too; Restore Purchases; privacy policy published'],
   ['0.23.0','The full diagnostic: 46 questions across every math topic AND analogies, synonyms, reading — resumable, and it seeds all your skills'],
   ['0.22.0','Free tier reborn: Review Misses + online racing free, friends & challenges, one free Full Test, parent numbers free'],
@@ -3739,20 +3740,20 @@ function openPremium(){
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0 6px">
           <div style="border:1.5px solid var(--line);border-radius:12px;padding:14px 10px;text-align:center">
             <div style="font-weight:700;color:var(--navy)">Solo</div>
-            <div style="margin:6px 0"><span style="font-size:26px;font-weight:800;color:var(--navy)">$75</span><span style="color:var(--gray);font-size:12px"> / 3 mo</span></div>
+            <div style="margin:6px 0"><span style="font-size:26px;font-weight:800;color:var(--navy)">$79.99</span><span style="color:var(--gray);font-size:12px"> / 3 mo</span></div>
             <div style="color:var(--gray);font-size:12px;margin-bottom:10px">1 account<br>Sage: 25 chats a day</div>
             <button class="btn" style="margin:0" onclick="buyPremium('solo')">Get Solo</button>
           </div>
           <div style="border:1.5px solid var(--line);border-radius:12px;padding:14px 10px;text-align:center">
             <div style="font-weight:700;color:var(--navy)">Unlimited</div>
-            <div style="margin:6px 0"><span style="font-size:26px;font-weight:800;color:var(--navy)">$100</span><span style="color:var(--gray);font-size:12px"> / 3 mo</span></div>
+            <div style="margin:6px 0"><span style="font-size:26px;font-weight:800;color:var(--navy)">$99.99</span><span style="color:var(--gray);font-size:12px"> / 3 mo</span></div>
             <div style="color:var(--gray);font-size:12px;margin-bottom:10px">1 account<br><b>unlimited everything</b><br>+ all perks + Deep Explanations</div>
             <button class="btn" style="margin:0" onclick="buyPremium('unlimited')">Get Unlimited</button>
           </div>
           <div style="border:1.5px solid var(--gold);border-radius:12px;padding:14px 10px;text-align:center;position:relative">
             <div style="position:absolute;top:-9px;left:50%;transform:translateX(-50%);background:var(--gold);color:#1a2136;font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;white-space:nowrap">BEST VALUE</div>
             <div style="font-weight:700;color:var(--navy)">Family</div>
-            <div style="margin:6px 0"><span style="font-size:26px;font-weight:800;color:var(--navy)">$349</span><span style="color:var(--gray);font-size:12px"> / 3 mo</span></div>
+            <div style="margin:6px 0"><span style="font-size:26px;font-weight:800;color:var(--navy)">$349.99</span><span style="color:var(--gray);font-size:12px"> / 3 mo</span></div>
             <div style="color:var(--gray);font-size:12px;margin-bottom:10px">up to 6 accounts, each kid their own<br>all perks: crown, Midnight, weekly plans</div>
             <button class="btn" style="margin:0" onclick="buyPremium('family')">Get Family</button>
           </div>
