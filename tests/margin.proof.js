@@ -48,11 +48,11 @@ function famChatCost(members, eachPlan, days){
 const repMax = (100 + 70) * REPORT;            // season cap then 1/day trickle
 const repMaxUnl = (300 + 60) * REPORT;
 const scenarios = [
-  ['Solo $75 — honest max',        chatCost('solo',DAYS)+repMax,          75,  false],
-  ['Solo $75 — FRAUD spoofed unl', chatCost('unlimited',DAYS)+repMaxUnl,  75,  true],
-  ['Unlimited $100 — max',         chatCost('unlimited',DAYS)+repMaxUnl,  100, false],
-  ['Family $349 — 6 honest max',   famChatCost(6,'solo',DAYS)+6*repMax,   349, false],
-  ['Family $349 — 6 spoof unl',    famChatCost(6,'unlimited',DAYS)+6*repMaxUnl, 349, true],
+  ['Solo $79.99 — honest max',        chatCost('solo',DAYS)+repMax,          75,  false],
+  ['Solo $79.99 — FRAUD spoofed unl', chatCost('unlimited',DAYS)+repMaxUnl,  75,  true],
+  ['Unlimited $99.99 — max',         chatCost('unlimited',DAYS)+repMaxUnl,  100, false],
+  ['Family $349.99 — 6 honest max',   famChatCost(6,'solo',DAYS)+6*repMax,   349, false],
+  ['Family $349.99 — 6 spoof unl',    famChatCost(6,'unlimited',DAYS)+6*repMaxUnl, 349.99, true],
   ['Free account — honest max',    chatCost('',DAYS),                     0,   false],
 ];
 let allSafe=true, fraudWorst=0;
