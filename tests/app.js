@@ -1,5 +1,5 @@
 
-const APP_VERSION = '0.23.0';
+const APP_VERSION = '0.23.1';
 /* ===== Local accounts: each person has their own on-device SSAT account ===== */
 let store = { accounts: [], currentId: null };
 function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
@@ -1459,17 +1459,22 @@ function saveAccountEdits(){
 }
 function deleteAccount(){
   document.getElementById('accountBar').innerHTML = `<div class="acct-box">
-      <div class="acct-title">Delete "${account.name}"? This erases their XP and progress for good.</div>
-      <div class="acct-btns"><button class="btn danger" onclick="confirmDelete()">Delete</button>
+      <div class="acct-title">Delete "${account.name}"? This erases XP, progress, and any cloud data — everywhere, for good.</div>
+      <div class="acct-btns"><button class="btn danger" onclick="confirmDelete()">Delete everything</button>
         <button class="btn secondary" onclick="manageAccount()">Cancel</button></div>
     </div>`;
 }
 function confirmDelete(){
+  // best-effort cloud wipe first (App Store rule 5.1.1(v): deletion must cover the server too)
+  if (account.onlineName){
+    if (ows && ows.readyState===1) osend({t:'delete_account'});
+    else { try{ ensureOnlineIdentity(); }catch(e){} setTimeout(()=>osend({t:'delete_account'}), 1200); }
+  }
   store.accounts = store.accounts.filter(a => a.id !== account.id);
   store.currentId=null; account=null; saveStore();
   const is=document.getElementById('introStats'); if(is) is.classList.add('hidden');
   renderHome();
-  showToast('Account deleted');
+  showToast('Account and cloud data deleted');
 }
 
 /* ================= Fun: streaks, achievements, beat-the-clock ================= */
@@ -3532,6 +3537,7 @@ function renderDiagDone(s){
 
 /* ===== About: version, platform, what's new ===== */
 const CHANGELOG = [
+  ['0.23.1','Account deletion wipes cloud data too; Restore Purchases; privacy policy published'],
   ['0.23.0','The full diagnostic: 46 questions across every math topic AND analogies, synonyms, reading — resumable, and it seeds all your skills'],
   ['0.22.0','Free tier reborn: Review Misses + online racing free, friends & challenges, one free Full Test, parent numbers free'],
   ['0.21.2','Spoof-proofing: server-enforced test locks (even second devices) and race answer verification'],
@@ -3585,7 +3591,7 @@ function openAbout(){
       <div class="mlabel">SamTech</div>
       <p class="section-instr">Quizard is founded and run by middle schoolers working toward college. Questions are procedurally generated and hand-checked; spot a bad one, tap Report and we fix it.</p>
       <p class="section-instr">Play anywhere: <b>spaceballtwo.github.io/quizard</b> &middot; Downloads &amp; code: <b>github.com/spaceballtwo/quizard</b></p>
-      <p class="section-instr" style="font-size:11.5px">Not affiliated with or endorsed by SSATB.</p>
+      <p class="section-instr" style="font-size:11.5px">Privacy: we collect a player name and progress, nothing else — <a href="https://spaceballtwo.github.io/quizard/privacy.html" target="_blank" rel="noopener" style="color:var(--amber)">full policy</a>. Not affiliated with or endorsed by SSATB.</p>
     </div>`;
   window.scrollTo({top:0,behavior:'smooth'});
 }
@@ -3752,6 +3758,7 @@ function openPremium(){
           </div>
         </div>
         <p class="section-instr" style="text-align:center;margin-top:6px">Beta preview: no card needed yet — tapping unlocks instantly while we're in beta.</p>
+        <button class="btn secondary" onclick="restorePurchases()">Restore Purchases</button>
         <div class="mlabel">Have a family code?</div>
         <div style="display:flex;gap:6px">
           <input id="famJoinCode" maxlength="8" placeholder="ABC123" style="flex:1;padding:9px 12px;border:1.5px solid var(--line);border-radius:8px;font-size:15px;letter-spacing:2px;text-transform:uppercase" />
@@ -3784,6 +3791,13 @@ function shareFamily(){
   if (!account || !account.familyCode){ showToast('Your family code is still being minted — one second'); osend({t:'family_create'}); return; }
   if (navigator.share){ navigator.share({ title:'Join our Quizard family plan', text: familyInviteText() }).catch(()=>{}); }
   else shareFamilyEmail();
+}
+function restorePurchases(){
+  if (!account){ showToast('Log into an account first'); return; }
+  if (!account.onlineToken || !ows || ows.readyState!==1){ ensureOnlineIdentity(); }
+  // beta: purchases live on the synced account; reconnecting + sync restores them.
+  // when StoreKit ships, this also re-checks Apple receipts.
+  setTimeout(()=>{ openPremium(); showToast(isPremium() ? 'Purchases restored to this device' : 'No purchases found on this account yet'); }, 900);
 }
 function toggleMidnight(){
   if (!hasMidnight()){ showToast('Midnight comes with Family and Unlimited plans'); return; }
