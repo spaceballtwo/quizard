@@ -12,16 +12,16 @@ My Apps > "+" > New App:
 - Platform: iOS (macOS later)
 - Name: **Quizard — SSAT Prep**
 - Subtitle: **Master the math, ace the test**
-- Primary language: English (US) · Bundle ID: **com.samtech.quizard** · SKU: quizard-001
+- Primary language: English (US) · Bundle ID: **com.quizard.app** · SKU: quizard-001
 - Category: Education. Age rating questionnaire: answer everything "None"; DO NOT enroll in the Kids category.
 
 ## C. Subscriptions (Monetization > Subscriptions)
 Create ONE subscription group: **Quizard Premium**, with three 3-MONTH auto-renewable plans:
 | Reference name | Product ID | Duration | Price | Family Sharing |
 |---|---|---|---|---|
-| Solo Season | com.samtech.quizard.solo.season | 3 months | $74.99 | OFF |
-| Unlimited Season | com.samtech.quizard.unlimited.season | 3 months | $99.99 | OFF |
-| Family Season | com.samtech.quizard.family.season | 3 months | $349.99 | **ON** |
+| Solo Season | app.quizard.solo.season | 3 months | $74.99 | OFF |
+| Unlimited Season | app.quizard.unlimited.season | 3 months | $99.99 | OFF |
+| Family Season | app.quizard.family.season | 3 months | $349.99 | **ON** |
 (Family Sharing requires auto-renewable — that's why these are subscriptions, not one-time passes.)
 
 ## D. Things Claude builds once A–C exist
