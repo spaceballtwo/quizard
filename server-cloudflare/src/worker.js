@@ -164,6 +164,16 @@ export class QuizardLobby {
       this.queue = this.queue.filter(c => c !== conn);
       this.send(conn, { t: 'queue_cancelled' });
     }
+    else if (m.t === 'delete_account'){
+      if (!conn.user) return;
+      const key = conn.user;
+      const u = await this.getUser(key);
+      if (u && u.familyCode) await this.storage.delete('fam:' + u.familyCode);
+      await this.storage.delete('u:' + key);
+      this.userConns.delete(key);
+      conn.user = null;
+      this.send(conn, { t: 'account_deleted' });
+    }
     else if (m.t === 'friend_add'){
       if (!conn.user) return;
       const fkey = String(m.name || '').trim().toLowerCase().slice(0, 16);
