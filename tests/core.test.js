@@ -119,6 +119,21 @@ openReport();
 T('report teaser renders for free', true);
 account.premium=true;
 
+// --- store bridge ---
+T('no native store in stub', nativeStore()===null);
+account.premium=false; account.premiumPlan=''; store.familyPremium=false;
+window.quizardPurchase({ok:true, plan:'unlimited'});
+T('purchase callback applies plan', account.premium===true && account.premiumPlan==='unlimited');
+account.premium=false; account.premiumPlan='';
+window.quizardPurchase({ok:false, cancelled:true});
+T('cancel is a no-op', account.premium===false);
+window.quizardRestore(['solo','family']);
+T('restore picks best plan', account.premiumPlan==='family' && store.familyPremium===true);
+store.familyPremium=false; account.premium=true; account.premiumPlan='unlimited';
+window.quizardPrices({solo:'$79.99'});
+T('prices callback stores', livePrices && livePrices.solo==='$79.99');
+livePrices=null;
+
 // --- sage banned during assessments ---
 T('no assessment by default', assessmentActive()===false);
 fullTest=true; applyAssessmentUI();
