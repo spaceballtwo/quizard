@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <meta name="theme-color" content="#1a2136" />
 <link rel="manifest" href="manifest.webmanifest" />
 <link rel="apple-touch-icon" href="apple-touch-icon.png" />
@@ -435,7 +435,7 @@
 </div>
 
 <script>
-const APP_VERSION = '0.23.2';
+const APP_VERSION = '0.24.0';
 /* ===== Local accounts: each person has their own on-device SSAT account ===== */
 let store = { accounts: [], currentId: null };
 function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
@@ -3973,6 +3973,7 @@ function renderDiagDone(s){
 
 /* ===== About: version, platform, what's new ===== */
 const CHANGELOG = [
+  ['0.24.0','Real checkout on iOS via the App Store; live prices; restore purchases through Apple'],
   ['0.23.2','Prices matched to the App Store: $79.99 / $99.99 / $349.99 per season'],
   ['0.23.1','Account deletion wipes cloud data too; Restore Purchases; privacy policy published'],
   ['0.23.0','The full diagnostic: 46 questions across every math topic AND analogies, synonyms, reading — resumable, and it seeds all your skills'],
@@ -4006,7 +4007,7 @@ const CHANGELOG = [
   ['0.9.x','Sage the coach got a name and a page; parent reports; verbal skill levels; sounds everywhere']
 ];
 function appPlatform(){
-  if (window.webkit && window.webkit.messageHandlers) return 'Mac app';
+  if (window.webkit && window.webkit.messageHandlers) return /iPhone|iPad|iPod/.test(navigator.userAgent) ? 'iOS app' : 'Mac app';
   if (/Electron/i.test(navigator.userAgent)) return 'Windows app';
   if (typeof isStandalone==='function' && isStandalone()) return 'Installed web app';
   return 'Web browser';
@@ -4130,6 +4131,38 @@ function endFocus(){
   window.scrollTo({top:0,behavior:'smooth'});
 }
 
+/* ===== Native store bridge (iOS shell): real StoreKit checkout ===== */
+const STORE_PRODUCTS = { solo:'app.quizard.solo.season', unlimited:'app.quizard.unlimited.season', family:'app.quizard.family.season' };
+let livePrices = null;
+function nativeStore(){ return (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.buy) ? window.webkit.messageHandlers : null; }
+function applyPlan(plan){
+  account.premium = true; account.premiumPlan = plan;
+  if (plan==='family'){
+    store.familyPremium = true;
+    if (!account.onlineToken || !ows || ows.readyState!==1) ensureOnlineIdentity();
+    setTimeout(()=>osend({t:'family_create'}), 800);
+  }
+  saveStore();
+  celebrate();
+  showToast('Welcome to Premium!');
+  openPremium(); renderHome();
+  document.getElementById('intro').classList.add('hidden');
+}
+window.quizardPurchase = function(res){
+  if (res && res.ok && res.plan){ applyPlan(res.plan); return; }
+  if (res && res.cancelled) return;
+  if (res && res.pending){ showToast(res.msg||'Waiting for a parent to approve'); return; }
+  showToast((res && res.msg) || 'Purchase did not go through');
+};
+window.quizardRestore = function(plans){
+  if (plans && plans.length){
+    const plan = plans.includes('family') ? 'family' : plans.includes('unlimited') ? 'unlimited' : 'solo';
+    applyPlan(plan);
+    showToast('Purchases restored');
+  } else showToast('No purchases found for this Apple ID');
+};
+window.quizardPrices = function(p){ livePrices = p; if (typeof openPremium==='function'){ const el=document.getElementById('premium'); if (el && !el.classList.contains('hidden')) openPremium(); } };
+
 /* ===== The gate: premium features send free accounts to the storefront ===== */
 function premiumGate(name){
   if (isPremium()) return false;
@@ -4140,6 +4173,8 @@ function premiumGate(name){
 
 /* ===== Premium: the season pass. Beta preview — the button unlocks instantly, Stripe comes later. ===== */
 function openPremium(){
+  const native = nativeStore();
+  if (native && !livePrices) native.prices.postMessage('');
   document.getElementById('intro').classList.add('hidden');
   const el=document.getElementById('premium');
   el.classList.remove('hidden');
@@ -4176,25 +4211,26 @@ function openPremium(){
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0 6px">
           <div style="border:1.5px solid var(--line);border-radius:12px;padding:14px 10px;text-align:center">
             <div style="font-weight:700;color:var(--navy)">Solo</div>
-            <div style="margin:6px 0"><span style="font-size:26px;font-weight:800;color:var(--navy)">$79.99</span><span style="color:var(--gray);font-size:12px"> / 3 mo</span></div>
+            <div style="margin:6px 0"><span style="font-size:26px;font-weight:800;color:var(--navy)">${livePrices&&livePrices.solo?livePrices.solo:'$79.99'}</span><span style="color:var(--gray);font-size:12px"> / 3 mo</span></div>
             <div style="color:var(--gray);font-size:12px;margin-bottom:10px">1 account<br>Sage: 25 chats a day</div>
             <button class="btn" style="margin:0" onclick="buyPremium('solo')">Get Solo</button>
           </div>
           <div style="border:1.5px solid var(--line);border-radius:12px;padding:14px 10px;text-align:center">
             <div style="font-weight:700;color:var(--navy)">Unlimited</div>
-            <div style="margin:6px 0"><span style="font-size:26px;font-weight:800;color:var(--navy)">$99.99</span><span style="color:var(--gray);font-size:12px"> / 3 mo</span></div>
+            <div style="margin:6px 0"><span style="font-size:26px;font-weight:800;color:var(--navy)">${livePrices&&livePrices.unlimited?livePrices.unlimited:'$99.99'}</span><span style="color:var(--gray);font-size:12px"> / 3 mo</span></div>
             <div style="color:var(--gray);font-size:12px;margin-bottom:10px">1 account<br><b>unlimited everything</b><br>+ all perks + Deep Explanations</div>
             <button class="btn" style="margin:0" onclick="buyPremium('unlimited')">Get Unlimited</button>
           </div>
           <div style="border:1.5px solid var(--gold);border-radius:12px;padding:14px 10px;text-align:center;position:relative">
             <div style="position:absolute;top:-9px;left:50%;transform:translateX(-50%);background:var(--gold);color:#1a2136;font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;white-space:nowrap">BEST VALUE</div>
             <div style="font-weight:700;color:var(--navy)">Family</div>
-            <div style="margin:6px 0"><span style="font-size:26px;font-weight:800;color:var(--navy)">$349.99</span><span style="color:var(--gray);font-size:12px"> / 3 mo</span></div>
+            <div style="margin:6px 0"><span style="font-size:26px;font-weight:800;color:var(--navy)">${livePrices&&livePrices.family?livePrices.family:'$349.99'}</span><span style="color:var(--gray);font-size:12px"> / 3 mo</span></div>
             <div style="color:var(--gray);font-size:12px;margin-bottom:10px">up to 6 accounts, each kid their own<br>all perks: crown, Midnight, weekly plans</div>
             <button class="btn" style="margin:0" onclick="buyPremium('family')">Get Family</button>
           </div>
         </div>
-        <p class="section-instr" style="text-align:center;margin-top:6px">Beta preview: no card needed yet — tapping unlocks instantly while we're in beta.</p>
+        ${nativeStore() ? `<p class="section-instr" style="text-align:center;margin-top:6px">Billed through the App Store. Auto-renews each season; cancel anytime in Settings. <a href="https://spaceballtwo.github.io/quizard/privacy.html" style="color:var(--amber)">Privacy</a></p>`
+          : `<p class="section-instr" style="text-align:center;margin-top:6px">Beta preview: no card needed yet — tapping unlocks instantly while we're in beta.</p>`}
         <button class="btn secondary" onclick="restorePurchases()">Restore Purchases</button>
         <div class="mlabel">Have a family code?</div>
         <div style="display:flex;gap:6px">
@@ -4231,6 +4267,8 @@ function shareFamily(){
 }
 function restorePurchases(){
   if (!account){ showToast('Log into an account first'); return; }
+  const native = nativeStore();
+  if (native){ native.restore.postMessage(''); return; }
   if (!account.onlineToken || !ows || ows.readyState!==1){ ensureOnlineIdentity(); }
   // beta: purchases live on the synced account; reconnecting + sync restores them.
   // when StoreKit ships, this also re-checks Apple receipts.
@@ -4261,6 +4299,8 @@ function joinFamily(){
 }
 function buyPremium(plan){
   if (!account){ showToast('Log into an account first'); return; }
+  const native = nativeStore();
+  if (native){ native.buy.postMessage(STORE_PRODUCTS[plan||'solo']); return; }   // Apple checkout; result arrives via quizardPurchase
   account.premium = true; account.premiumPlan = plan||'solo';
   if (plan==='family'){
     store.familyPremium = true;                          // every account on this device
