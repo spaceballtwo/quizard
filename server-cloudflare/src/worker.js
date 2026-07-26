@@ -5,7 +5,7 @@
 // Deploy: npx wrangler deploy   →  wss://quizard-server.<your-subdomain>.workers.dev
 
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'content-type' };
-const WIN_POINTS = 3;
+const MATCH_FORMATS = { 11: 16, 21: 32 };   // points -> elo K factor
 const ROUND_TIMEOUT_MS = 45000;
 
 function enc(s){ return new TextEncoder().encode(s); }
@@ -156,9 +156,10 @@ export class QuizardLobby {
     }
     else if (m.t === 'queue'){
       if (!conn.user || conn.match || this.queue.includes(conn)) return;
-      const opp = this.queue.find(c => c.user !== conn.user);
-      if (opp){ this.queue = this.queue.filter(c => c !== opp); await this.startMatch(conn, opp); }
-      else { this.queue.push(conn); this.send(conn, { t: 'queued' }); }
+      conn.wantLen = MATCH_FORMATS[Number(m.len)] ? Number(m.len) : 11;
+      const opp = this.queue.find(c => c.user !== conn.user && c.wantLen === conn.wantLen);
+      if (opp){ this.queue = this.queue.filter(c => c !== opp); await this.startMatch(conn, opp, conn.wantLen); }
+      else { this.queue.push(conn); this.send(conn, { t: 'queued', len: conn.wantLen }); }
     }
     else if (m.t === 'cancel_queue'){
       this.queue = this.queue.filter(c => c !== conn);
@@ -182,12 +183,41 @@ export class QuizardLobby {
       if (!target) return this.send(conn, { t: 'friend_result', ok: false, msg: 'No player with that name' });
       const u = await this.getUser(conn.user);
       u.friends = u.friends || [];
-      if (!u.friends.includes(fkey)){
-        if (u.friends.length >= 20) return this.send(conn, { t: 'friend_result', ok: false, msg: 'Friend list is full (20)' });
+      if (u.friends.includes(fkey)) return this.send(conn, { t: 'friend_result', ok: true, name: target.name, msg: 'Already friends' });
+      target.friendReqs = (target.friendReqs || []).filter(k => k !== conn.user);
+      if ((u.friendReqs || []).includes(fkey)){
+        // they already asked US — adding them back = instant accept
+        u.friendReqs = u.friendReqs.filter(k => k !== fkey);
         u.friends.push(fkey);
-        await this.putUser(conn.user, u);
+        target.friends = target.friends || []; if (!target.friends.includes(conn.user)) target.friends.push(conn.user);
+        await this.putUser(conn.user, u); await this.putUser(fkey, target);
+        this.send(conn, { t: 'friend_result', ok: true, name: target.name });
+        const tc = this.liveConn(fkey); if (tc) await this.sendFriends(tc);
+      } else {
+        if (target.friendReqs.length >= 30) return this.send(conn, { t: 'friend_result', ok: false, msg: 'Their request box is full' });
+        target.friendReqs.push(conn.user);
+        await this.putUser(fkey, target);
+        this.send(conn, { t: 'friend_result', ok: true, name: target.name, requested: true });
+        const tc = this.liveConn(fkey);
+        if (tc){ this.send(tc, { t: 'friend_request', from: u.name }); await this.sendFriends(tc); }
       }
-      this.send(conn, { t: 'friend_result', ok: true, name: target.name });
+      await this.sendFriends(conn);
+    }
+    else if (m.t === 'friend_respond'){
+      if (!conn.user) return;
+      const fkey = String(m.name || '').trim().toLowerCase();
+      const u = await this.getUser(conn.user);
+      u.friendReqs = (u.friendReqs || []).filter(k => k !== fkey);
+      if (m.accept){
+        const other = await this.getUser(fkey);
+        if (other){
+          u.friends = u.friends || []; if (!u.friends.includes(fkey) && u.friends.length < 20) u.friends.push(fkey);
+          other.friends = other.friends || []; if (!other.friends.includes(conn.user) && other.friends.length < 20) other.friends.push(conn.user);
+          await this.putUser(fkey, other);
+          const oc = this.liveConn(fkey); if (oc){ this.send(oc, { t: 'friend_result', ok: true, name: u.name, msg: u.name + ' accepted your request!' }); await this.sendFriends(oc); }
+        }
+      }
+      await this.putUser(conn.user, u);
       await this.sendFriends(conn);
     }
     else if (m.t === 'friend_remove'){
@@ -209,8 +239,9 @@ export class QuizardLobby {
       const me = await this.getUser(conn.user);
       if (!tconn) return this.send(conn, { t: 'challenge_result', ok: false, msg: 'They are not online right now' });
       if (tconn.match) return this.send(conn, { t: 'challenge_result', ok: false, msg: 'They are mid-race — try again in a minute' });
-      this.pending.set(fkey, { from: conn.user, conn, ts: Date.now() });
-      this.send(tconn, { t: 'challenged', from: me.name, rating: this.visibleRating(me) });
+      const len = MATCH_FORMATS[Number(m.len)] ? Number(m.len) : 11;
+      this.pending.set(fkey, { from: conn.user, conn, ts: Date.now(), len });
+      this.send(tconn, { t: 'challenged', from: me.name, rating: this.visibleRating(me), len });
       this.send(conn, { t: 'challenge_result', ok: true, msg: 'Challenge sent!' });
     }
     else if (m.t === 'challenge_accept'){
@@ -220,7 +251,7 @@ export class QuizardLobby {
       if (!p || Date.now() - p.ts > 120e3 || p.conn.ws.readyState !== 1 || p.conn.match)
         return this.send(conn, { t: 'challenge_result', ok: false, msg: 'That challenge expired' });
       this.queue = this.queue.filter(c => c !== conn && c !== p.conn);
-      await this.startMatch(p.conn, conn);
+      await this.startMatch(p.conn, conn, p.len);
     }
     else if (m.t === 'challenge_decline'){
       if (!conn.user) return;
@@ -449,19 +480,25 @@ Warm and professional, like a good tutor's note home. Refer to the student as "y
       out.push({ name: f.name, rating: this.visibleRating(f), online: !!this.liveConn(fkey),
                  flair: !!(f.data && ['unlimited','family','family-member'].includes(f.data.premiumPlan)) });
     }
-    this.send(conn, { t: 'friends', list: out });
+    const reqs = [];
+    for (const rkey of (u.friendReqs || []).slice(0, 30)){
+      const f = await this.getUser(rkey);
+      if (f) reqs.push({ name: f.name, rating: this.visibleRating(f) });
+    }
+    this.send(conn, { t: 'friends', list: out, reqs });
   }
 
   async lockForMatch(keys, on){
     for (const k of keys){ const u = await this.getUser(k); if (u){ u.assessUntil = on ? Date.now() + 10 * 60e3 : 0; await this.putUser(k, u); } }
   }
-  async startMatch(a, b){
-    const match = { id: this.nextMatchId++, players: [a, b], score: [0, 0], round: 0, answered: new Set(), roundWon: false, done: false, timer: null };
+  async startMatch(a, b, len){
+    const winPoints = MATCH_FORMATS[len] ? len : 11;
+    const match = { id: this.nextMatchId++, players: [a, b], score: [0, 0], round: 0, answered: new Set(), roundWon: false, done: false, timer: null, winPoints };
     a.match = b.match = match;
     await this.lockForMatch([a.user, b.user], true);
     const ua = await this.getUser(a.user), ub = await this.getUser(b.user);
-    this.send(a, { t: 'match_start', opp: { name: ub.name, rating: this.visibleRating(ub), flair: !!(ub.data && ['unlimited','family','family-member'].includes(ub.data.premiumPlan)) }, winPoints: WIN_POINTS });
-    this.send(b, { t: 'match_start', opp: { name: ua.name, rating: this.visibleRating(ua), flair: !!(ua.data && ['unlimited','family','family-member'].includes(ua.data.premiumPlan)) }, winPoints: WIN_POINTS });
+    this.send(a, { t: 'match_start', opp: { name: ub.name, rating: this.visibleRating(ub), flair: !!(ub.data && ['unlimited','family','family-member'].includes(ub.data.premiumPlan)) }, winPoints: match.winPoints });
+    this.send(b, { t: 'match_start', opp: { name: ua.name, rating: this.visibleRating(ua), flair: !!(ua.data && ['unlimited','family','family-member'].includes(ua.data.premiumPlan)) }, winPoints: match.winPoints });
     setTimeout(() => this.nextRound(match), 2500);
   }
 
@@ -499,7 +536,7 @@ Warm and professional, like a good tutor's note home. Refer to the student as "y
       match.score[i]++;
       const u = await this.getUser(conn.user);
       match.players.forEach(p => this.send(p, { t: 'round_result', n: match.round, winner: u.name, youWon: p === conn, score: this.scoreFor(match, p) }));
-      if (match.score[i] >= WIN_POINTS) return this.endMatch(match, i);
+      if (match.score[i] >= match.winPoints) return this.endMatch(match, i);
       setTimeout(() => this.nextRound(match), 2200);
     } else {
       this.send(conn, { t: 'locked', n: match.round });
@@ -529,7 +566,8 @@ Warm and professional, like a good tutor's note home. Refer to the student as "y
       return;
     }
     const expected = 1 / (1 + Math.pow(10, (ul.rating - uw.rating) / 400));
-    const delta = Math.max(1, Math.round(24 * (1 - expected)));
+    const K = MATCH_FORMATS[match.winPoints] || 16;
+    const delta = Math.max(1, Math.round(K * (1 - expected)));
     uw.rating += delta;
     ul.rating = Math.max(100, ul.rating - delta);
     uw.wins++; ul.losses++;
