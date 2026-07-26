@@ -1,5 +1,5 @@
 
-const APP_VERSION = '0.24.0';
+const APP_VERSION = '0.26.0';
 /* ===== Local accounts: each person has their own on-device SSAT account ===== */
 let store = { accounts: [], currentId: null };
 function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
@@ -1517,6 +1517,7 @@ function ensureFields(a){
   if(typeof a.premium!=='boolean') a.premium=false;
   if(typeof a.premiumPlan!=='string') a.premiumPlan='';
   if(typeof a.freeTestUsed!=='boolean') a.freeTestUsed=false;
+  if(typeof a.stats.bestComposite!=='number') a.stats.bestComposite=0;
 }
 function dateStr(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function markActivity(){
@@ -2007,17 +2008,26 @@ const FT_N=25, FT_SECS=30*60;
 function openFullTest(){
   if (!isPremium() && account && account.freeTestUsed){ premiumGate('Unlimited Full Tests'); return; }
   document.getElementById('intro').classList.add('hidden');
+  /* the Real SSAT entry rides on this screen — see startRealTest() */
   const best = account ? account.stats.bestScaled : 0;
+  const bestC = account ? account.stats.bestComposite : 0;
   document.getElementById('fulltest').innerHTML = `
     <div class="card">
-      <div class="section-title">${ico('hourglass',18)} Full Test — Quantitative Section</div>
-      <p class="section-instr">This works exactly like the real SSAT quant section:</p>
-      <div class="tier-row"><span>${FT_N} questions, all visible — skip and come back freely</span></div>
-      <div class="tier-row"><span>30 minutes on the clock; it submits itself at 0:00</span></div>
-      <div class="tier-row"><span>No feedback until the end</span></div>
-      <div class="tier-row"><span>Real scoring: +1 per correct, −¼ per wrong, blanks cost nothing — so don't wild-guess</span></div>
-      ${best?`<p style="font-weight:700;color:var(--navy);margin-top:10px">Your best estimated score: ${best}</p>`:''}
-      <button class="btn" style="margin-top:10px" onclick="startFullTest()">Begin the test &rarr;</button>
+      <div class="section-title">${ico('hourglass',18)} Quick Test — 25 questions, 30:00</div>
+      <p class="section-instr">One mixed section (quant + verbal), real SSAT scoring: +1 correct, −¼ wrong, blanks free. No feedback until the end.</p>
+      ${best?`<p style="font-weight:700;color:var(--navy)">Best estimated score: ${best}</p>`:''}
+      <button class="btn" onclick="startFullTest()">Begin the Quick Test &rarr;</button>
+    </div>
+    <div class="card">
+      <div class="section-title">${ico('flame',18)} The Real SSAT — 4 sections, ~95 minutes</div>
+      <p class="section-instr">The full experience, structured like the actual test — sections lock behind you, each with its own clock:</p>
+      <div class="tier-row"><span><b>1 · Quantitative</b> — 25 questions</span><span class="tier-rp">30:00</span></div>
+      <div class="tier-row"><span><b>2 · Reading</b> — 4 passages, 16 questions</span><span class="tier-rp">20:00</span></div>
+      <div class="tier-row"><span><b>3 · Verbal</b> — 18 synonyms + 12 analogies</span><span class="tier-rp">15:00</span></div>
+      <div class="tier-row"><span><b>4 · Quantitative</b> — 25 questions</span><span class="tier-rp">30:00</span></div>
+      <p class="section-instr" style="margin-top:8px">Each area scored 500–800; composite 1500–2400 — the numbers schools actually look at.</p>
+      ${bestC?`<p style="font-weight:700;color:var(--navy)">Best composite: ${bestC}</p>`:''}
+      <button class="btn" onclick="startRealTest()">Begin the Real SSAT &rarr;</button>
       <button class="btn secondary" onclick="closeFullTest()">Back to menu</button>
     </div>`;
   document.getElementById('fulltest').classList.remove('hidden');
@@ -2090,6 +2100,133 @@ function renderTestResults(correct, wrongChosen, blanks, perSection){
 function closeFullTestToIntro(){
   goHome();
   openFullTest();
+}
+
+/* ===== The Real SSAT: four locked, individually timed sections ===== */
+let rtActive=false, rtSections=[], rtIdx=0, rtSecs=0, rtTimer=null, rtRes=[];
+function rtBuildSections(){
+  const quant = n => { const n1=Math.round(n*0.2), n3=Math.round(n*0.36), n2=n-n1-n3;
+    return shuffle(takeFrom(L1_GENS,n1).concat(takeFrom(L2_GENS,n2), takeFrom(L3_GENS,n3))); };
+  const reading = () => {
+    const out=[];
+    pick(POOL.reading.filter(p=>p.questions.length>=4), 4).forEach(p=>{ pick(p.questions, 4).forEach(q=>{ out.push({q:q.q,choices:q.choices,answer:q.answer,why:q.why,passage:p.passage}); }); });
+    return out;
+  };
+  const verbal = () => shuffle(drawSynonyms(18).concat(drawAnalogies(12)));
+  return [
+    { name:'Quantitative I',  secs:30*60, questions: quant(25), area:'quant' },
+    { name:'Reading',         secs:20*60, questions: reading(), area:'reading' },
+    { name:'Verbal',          secs:15*60, questions: verbal(),  area:'verbal' },
+    { name:'Quantitative II', secs:30*60, questions: quant(25), area:'quant' },
+  ];
+}
+function startRealTest(){
+  if (!account){ showToast('Log into an account first'); return; }
+  if (premiumGate('The Real SSAT')) return;
+  rtActive=true; applyAssessmentUI();
+  osend({t:'assess_start', mins:100});
+  rtSections=rtBuildSections(); rtIdx=0; rtRes=[];
+  document.getElementById('fulltest').classList.add('hidden');
+  rtIntro();
+}
+function rtIntro(){
+  const el=document.getElementById('realtest'); el.classList.remove('hidden');
+  const s=rtSections[rtIdx];
+  el.innerHTML=`
+    <div class="card" style="text-align:center">
+      <div class="section-title" style="justify-content:center">Section ${rtIdx+1} of 4 — ${s.name}</div>
+      <p class="section-instr" style="text-align:center">${s.questions.length} questions · ${fmtTime(s.secs)} on the clock.<br>Once you finish a section, it locks — just like the real test.</p>
+      <button class="btn" onclick="rtBegin()">Start section &rarr;</button>
+      ${rtIdx===0?`<button class="btn secondary" onclick="rtAbandon()">Never mind</button>`:''}
+    </div>`;
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function rtBegin(){
+  const s=rtSections[rtIdx];
+  rtSecs=s.secs;
+  const el=document.getElementById('realtest');
+  let inner=`<div class="card" style="position:sticky;top:8px;z-index:20;padding:10px 16px;display:flex;justify-content:space-between;align-items:center">
+    <span style="font-weight:700;color:var(--navy)">${s.name} &middot; ${s.questions.length} questions</span><span class="clock-time" id="rtTime">${fmtTime(rtSecs)}</span></div>`;
+  let lastPassage=null;
+  s.questions.forEach((q,i)=>{
+    if (q.passage && q.passage!==lastPassage){ inner+=`<div class="passage">${q.passage}</div>`; lastPassage=q.passage; }
+    inner+=`<div class="q"><div class="q-stem"><span class="q-num">${i+1}.</span> ${q.q}</div>${figHTML(q)}`
+      + q.choices.map((c,ci)=>`<label class="choice"><input type="radio" name="rt${i}" value="${ci}"><span>${String.fromCharCode(65+ci)}. ${c}</span></label>`).join('')
+      + `</div>`;
+  });
+  inner+=`<button class="btn" onclick="rtGrade(false)">Finish section &rarr;</button>`;
+  el.innerHTML=`<div class="card">${inner}</div>`;
+  drawFigs();
+  clearInterval(rtTimer);
+  rtTimer=setInterval(()=>{
+    rtSecs--;
+    const t=document.getElementById('rtTime');
+    if (t){ t.textContent=fmtTime(rtSecs); if(rtSecs<=60) t.style.background='var(--red)'; }
+    if (rtSecs===60) beep([880,660],0.14,'triangle',0.14);
+    if (rtSecs>0 && rtSecs<=5) playTick();
+    if (rtSecs<=0){ clearInterval(rtTimer); showToast("Time! Section locked."); rtGrade(true); }
+  },1000);
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function rtGrade(auto){
+  clearInterval(rtTimer);
+  const s=rtSections[rtIdx];
+  let correct=0, wrong=0, blank=0;
+  s.questions.forEach((q,i)=>{
+    const picked=document.querySelector(`input[name="rt${i}"]:checked`);
+    if (!picked){ blank++; return; }
+    const ok=(+picked.value===q.answer);
+    noteTopicResult(q, ok);
+    if (ok) correct++;
+    else { wrong++; recordMiss(q, q.passage||''); }
+  });
+  rtRes.push({ name:s.name, area:s.area, n:s.questions.length, correct, wrong, blank, raw: correct-0.25*wrong });
+  saveStore();
+  rtIdx++;
+  if (rtIdx>=rtSections.length) rtFinish();
+  else {
+    const el=document.getElementById('realtest');
+    el.innerHTML=`
+      <div class="card" style="text-align:center">
+        <div class="section-title" style="justify-content:center">Section ${rtIdx} locked in</div>
+        <p class="section-instr" style="text-align:center">Shake it off, breathe — next up: <b>${rtSections[rtIdx].name}</b>. The clock only runs inside sections.</p>
+        <button class="btn" onclick="rtIntro()">Ready — next section &rarr;</button>
+      </div>`;
+    window.scrollTo({top:0,behavior:'smooth'});
+  }
+}
+function rtScaled(raw, n){ return Math.round(500 + Math.max(0, raw)/n*300); }
+function rtFinish(){
+  rtActive=false; applyAssessmentUI();
+  osend({t:'assess_end'});
+  const areas={};
+  rtRes.forEach(r=>{ const a=areas[r.area]=areas[r.area]||{raw:0,n:0,correct:0,wrong:0,blank:0}; a.raw+=r.raw; a.n+=r.n; a.correct+=r.correct; a.wrong+=r.wrong; a.blank+=r.blank; });
+  const sq=rtScaled(areas.quant.raw, areas.quant.n), sr=rtScaled(areas.reading.raw, areas.reading.n), sv=rtScaled(areas.verbal.raw, areas.verbal.n);
+  const composite=sq+sr+sv;
+  let best=false;
+  if (account && composite>account.stats.bestComposite){ account.stats.bestComposite=composite; best=true; }
+  if (account && sq>account.stats.bestScaled){ account.stats.bestScaled=sq; }
+  markActivity(); saveStore();
+  if (best) celebrate();
+  const row=(k,v)=>`<div class="tier-row"><span>${k}</span><span class="tier-rp">${v}</span></div>`;
+  const el=document.getElementById('realtest');
+  el.innerHTML=`
+    <div class="card">
+      <div class="score-ring"><div class="score-big">&asymp; ${composite}</div><div class="score-sub">estimated SSAT composite (1500–2400)</div></div>
+      ${best?`<div class="verdict v-strong">★ New best composite!</div>`:''}
+      ${row('Quantitative', '&asymp; '+sq+' &middot; '+areas.quant.correct+'/'+areas.quant.n+' right, '+areas.quant.blank+' blank')}
+      ${row('Reading', '&asymp; '+sr+' &middot; '+areas.reading.correct+'/'+areas.reading.n+' right, '+areas.reading.blank+' blank')}
+      ${row('Verbal', '&asymp; '+sv+' &middot; '+areas.verbal.correct+'/'+areas.verbal.n+' right, '+areas.verbal.blank+' blank')}
+      <p style="color:var(--gray);font-size:12.5px;text-align:center;margin-top:10px">Rough estimates — the real test scales against everyone who took it. Misses went to Review; gaps went to your Knowledge Map.</p>
+      <button class="btn" onclick="goHome()">Back to menu</button>
+    </div>`;
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function rtAbandon(){
+  clearInterval(rtTimer);
+  rtActive=false; applyAssessmentUI();
+  osend({t:'assess_end'});
+  goHome();
 }
 
 /* ================= Set builder ================= */
@@ -2642,13 +2779,15 @@ function renderOnlineHome(msg){
       <div class="tier-row" style="margin-bottom:10px"><span>Show my rating to other players</span>
         <button class="seg ${oMe.showRating?'seg-on':''}" style="flex:none;min-width:64px" onclick="osend({t:'set_privacy', showRating:${oMe.showRating?'false':'true'}})">${oMe.showRating?'On':'Off'}</button></div>
       <p class="section-instr" style="margin:0 0 10px">Progress backs up to the cloud automatically.</p>
-      <button class="btn" onclick="findMatch()">Find a match &rarr;</button>
+      <button class="btn" onclick="findMatch(11)">Quick match — first to 11 &rarr;</button>
+      <button class="btn" onclick="findMatch(21)">Full match — first to 21 &rarr;</button>
       <button class="btn secondary" onclick="showLeaderboard()">Leaderboard</button>
+      <button class="btn secondary" onclick="navTo('friendspage')">Friends &amp; requests</button>
       <div class="mlabel">Friends</div>
       <div id="friendBox"><p class="section-instr">Loading friends&hellip;</p></div>
       <div style="display:flex;gap:6px;margin-top:6px">
         <input id="friendName" maxlength="16" placeholder="Friend's player name" style="flex:1;padding:9px 12px;border:1.5px solid var(--line);border-radius:8px" />
-        <button class="btn" style="width:auto;padding:9px 14px;margin:0" onclick="addFriend()">Add</button>
+        <button class="btn" style="width:auto;padding:9px 14px;margin:0" onclick="addFriend()">Request</button>
       </div>
     ` : `
       <p class="section-instr" style="text-align:center">${msg ? '' : 'Connecting&hellip;'}</p>
@@ -2671,6 +2810,53 @@ function oconnect(cb){
   ows.onmessage = (ev)=>{ let m; try{ m=JSON.parse(ev.data); }catch(e){ return; } onlineMsg(m); };
 }
 function osend(obj){ if (ows && ows.readyState===1) ows.send(JSON.stringify(obj)); }
+let lastFriends = { list: [], reqs: [] };
+function friendsHTML(){
+  const reqRows = (lastFriends.reqs||[]).map(r=>`
+    <div class="tier-row" style="border-left:4px solid var(--gold)"><span><b>${esc(r.name)}</b>${r.rating!=null?` <span style="font-weight:400;font-size:12px;color:var(--gray)">${r.rating}</span>`:''}<br><span style="font-weight:400;font-size:12px;color:var(--gray)">wants to be friends</span></span>
+      <span style="display:flex;gap:6px">
+        <button class="seg" style="flex:none" onclick="osend({t:'friend_respond', name:'${esc(r.name)}', accept:true})">Accept</button>
+        <button class="seg" style="flex:none" onclick="osend({t:'friend_respond', name:'${esc(r.name)}', accept:false})">Decline</button></span></div>`).join('');
+  const rows = (lastFriends.list||[]).map(f=>`
+    <div class="tier-row"><span>${f.online?'<span style="color:var(--green)">●</span>':'<span style="color:var(--gray)">○</span>'} ${f.flair?ico('crown',12)+' ':''}<b>${esc(f.name)}</b>${f.rating!=null?` <span style="font-weight:400;font-size:12px;color:var(--gray)">${f.rating}</span>`:''}</span>
+      <span style="display:flex;gap:6px">${f.online?`<button class="seg" style="flex:none" onclick="challengeFriend('${esc(f.name)}',11)">Race 11</button>
+      <button class="seg" style="flex:none" onclick="challengeFriend('${esc(f.name)}',21)">Race 21</button>`:''}
+      <button class="seg" style="flex:none" onclick="removeFriend('${esc(f.name)}')">&times;</button></span></div>`).join('');
+  return (reqRows ? `<div class="mlabel">Requests</div>${reqRows}` : '')
+    + `<div class="mlabel">Friends</div>`
+    + (rows || '<p class="section-instr">No friends yet — send a request by player name. Friendship starts when they accept.</p>');
+}
+function openFriendsPage(){
+  if (!account){ showToast('Log into an account first'); return; }
+  if (!account.onlineToken || !ows || ows.readyState!==1) ensureOnlineIdentity();
+  setTimeout(()=>osend({t:'friends'}), 400);
+  document.getElementById('intro').classList.add('hidden');
+  renderFriendsPage();
+}
+function renderFriendsPage(){
+  const el=document.getElementById('friendspage');
+  el.classList.remove('hidden');
+  el.innerHTML=`
+    <div class="card">
+      <div class="section-title">${ico('person',17)} Friends</div>
+      <p class="section-instr">Race a friend directly — first to 11 for a quick match, first to 21 for the real thing (bigger rating swings).</p>
+      <div id="friendsPageBox">${friendsHTML()}</div>
+      <div style="display:flex;gap:6px;margin-top:10px">
+        <input id="friendNamePg" maxlength="16" placeholder="Friend's player name" style="flex:1;padding:9px 12px;border:1.5px solid var(--line);border-radius:8px" />
+        <button class="btn" style="width:auto;padding:9px 14px;margin:0" onclick="addFriendPg()">Request</button>
+      </div>
+      <button class="btn secondary" onclick="goHome()">Back to menu</button>
+    </div>`;
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function addFriendPg(){
+  const inp=document.getElementById('friendNamePg');
+  const name=(inp&&inp.value||'').trim();
+  if(!name){ showToast("Type your friend's player name"); return; }
+  osend({t:'friend_add', name});
+  if(inp) inp.value='';
+}
+let findMatchLen=11;
 function addFriend(){
   const inp=document.getElementById('friendName');
   const name=(inp&&inp.value||'').trim();
@@ -2678,11 +2864,11 @@ function addFriend(){
   osend({t:'friend_add', name});
   if(inp) inp.value='';
 }
-function challengeFriend(name){ osend({t:'challenge', name}); }
+function challengeFriend(name, len){ osend({t:'challenge', name, len: len||11}); }
 function removeFriend(name){ osend({t:'friend_remove', name}); }
-function findMatch(){
-  oState='queued';
-  oconnect(()=>osend({t:'queue'}));
+function findMatch(len){
+  oState='queued'; findMatchLen=len||11;
+  oconnect(()=>osend({t:'queue', len: findMatchLen}));
   document.getElementById('online').innerHTML=`
     <div class="card" style="text-align:center">
       <div class="section-title" style="justify-content:center">${ico('globe',17)} Searching&hellip;</div>
@@ -2792,7 +2978,7 @@ function onlineMsg(m){
         <div style="color:${m.won?'var(--gold)':'var(--gray)'}">${ico(m.won?'trophy':'swords',44)}</div>
         <div class="score-big" style="font-size:26px">${m.won?'Victory!':'Defeat'}</div>
         <div class="score-sub">${oScore.you} &ndash; ${oScore.opp} vs ${esc(oOpp?oOpp.name:'opponent')} &middot; ${m.delta>0?'+':''}${m.delta} rating &rarr; ${m.rating}</div>
-        <button class="btn" onclick="findMatch()">Race again &rarr;</button>
+        <button class="btn" onclick="findMatch(findMatchLen)">Race again &rarr;</button>
         <button class="btn secondary" onclick="renderOnlineHome()">Online home</button>
       </div>`;
   }
@@ -2806,14 +2992,16 @@ function onlineMsg(m){
       </div>`;
   }
   else if (m.t==='friends'){
+    lastFriends = { list: m.list||[], reqs: m.reqs||[] };
     const box=document.getElementById('friendBox');
-    if (box){
-      box.innerHTML = (m.list&&m.list.length) ? m.list.map(f=>`
-        <div class="tier-row"><span>${f.online?'<span style="color:var(--green)">●</span>':'<span style="color:var(--gray)">○</span>'} ${f.flair?ico('crown',12)+' ':''}<b>${esc(f.name)}</b>${f.rating!=null?` <span style="font-weight:400;font-size:12px;color:var(--gray)">${f.rating}</span>`:''}</span>
-          <span style="display:flex;gap:6px">${f.online?`<button class="seg" style="flex:none" onclick="challengeFriend('${esc(f.name)}')">Race</button>`:''}
-          <button class="seg" style="flex:none" onclick="removeFriend('${esc(f.name)}')">&times;</button></span></div>`).join('')
-        : '<p class="section-instr">No friends yet — add one by their player name and race them directly.</p>';
-    }
+    if (box) box.innerHTML = friendsHTML();
+    const pg=document.getElementById('friendsPageBox');
+    if (pg) pg.innerHTML = friendsHTML();
+  }
+  else if (m.t==='friend_request'){
+    playCoachChime();
+    showToast(esc(m.from)+' sent you a friend request — open Friends to accept');
+    osend({t:'friends'});
   }
   else if (m.t==='friend_result'){
     showToast(m.ok ? 'Added '+m.name+'!' : (m.msg||'Could not add friend'));
@@ -2829,13 +3017,13 @@ function onlineMsg(m){
       const box=document.getElementById('friendBox');
       const bar=document.createElement('div');
       bar.className='explain ok';
-      bar.innerHTML=`<b>${esc(m.from)}</b> challenges you to a race!${m.rating!=null?' ('+m.rating+' rating)':''}
+      bar.innerHTML=`<b>${esc(m.from)}</b> challenges you — first to ${m.len||11}!${m.rating!=null?' ('+m.rating+' rating)':''}
         <div style="display:flex;gap:6px;margin-top:8px">
         <button class="btn" style="margin:0" onclick="osend({t:'challenge_accept'}); this.parentNode.parentNode.remove()">Race!</button>
         <button class="btn secondary" style="margin:0" onclick="osend({t:'challenge_decline'}); this.parentNode.parentNode.remove()">Not now</button></div>`;
       if (box && box.parentNode) box.parentNode.insertBefore(bar, box);
     } else {
-      showToast(esc(m.from)+' challenged you to a race — open Online to accept!');
+      showToast(esc(m.from)+' challenged you (first to '+(m.len||11)+') — open Online to accept!');
     }
   }
   else if (m.t==='family_code'){
@@ -3071,12 +3259,14 @@ function closeLearn(){
 }
 
 /* ================= Sidebar navigation ================= */
-const MODE_DIVS = ['quiz','results','study','clock','versus','survival','daily','compete','achievements','reports','online','learn','vote','fulltest','coachpage','parentreport','gaps','premium','about','focus'];
+const MODE_DIVS = ['quiz','results','study','clock','versus','survival','daily','compete','achievements','reports','online','learn','vote','fulltest','coachpage','parentreport','gaps','premium','about','focus','friendspage','realtest'];
 function resetToHome(){
   const wasAssessing = fullTest || diagActive;
   clearInterval(clockTimer); clearTimeout(clockTimer);
   clearInterval(testTimerId); fullTest=false;
   clearInterval(focusTimer);
+  clearInterval(rtTimer);
+  if (rtActive){ rtActive=false; osend({t:'assess_end'}); }
   if (oState==='queued'){ osend({t:'cancel_queue'}); oState='idle'; }
   if (oState==='racing'){ try{ ows.close(); }catch(e){} ows=null; oState='idle'; }
   MODE_DIVS.forEach(id=>{ const el=document.getElementById(id); if(el){ el.classList.add('hidden'); el.innerHTML=''; }});
@@ -3094,7 +3284,7 @@ function navTo(mode){
   playSwoosh();
   document.body.classList.remove('snav-open');
   resetToHome();
-  const map = { learn:openLearn, daily:openDaily, practice:start, fulltest:openFullTest, study:openStudy, verbal:openVerbal, review:openReview, coach:openCoachPage, report:openReport, gaps:openGaps, premium:openPremium, about:openAbout, focus:openFocus,
+  const map = { learn:openLearn, daily:openDaily, practice:start, fulltest:openFullTest, study:openStudy, verbal:openVerbal, review:openReview, coach:openCoachPage, report:openReport, gaps:openGaps, premium:openPremium, about:openAbout, focus:openFocus, friendspage:openFriendsPage,
                 clock:openClock, survival:openSurvival, versus:openVersus, online:openOnline,
                 compete:openCompete, achievements:openAchievements, vote:openVote };
   if (mode !== 'home' && map[mode]) map[mode]();
@@ -3126,6 +3316,7 @@ function renderSidebar(){
     ${item('survival','sword','Survival')}
     ${item('versus','swords','Versus')}
     ${item('online','globe','Online')}
+    ${item('friendspage','person','Friends')}
     <div class="sdiv"></div>
     ${item('compete','trophy','Rank & League')}
     ${item('achievements','medal','Achievements')}
@@ -3425,7 +3616,7 @@ function openGaps(){
 /* Diagnostic: 2 questions from every topic, shuffled, no XP — pure measurement. */
 let diagAnswered=false, diagActive=false;
 /* Sage is banned wherever the score is supposed to measure the KID. */
-function assessmentActive(){ return !!(fullTest || diagActive || oState==='racing'); }
+function assessmentActive(){ return !!(fullTest || diagActive || rtActive || oState==='racing'); }
 function applyAssessmentUI(){ document.body.classList.toggle('assessing', assessmentActive()); }
 /* Diagnostic v2: every math topic AND every verbal section. Resumable (device-local),
    seeds all four skills, ends in a placement summary. ~46 questions, ~30 min. */
@@ -3537,6 +3728,8 @@ function renderDiagDone(s){
 
 /* ===== About: version, platform, what's new ===== */
 const CHANGELOG = [
+  ['0.26.0','The Real SSAT: four timed sections — Quant, Reading, Verbal, Quant — scored 500-800 each with a 1500-2400 composite'],
+  ['0.25.0','Longer races: first to 11 or 21 with bigger rating swings; friend requests need both sides; a real Friends page'],
   ['0.24.0','Real checkout on iOS via the App Store; live prices; restore purchases through Apple'],
   ['0.23.2','Prices matched to the App Store: $79.99 / $99.99 / $349.99 per season'],
   ['0.23.1','Account deletion wipes cloud data too; Restore Purchases; privacy policy published'],
@@ -3708,7 +3901,7 @@ function applyPlan(plan){
   }
   saveStore();
   celebrate();
-  showToast('Welcome to Premium!');
+  showToast(plan==='family' ? 'Family plan active — share your code below!' : 'Welcome to Premium!');
   openPremium(); renderHome();
   document.getElementById('intro').classList.add('hidden');
 }
@@ -4021,6 +4214,7 @@ function reportFacts(){
     topicsMastered:mastered, topicsInProgress:inProgress,
     recentTroubleSpots:focus,
     bestFullTestEstimate:s.bestScaled||null,
+    bestComposite:s.bestComposite||null,
     perfectPracticeSets:s.perfectSets||0
   };
 }
@@ -4029,6 +4223,7 @@ function reportFactsRows(f){
   return row('Questions answered', f.questionsAnswered+' ('+f.accuracyPct+'% correct)')
     + row('Practice streak', f.currentStreakDays+' days &middot; best '+f.bestStreakDays)
     + row('Estimated SSAT score', f.bestFullTestEstimate ? f.bestFullTestEstimate : 'no Full Test taken yet')
+    + (f.bestComposite ? row('Best composite (Real SSAT)', f.bestComposite+' / 2400') : '')
     + row('Math skill', f.mathSkillOutOf10+' / 10')
     + row('Analogies skill', f.verbalSkillOutOf10.analogies+' / 10')
     + row('Reading skill', f.verbalSkillOutOf10.reading+' / 10')
