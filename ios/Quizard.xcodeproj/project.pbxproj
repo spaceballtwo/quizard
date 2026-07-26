@@ -1,115 +1,219 @@
 // !$*UTF8*$!
 {
-    archiveVersion = 1;
-    classes = {};
-    objectVersion = 56;
-    objects = {
-        AA0000000000000000000001 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
-        AA0000000000000000000006 /* Store.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Store.swift; sourceTree = "<group>"; };
-        AA0000000000000000000002 /* index.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = index.html; sourceTree = "<group>"; };
-        AA0000000000000000000003 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-        AA0000000000000000000004 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-        AA0000000000000000000005 /* Quizard.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Quizard.app; sourceTree = BUILT_PRODUCTS_DIR; };
-        BB0000000000000000000001 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000001; };
-        BB0000000000000000000004 /* Store.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000006; };
-        BB0000000000000000000002 /* index.html in Resources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000002; };
-        BB0000000000000000000003 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000003; };
-        CC0000000000000000000001 /* Quizard group */ = {
-            isa = PBXGroup;
-            children = (AA0000000000000000000001, AA0000000000000000000006, AA0000000000000000000002, AA0000000000000000000003, AA0000000000000000000004);
-            path = Quizard; sourceTree = "<group>";
-        };
-        CC0000000000000000000002 /* Products */ = {
-            isa = PBXGroup; children = (AA0000000000000000000005); name = Products; sourceTree = "<group>";
-        };
-        CC0000000000000000000003 /* root */ = {
-            isa = PBXGroup;
-            children = (CC0000000000000000000001, CC0000000000000000000002);
-            sourceTree = "<group>";
-        };
-        DD0000000000000000000001 /* Sources */ = {
-            isa = PBXSourcesBuildPhase; buildActionMask = 2147483647;
-            files = (BB0000000000000000000001, BB0000000000000000000004); runOnlyForDeploymentPostprocessing = 0;
-        };
-        DD0000000000000000000002 /* Resources */ = {
-            isa = PBXResourcesBuildPhase; buildActionMask = 2147483647;
-            files = (BB0000000000000000000002, BB0000000000000000000003); runOnlyForDeploymentPostprocessing = 0;
-        };
-        EE0000000000000000000001 /* Debug target */ = {
-            isa = XCBuildConfiguration; name = Debug;
-            buildSettings = {ALWAYS_SEARCH_USER_PATHS = NO;
-                ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-                CLANG_ENABLE_MODULES = YES;
-                CODE_SIGN_STYLE = Automatic;
-                CURRENT_PROJECT_VERSION = 1;
-                GENERATE_INFOPLIST_FILE = NO;
-                INFOPLIST_FILE = Quizard/Info.plist;
-                IPHONEOS_DEPLOYMENT_TARGET = 15.0;
-                LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-                MARKETING_VERSION = 1.0;
-                PRODUCT_BUNDLE_IDENTIFIER = com.quizard.app;
-                PRODUCT_NAME = "$(TARGET_NAME)";
-                SDKROOT = iphoneos;
-                SWIFT_VERSION = 5.0;
-                TARGETED_DEVICE_FAMILY = "1,2"; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; };
-        };
-        EE0000000000000000000002 /* Release target */ = {
-            isa = XCBuildConfiguration; name = Release;
-            buildSettings = {ALWAYS_SEARCH_USER_PATHS = NO;
-                ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-                CLANG_ENABLE_MODULES = YES;
-                CODE_SIGN_STYLE = Automatic;
-                CURRENT_PROJECT_VERSION = 1;
-                GENERATE_INFOPLIST_FILE = NO;
-                INFOPLIST_FILE = Quizard/Info.plist;
-                IPHONEOS_DEPLOYMENT_TARGET = 15.0;
-                LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-                MARKETING_VERSION = 1.0;
-                PRODUCT_BUNDLE_IDENTIFIER = com.quizard.app;
-                PRODUCT_NAME = "$(TARGET_NAME)";
-                SDKROOT = iphoneos;
-                SWIFT_VERSION = 5.0;
-                TARGETED_DEVICE_FAMILY = "1,2"; SWIFT_COMPILATION_MODE = wholemodule; };
-        };
-        EE0000000000000000000003 /* Debug project */ = {
-            isa = XCBuildConfiguration; name = Debug;
-            buildSettings = { SDKROOT = iphoneos; };
-        };
-        EE0000000000000000000004 /* Release project */ = {
-            isa = XCBuildConfiguration; name = Release;
-            buildSettings = { SDKROOT = iphoneos; };
-        };
-        FF0000000000000000000001 /* target configs */ = {
-            isa = XCConfigurationList;
-            buildConfigurations = (EE0000000000000000000001, EE0000000000000000000002);
-            defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;
-        };
-        FF0000000000000000000002 /* project configs */ = {
-            isa = XCConfigurationList;
-            buildConfigurations = (EE0000000000000000000003, EE0000000000000000000004);
-            defaultConfigurationIsVisible = 0; defaultConfigurationName = Release;
-        };
-        11000000000000000000000A /* Quizard target */ = {
-            isa = PBXNativeTarget;
-            buildConfigurationList = FF0000000000000000000001;
-            buildPhases = (DD0000000000000000000001, DD0000000000000000000002);
-            buildRules = (); dependencies = ();
-            name = Quizard; productName = Quizard;
-            productReference = AA0000000000000000000005;
-            productType = "com.apple.product-type.application";
-        };
-        12000000000000000000000A /* Project */ = {
-            isa = PBXProject;
-            attributes = { LastUpgradeCheck = 2600; TargetAttributes = { 11000000000000000000000A = { CreatedOnToolsVersion = 26.0; }; }; };
-            buildConfigurationList = FF0000000000000000000002;
-            compatibilityVersion = "Xcode 14.0";
-            developmentRegion = en; hasScannedForEncodings = 0;
-            knownRegions = (en, Base);
-            mainGroup = CC0000000000000000000003;
-            productRefGroup = CC0000000000000000000002;
-            projectDirPath = ""; projectRoot = "";
-            targets = (11000000000000000000000A);
-        };
-    };
-    rootObject = 12000000000000000000000A;
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		BB0000000000000000000001 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000001 /* AppDelegate.swift */; };
+		BB0000000000000000000002 /* index.html in Resources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000002 /* index.html */; };
+		BB0000000000000000000003 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000003 /* Assets.xcassets */; };
+		BB0000000000000000000004 /* Store.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000006 /* Store.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		AA0000000000000000000001 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		AA0000000000000000000002 /* index.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = index.html; sourceTree = "<group>"; };
+		AA0000000000000000000003 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		AA0000000000000000000004 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		AA0000000000000000000005 /* Quizard.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Quizard.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA0000000000000000000006 /* Store.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Store.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		CC0000000000000000000001 /* Quizard */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000001 /* AppDelegate.swift */,
+				AA0000000000000000000006 /* Store.swift */,
+				AA0000000000000000000002 /* index.html */,
+				AA0000000000000000000003 /* Assets.xcassets */,
+				AA0000000000000000000004 /* Info.plist */,
+			);
+			path = Quizard;
+			sourceTree = "<group>";
+		};
+		CC0000000000000000000002 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000005 /* Quizard.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		CC0000000000000000000003 = {
+			isa = PBXGroup;
+			children = (
+				CC0000000000000000000001 /* Quizard */,
+				CC0000000000000000000002 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		11000000000000000000000A /* Quizard */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FF0000000000000000000001 /* Build configuration list for PBXNativeTarget "Quizard" */;
+			buildPhases = (
+				DD0000000000000000000001 /* Sources */,
+				DD0000000000000000000002 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Quizard;
+			productName = Quizard;
+			productReference = AA0000000000000000000005 /* Quizard.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		12000000000000000000000A /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+					11000000000000000000000A = {
+						CreatedOnToolsVersion = 26.0;
+					};
+				};
+			};
+			buildConfigurationList = FF0000000000000000000002 /* Build configuration list for PBXProject "Quizard" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = CC0000000000000000000003;
+			productRefGroup = CC0000000000000000000002 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				11000000000000000000000A /* Quizard */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		DD0000000000000000000002 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BB0000000000000000000002 /* index.html in Resources */,
+				BB0000000000000000000003 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		DD0000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BB0000000000000000000001 /* AppDelegate.swift in Sources */,
+				BB0000000000000000000004 /* Store.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		EE0000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = CMLTHS6KAU;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Quizard/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.quizard.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		EE0000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = CMLTHS6KAU;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Quizard/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.quizard.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		EE0000000000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				SDKROOT = iphoneos;
+			};
+			name = Debug;
+		};
+		EE0000000000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				SDKROOT = iphoneos;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		FF0000000000000000000001 /* Build configuration list for PBXNativeTarget "Quizard" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				EE0000000000000000000001 /* Debug */,
+				EE0000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		FF0000000000000000000002 /* Build configuration list for PBXProject "Quizard" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				EE0000000000000000000003 /* Debug */,
+				EE0000000000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 12000000000000000000000A /* Project object */;
 }
