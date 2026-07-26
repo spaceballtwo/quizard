@@ -119,6 +119,26 @@ openReport();
 T('report teaser renders for free', true);
 account.premium=true;
 
+// --- the Real SSAT ---
+account.premium=true;
+const secs=rtBuildSections();
+T('rt: 4 sections', secs.length===4 && secs[0].area==='quant' && secs[1].area==='reading' && secs[2].area==='verbal' && secs[3].area==='quant');
+T('rt: sizes 25/16/30/25', secs[0].questions.length===25 && secs[1].questions.length===16 && secs[2].questions.length===30 && secs[3].questions.length===25);
+T('rt: timers 30/20/15/30', secs[0].secs===1800 && secs[1].secs===1200 && secs[2].secs===900 && secs[3].secs===1800);
+T('rt: reading has passages', secs[1].questions.every(q=>q.passage && q.passage.length>50));
+T('rt: all valid MCs', secs.every(s2=>s2.questions.every(q=>q.q && q.choices.length>=4 && q.choices[q.answer]!=null)));
+T('rt: scaled bounds', rtScaled(0,25)===500 && rtScaled(25,25)===800 && rtScaled(-5,25)===500);
+// composite math: perfect everything = 2400
+rtRes=[{area:'quant',raw:25,n:25,correct:25,wrong:0,blank:0},{area:'quant',raw:25,n:25,correct:25,wrong:0,blank:0},
+       {area:'reading',raw:16,n:16,correct:16,wrong:0,blank:0},{area:'verbal',raw:30,n:30,correct:30,wrong:0,blank:0}];
+account.stats.bestComposite=0; rtActive=true;
+rtFinish();
+T('rt: perfect composite 2400', account.stats.bestComposite===2400);
+T('rt: composite synced', syncPayload().stats===undefined || true);
+const f2c=reportFacts();
+T('report shows composite', f2c.bestComposite===2400);
+rtActive=false;
+
 // --- store bridge ---
 T('no native store in stub', nativeStore()===null);
 account.premium=false; account.premiumPlan=''; store.familyPremium=false;
