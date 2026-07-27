@@ -5,7 +5,7 @@
 // Deploy: npx wrangler deploy   →  wss://quizard-server.<your-subdomain>.workers.dev
 
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'content-type' };
-const MATCH_FORMATS = { 11: 24, 21: 24 };   // both formats swing ratings equally
+const MATCH_FORMATS = { 5: 24, 11: 24, 21: 24 };   // all formats swing ratings equally (5 = arena sprints)
 const ROUND_TIMEOUT_MS = 45000;
 
 function enc(s){ return new TextEncoder().encode(s); }
@@ -34,6 +34,8 @@ export class QuizardLobby {
     this.nextMatchId = 1;
     this.userConns = new Map();   // key -> live conn (best effort; only valid while the DO is warm)
     this.pending = new Map();     // challenged key -> { from, conn, ts }
+    this.tqueue = [];             // bracket tournament waiting room (4 players)
+    this.arena = null;            // { endsAt, scores, names, queue, players }
   }
 
   async fetch(request){
@@ -76,6 +78,8 @@ export class QuizardLobby {
 
   onClose(conn){
     this.queue = this.queue.filter(c => c !== conn);
+    this.tqueue = this.tqueue.filter(c => c !== conn);
+    if (this.arena) this.arena.queue = this.arena.queue.filter(c => c !== conn);
     if (conn.user && this.userConns.get(conn.user) === conn) this.userConns.delete(conn.user);
     if (conn.match) this.forfeit(conn.match, conn);
   }
@@ -264,6 +268,43 @@ export class QuizardLobby {
       this.pending.delete(conn.user);
       if (p && p.conn.ws.readyState === 1) this.send(p.conn, { t: 'challenge_result', ok: false, msg: 'They passed on the race' });
     }
+    else if (m.t === 'tourney_join'){
+      if (!conn.user || conn.match || this.tqueue.includes(conn)) return;
+      this.tqueue.push(conn);
+      this.tqueue = this.tqueue.filter(c => c.ws.readyState === 1);
+      this.tqueue.forEach(c => this.send(c, { t: 'tourney_wait', n: this.tqueue.length, need: 4 }));
+      if (this.tqueue.length >= 4){
+        const four = this.tqueue.splice(0, 4);
+        const rated = [];
+        for (const c of four){ const u = await this.getUser(c.user); rated.push({ conn: c, name: u.name, rating: u.rating }); }
+        rated.sort((a, b) => b.rating - a.rating);
+        const t = { id: this.nextMatchId++, conns: rated.map(r => r.conn), names: rated.map(r => r.name), winners: [], finalStarted: false };
+        rated.forEach((r, i) => this.send(r.conn, { t: 'tourney_start', seed: i + 1, bracket: rated.map((x, j) => ({ seed: j + 1, name: x.name, rating: x.rating })) }));
+        await this.startMatch(rated[0].conn, rated[3].conn, 11, { tourney: t, label: 'Semifinal' });
+        await this.startMatch(rated[1].conn, rated[2].conn, 11, { tourney: t, label: 'Semifinal' });
+      }
+    }
+    else if (m.t === 'tourney_leave'){
+      this.tqueue = this.tqueue.filter(c => c !== conn);
+      this.send(conn, { t: 'tourney_wait', n: -1 });
+    }
+    else if (m.t === 'arena_join'){
+      if (!conn.user || conn.match) return;
+      const now = Date.now();
+      if (!this.arena || now > this.arena.endsAt){
+        this.arena = { endsAt: now + 10 * 60e3, scores: {}, names: {}, queue: [], players: new Set() };
+      }
+      const a = this.arena;
+      const u = await this.getUser(conn.user);
+      a.players.add(conn.user);
+      a.names[conn.user] = u.name;
+      a.scores[conn.user] = a.scores[conn.user] || 0;
+      a.queue = a.queue.filter(c => c.ws.readyState === 1 && c !== conn);
+      const opp = a.queue.shift();
+      if (opp){ await this.startMatch(opp, conn, 5, { arena: true, label: 'Arena' }); }
+      else a.queue.push(conn);
+      this.sendArenaState();
+    }
     else if (m.t === 'assess_start'){
       if (!conn.user) return;
       const u = await this.getUser(conn.user);
@@ -322,7 +363,8 @@ export class QuizardLobby {
     }
     else if (m.t === 'leaderboard'){
       const users = await this.storage.list({ prefix: 'u:' });
-      const all = [...users.values()];
+      const min = Number(m.min) || 0;
+      const all = [...users.values()].filter(u => u.rating >= min);
       const top = all.sort((a, b) => b.rating - a.rating).slice(0, 10)
         .map(u => ({ name: u.name, rating: u.showRating === false ? null : u.rating, wins: u.wins, losses: u.losses, flair: !!(u.data && ['unlimited','family','family-member'].includes(u.data.premiumPlan)) }));
       let you = null;
@@ -547,14 +589,15 @@ Under 250 words, plain text, warm, specific to THEIR essay — never generic. Ne
   async lockForMatch(keys, on){
     for (const k of keys){ const u = await this.getUser(k); if (u){ u.assessUntil = on ? Date.now() + 10 * 60e3 : 0; await this.putUser(k, u); } }
   }
-  async startMatch(a, b, len){
+  async startMatch(a, b, len, ctx){
     const winPoints = MATCH_FORMATS[len] ? len : 11;
-    const match = { id: this.nextMatchId++, players: [a, b], score: [0, 0], round: 0, answered: new Set(), roundWon: false, done: false, timer: null, winPoints };
+    const match = { id: this.nextMatchId++, players: [a, b], score: [0, 0], round: 0, answered: new Set(), roundWon: false, done: false, timer: null, winPoints,
+                    tourney: ctx && ctx.tourney, arena: !!(ctx && ctx.arena), label: (ctx && ctx.label) || null };
     a.match = b.match = match;
     await this.lockForMatch([a.user, b.user], true);
     const ua = await this.getUser(a.user), ub = await this.getUser(b.user);
-    this.send(a, { t: 'match_start', opp: { name: ub.name, rating: this.visibleRating(ub), flair: !!(ub.data && ['unlimited','family','family-member'].includes(ub.data.premiumPlan)) }, winPoints: match.winPoints });
-    this.send(b, { t: 'match_start', opp: { name: ua.name, rating: this.visibleRating(ua), flair: !!(ua.data && ['unlimited','family','family-member'].includes(ua.data.premiumPlan)) }, winPoints: match.winPoints });
+    this.send(a, { t: 'match_start', opp: { name: ub.name, rating: this.visibleRating(ub), flair: !!(ub.data && ['unlimited','family','family-member'].includes(ub.data.premiumPlan)) }, winPoints: match.winPoints, label: match.label });
+    this.send(b, { t: 'match_start', opp: { name: ua.name, rating: this.visibleRating(ua), flair: !!(ua.data && ['unlimited','family','family-member'].includes(ua.data.premiumPlan)) }, winPoints: match.winPoints, label: match.label });
     setTimeout(() => this.nextRound(match), 2500);
   }
 
@@ -632,6 +675,52 @@ Under 250 words, plain text, warm, specific to THEIR essay — never generic. Ne
     this.send(w, { t: 'match_end', won: true,  delta: +delta, rating: uw.rating, score: this.scoreFor(match, w) });
     this.send(l, { t: 'match_end', won: false, delta: -delta, rating: ul.rating, score: this.scoreFor(match, l) });
     match.players.forEach(p => { p.match = null; });
+    await this.afterMatch(match, w, l);
+  }
+  async afterMatch(match, w, l){
+    if (match.arena && this.arena && Date.now() < this.arena.endsAt){
+      const a = this.arena;
+      if (a.players.has(w.user)) a.scores[w.user] = (a.scores[w.user] || 0) + 2;
+      this.sendArenaState();
+      [w, l].forEach(p => { if (p.ws.readyState === 1 && a.players.has(p.user)) this.send(p, { t: 'arena_next', secs: Math.round((a.endsAt - Date.now()) / 1000) }); });
+    } else if (match.arena && this.arena){
+      this.endArena();
+    }
+    const t = match.tourney;
+    if (t){
+      if (!t.finalStarted){
+        t.winners.push(w);
+        const wname = t.names[t.conns.indexOf(w)] || 'Winner';
+        t.conns.forEach(c => { if (c.ws.readyState === 1) this.send(c, { t: 'tourney_round', msg: wname + ' advances to the final' }); });
+        if (t.winners.length === 2){
+          t.finalStarted = true;
+          const [f1, f2] = t.winners;
+          if (f1.ws.readyState === 1 && f2.ws.readyState === 1 && !f1.match && !f2.match){
+            setTimeout(() => this.startMatch(f1, f2, 11, { tourney: t, label: 'FINAL' }).catch(()=>{}), 3000);
+          }
+        }
+      } else {
+        const champU = await this.getUser(w.user);
+        champU.tourneyWins = (champU.tourneyWins || 0) + 1;
+        await this.putUser(w.user, champU);
+        t.conns.forEach(c => { if (c.ws.readyState === 1) this.send(c, { t: 'tourney_result', champion: champU.name, yours: c === w }); });
+      }
+    }
+  }
+  sendArenaState(){
+    const a = this.arena; if (!a) return;
+    const top = Object.entries(a.scores).sort((x, y) => y[1] - x[1]).slice(0, 10)
+      .map(([k, v]) => ({ name: a.names[k] || k, pts: v }));
+    const secs = Math.max(0, Math.round((a.endsAt - Date.now()) / 1000));
+    for (const k of a.players){ const c = this.liveConn(k); if (c) this.send(c, { t: 'arena_state', secs, top }); }
+    if (secs <= 0) this.endArena();
+  }
+  endArena(){
+    const a = this.arena; if (!a) return;
+    const top = Object.entries(a.scores).sort((x, y) => y[1] - x[1]);
+    const champ = top.length ? (a.names[top[0][0]] || top[0][0]) : null;
+    for (const k of a.players){ const c = this.liveConn(k); if (c) this.send(c, { t: 'arena_result', champion: champ, top: top.slice(0, 10).map(([k2, v]) => ({ name: a.names[k2] || k2, pts: v })) }); }
+    this.arena = null;
   }
 
   forfeit(match, quitter){
