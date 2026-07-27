@@ -1,5 +1,5 @@
 
-const APP_VERSION = '0.26.1';
+const APP_VERSION = '0.26.2';
 /* ===== Local accounts: each person has their own on-device SSAT account ===== */
 let store = { accounts: [], currentId: null };
 function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
@@ -4323,14 +4323,15 @@ if ('serviceWorker' in navigator && location.protocol === 'https:'){
   let W=0, H=0, frame=0;
   function themeColors(){
     const b = document.body.classList;
-    if (b.contains('midnight')) return { base:'#141a2b', blobs:['rgba(88,101,242,0.20)','rgba(202,152,39,0.16)','rgba(47,145,80,0.12)'], spark:'#eacd7f', starry:true };
-    if (b.contains('daybreak')) return { base:'#eef3fa', blobs:['rgba(120,170,255,0.30)','rgba(255,214,140,0.30)','rgba(150,220,180,0.22)'], spark:'#b8860b', starry:false };
-    return { base:'#f8f2e0', blobs:['rgba(224,193,105,0.42)','rgba(192,90,40,0.20)','rgba(47,145,80,0.16)'], spark:'#ca9827', starry:false };
+    if (b.contains('midnight')) return { base:'#121828', blobs:['rgba(96,110,255,0.42)','rgba(224,168,42,0.34)','rgba(56,180,110,0.26)','rgba(190,80,200,0.22)'], spark:'#ffe9a8', starry:true };
+    if (b.contains('daybreak')) return { base:'#e8f0fb', blobs:['rgba(95,155,255,0.50)','rgba(255,200,90,0.48)','rgba(120,220,170,0.36)','rgba(255,130,150,0.24)'], spark:'#a8760a', starry:false };
+    return { base:'#f6efd8', blobs:['rgba(236,190,70,0.65)','rgba(220,100,40,0.38)','rgba(60,160,90,0.30)','rgba(150,110,220,0.20)'], spark:'#b8860b', starry:false };
   }
   function resize(){ W=c.width=window.innerWidth; H=c.height=window.innerHeight; }
   window.addEventListener('resize', resize); resize();
-  const blobs = Array.from({length:3},(_,i)=>({ a:Math.random()*6.28, sp:0.0016+i*0.0009, r:Math.max(W,H)*(0.45+i*0.12), ox:[0.18,0.85,0.5][i], oy:[0.1,0.35,1.02][i] }));
-  const sparks = Array.from({length:34},()=>({ px:Math.random(), py:Math.random(), s:Math.random()*2.2+0.8, ph:Math.random()*6.28, tw:0.008+Math.random()*0.02, dx:(Math.random()-0.5)*0.00012, dy:-0.00008-Math.random()*0.0001 }));
+  const blobs = Array.from({length:4},(_,i)=>({ a:Math.random()*6.28, sp:0.0022+i*0.0011, r:Math.max(W,H)*(0.4+i*0.1), ox:[0.15,0.9,0.5,0.05][i], oy:[0.08,0.3,1.05,0.85][i] }));
+  const sparks = Array.from({length:90},()=>({ px:Math.random(), py:Math.random(), s:Math.random()*3.4+1.2, ph:Math.random()*6.28, tw:0.012+Math.random()*0.03, dx:(Math.random()-0.5)*0.0002, dy:-0.00012-Math.random()*0.00018 }));
+  const orbs = Array.from({length:10},()=>({ px:Math.random(), py:Math.random(), r:Math.random()*22+10, ph:Math.random()*6.28, tw:0.006+Math.random()*0.012, dy:-0.00005-Math.random()*0.00008 }));
   function draw(){
     frame++;
     const t = themeColors();
@@ -4343,11 +4344,21 @@ if ('serviceWorker' in navigator && location.protocol === 'https:'){
       g.addColorStop(0, t.blobs[i]); g.addColorStop(1, 'rgba(0,0,0,0)');
       x.fillStyle = g; x.fillRect(0,0,W,H);
     });
+    orbs.forEach(o=>{
+      o.ph += o.tw; o.py += o.dy;
+      if (o.py < -0.06){ o.py = 1.06; o.px = Math.random(); }
+      const oa = 0.10+0.22*Math.abs(Math.sin(o.ph));
+      const g = x.createRadialGradient(o.px*W, o.py*H, 0, o.px*W, o.py*H, o.r);
+      g.addColorStop(0, t.spark); g.addColorStop(1, 'rgba(0,0,0,0)');
+      x.globalAlpha = oa; x.fillStyle = g;
+      x.beginPath(); x.arc(o.px*W, o.py*H, o.r, 0, 7); x.fill();
+      x.globalAlpha = 1;
+    });
     sparks.forEach(s=>{
       s.ph += s.tw; s.px += s.dx; s.py += s.dy;
       if (s.py < -0.02){ s.py = 1.02; s.px = Math.random(); }
       if (s.px < -0.02) s.px = 1.02; if (s.px > 1.02) s.px = -0.02;
-      const a = t.starry ? 0.25+0.55*Math.abs(Math.sin(s.ph)) : 0.10+0.30*Math.abs(Math.sin(s.ph));
+      const a = t.starry ? 0.4+0.6*Math.abs(Math.sin(s.ph)) : 0.35+0.5*Math.abs(Math.sin(s.ph));
       x.globalAlpha = a;
       x.fillStyle = t.spark;
       const px = s.px*W, py = s.py*H, r = s.s;
