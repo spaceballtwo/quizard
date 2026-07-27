@@ -1,5 +1,5 @@
 
-const APP_VERSION = '0.28.0';
+const APP_VERSION = '0.29.0';
 /* ===== Local accounts: each person has their own on-device SSAT account ===== */
 let store = { accounts: [], currentId: null };
 function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
@@ -1324,6 +1324,7 @@ function renderHome(){
     renderDiff();
     renderNextUp();
     renderHomeCourses();
+    renderWeekPlan();
     const sl=document.getElementById('skillsLine');
     if (sl){
       const chip=(name,v)=>`<span class="badge" title="${name} skill, 1–10">${name} ${(v||2).toFixed(1)}</span>`;
@@ -1520,6 +1521,7 @@ function ensureFields(a){
   if(typeof a.stats.bestComposite!=='number') a.stats.bestComposite=0;
   if(!a.revDay || typeof a.revDay!=='object') a.revDay={d:'',n:0};
   if(!Array.isArray(a.testHist)) a.testHist=[];
+  if(!a.weekPlan || typeof a.weekPlan!=='object') a.weekPlan=null;
 }
 function dateStr(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function markActivity(){
@@ -2108,6 +2110,7 @@ function renderTestResults(correct, wrongChosen, blanks, perSection){
       <p style="text-align:center;color:var(--gray);font-size:13.5px;margin-top:10px">Raw score: ${correct} − ¼&times;${wrongChosen} = <b>${raw.toFixed(2).replace(/\.?0+$/,'')}</b> of ${FT_N} &middot; time used ${fmtTime(used)}</p>
       <p style="color:var(--gray);font-size:12.5px;text-align:center">Rough estimate — the real test scales scores against everyone who took it. Treat &plusmn;30 as the honest range.</p>
       <p style="color:var(--gray);font-size:13.5px;margin-top:10px">Scroll up to review — explanations show under every question you missed, with a lesson link.</p>
+      ${tutorTier()?`<button class="btn" onclick="sageDebrief('quick')">Sage's debrief &rarr;</button>`:''}
       <button class="btn" onclick="closeFullTestToIntro()">Take another test &rarr;</button>
       <button class="btn secondary" onclick="goHome()">Back to menu</button>
     </div>`;
@@ -2117,6 +2120,66 @@ function renderTestResults(correct, wrongChosen, blanks, perSection){
 function closeFullTestToIntro(){
   goHome();
   openFullTest();
+}
+
+/* ===== Week Plan: Sage's plan as a real checklist, built from the kid's own gaps ===== */
+function tutorTier(){ return isUnlimited() || account && (account.premiumPlan==='family' || account.premiumPlan==='family-member' || store.familyPremium); }
+function buildWeekPlan(){
+  const gaps=gapTopics();
+  const t1=gaps[0]!=null?TOPICS[gaps[0]].title:null;
+  const t2=gaps[1]!=null?TOPICS[gaps[1]].title:null;
+  const items=[];
+  items.push({ label: t1?('Lesson: '+t1):'Continue your next course lesson', mode: t1?('lesson:'+gaps[0]):'learn' });
+  items.push({ label:'Focus Sprint on your weakest gap', mode:'focus' });
+  items.push({ label: t2?('Lesson: '+t2):'Study session — 20 mixed questions', mode: t2?('lesson:'+gaps[1]):'study' });
+  items.push({ label:'Clear your review queue', mode:'review' });
+  items.push({ label:'Verbal day — analogies and synonyms', mode:'verbal' });
+  items.push({ label:'Quick Test — check your score', mode:'fulltest' });
+  items.push({ label:'Race day — challenge a friend', mode:'friendspage' });
+  account.weekPlan={ created:dateStr(new Date()), items: items.map(x=>({label:x.label, mode:x.mode, done:false})) };
+  saveStore();
+}
+function weekPlanFresh(){ 
+  if (!account || !account.weekPlan) return false;
+  const made=new Date(account.weekPlan.created), now=new Date();
+  return (now-made)/86400e3 < 7;
+}
+function planGo(i){
+  const it=account.weekPlan.items[i];
+  if (it.mode.indexOf('lesson:')===0){ jumpToLesson(+it.mode.split(':')[1]); return; }
+  navTo(it.mode);
+}
+function planToggle(i){
+  account.weekPlan.items[i].done=!account.weekPlan.items[i].done;
+  saveStore(); renderWeekPlan();
+  if (account.weekPlan.items.every(x=>x.done)){ celebrate(); showToast('Week plan complete — Sage is impressed'); }
+}
+function renderWeekPlan(){
+  const el=document.getElementById('weekPlanBox'); if(!el) return;
+  if (!tutorTier()){ el.innerHTML=''; return; }
+  if (!weekPlanFresh()){
+    el.innerHTML=`<div class="card" style="padding:14px 16px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-weight:700;color:var(--navy)">${ico('quill',15)} Sage's week plan</span>
+        <button class="seg" style="flex:none" onclick="buildWeekPlan(); renderWeekPlan()">Build my week</button>
+      </div>
+      <p class="section-instr" style="margin:6px 0 0">Seven days, built from your actual gaps — pinned right here.</p>
+    </div>`;
+    return;
+  }
+  const days=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const done=account.weekPlan.items.filter(x=>x.done).length;
+  el.innerHTML=`<div class="card" style="padding:14px 16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <span style="font-weight:700;color:var(--navy)">${ico('quill',15)} Sage's week plan &middot; ${done}/7</span>
+      <button class="seg" style="flex:none" onclick="buildWeekPlan(); renderWeekPlan()">Rebuild</button>
+    </div>
+    ${account.weekPlan.items.map((it,i)=>`
+      <div class="tier-row" style="${it.done?'opacity:.55':''}">
+        <span style="cursor:pointer" onclick="planGo(${i})"><b>${days[i]}</b> &middot; ${it.label}</span>
+        <button class="seg" style="flex:none" onclick="planToggle(${i})">${it.done?'&check;':'Do'}</button>
+      </div>`).join('')}
+  </div>`;
 }
 
 /* ===== Writing Coach: SSAT writing sample + Sage feedback (Unlimited & Family) ===== */
@@ -2320,9 +2383,22 @@ function rtFinish(){
       ${row('Reading', '&asymp; '+sr+' &middot; '+areas.reading.correct+'/'+areas.reading.n+' right, '+areas.reading.blank+' blank')}
       ${row('Verbal', '&asymp; '+sv+' &middot; '+areas.verbal.correct+'/'+areas.verbal.n+' right, '+areas.verbal.blank+' blank')}
       <p style="color:var(--gray);font-size:12.5px;text-align:center;margin-top:10px">Rough estimates — the real test scales against everyone who took it. Misses went to Review; gaps went to your Knowledge Map.</p>
+      ${tutorTier()?`<button class="btn" onclick="sageDebrief('real')">Sage's debrief &rarr;</button>`:''}
       <button class="btn" onclick="goHome()">Back to menu</button>
     </div>`;
   window.scrollTo({top:0,behavior:'smooth'});
+}
+function sageDebrief(kind){
+  const h=(account.testHist||[]).slice().reverse().find(t=>t.kind===kind);
+  if (!h){ showToast('Take a test first'); return; }
+  let summary;
+  if (kind==='real') summary=`I just finished a Real SSAT practice test. Composite ${h.score}. Quant ${h.sq}, Reading ${h.sr}, Verbal ${h.sv}. Debrief me: what do these numbers say, and exactly what should I do this week?`;
+  else {
+    const gaps=h.topicMiss?Object.entries(h.topicMiss).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([ti,n])=>(TOPICS[ti]?TOPICS[ti].title:'')+' ('+n+' missed)').filter(Boolean).join(', '):'none tracked';
+    summary=`I just finished a practice test. Estimated score ${h.score}: ${h.correct} right, ${h.wrong} wrong, ${h.blank} blank. Topics I missed most: ${gaps}. Debrief me: what patterns do you see, and exactly what should I do this week?`;
+  }
+  navTo('coach');
+  setTimeout(()=>coachSend(summary), 600);
 }
 function rtAbandon(){
   clearInterval(rtTimer);
@@ -3038,7 +3114,7 @@ function showLeaderboard(){ oconnect(()=>osend({t:'leaderboard'})); }
 let syncTimer=null;
 function syncPayload(){ const a=account; return { xp:a.xp, rp:a.rp, streak:a.streak, bestStreak:a.bestStreak,
   lastPlayed:a.lastPlayed, achievements:a.achievements, stats:a.stats, bestRun:a.bestRun,
-  lastDaily:a.lastDaily, weekPoints:a.weekPoints, weekId:a.weekId, diff:a.diff, vote:a.vote, skill:a.skill, topics:a.topics, misses:a.misses, verbalSkill:a.verbalSkill, lessonsDone:a.lessonsDone, tstats:a.tstats, diagAt:a.diagAt, hist:a.hist, tourDone:a.tourDone, premium:a.premium, premiumPlan:a.premiumPlan, familyCode:a.familyCode||'', theme:a.theme||'', freeTestUsed:a.freeTestUsed, testHist:a.testHist, revDay:a.revDay }; }
+  lastDaily:a.lastDaily, weekPoints:a.weekPoints, weekId:a.weekId, diff:a.diff, vote:a.vote, skill:a.skill, topics:a.topics, misses:a.misses, verbalSkill:a.verbalSkill, lessonsDone:a.lessonsDone, tstats:a.tstats, diagAt:a.diagAt, hist:a.hist, tourDone:a.tourDone, premium:a.premium, premiumPlan:a.premiumPlan, familyCode:a.familyCode||'', theme:a.theme||'', freeTestUsed:a.freeTestUsed, testHist:a.testHist, revDay:a.revDay, weekPlan:a.weekPlan }; }
 function syncUp(){ if(!oMe || !account) return; osend({t:'sync_up', data:syncPayload(), updatedAt:account.updatedAt||Date.now()}); }
 function scheduleSync(){ if(!oMe || !account || !ows || ows.readyState!==1) return; clearTimeout(syncTimer); syncTimer=setTimeout(syncUp, 3000); }
 function applySync(data){ if(!account || !data) return; Object.assign(account, data); ensureFields(account); syncXPFromAccount(); saveStore(); }
@@ -3623,10 +3699,10 @@ function coachSetContext(q, chosenIdx){
   };
   coachMsgs = [];
 }
-function coachSend(){
+function coachSend(textOverride){
   if (coachBusy) return;
   const inp=document.getElementById('coachInput');
-  const text=(inp && inp.value || '').trim();
+  const text=(textOverride || (inp && inp.value) || '').trim();
   if (!text) return;
   coachMsgs.push({role:'user', content:text});
   coachBusy=true; renderCoach();
@@ -3889,6 +3965,7 @@ function renderDiagDone(s){
 
 /* ===== About: version, platform, what's new ===== */
 const CHANGELOG = [
+  ['0.29.0','Unlimited becomes the Tutor tier: week plans pinned to your home screen and personal test debriefs — built from YOUR data, which no chatbot has'],
   ['0.28.0','Premium earns it: Writing Coach (Sage grades your essays), Score Reports with test history, Focus Sprints go premium, free review capped at 10/day — and the ladder shows YOUR rank'],
   ['0.27.0','Your Account page: player card, mutual friends with one-tap challenges, global + friends leaderboards; both race formats now swing ratings equally'],
   ['0.26.1','The academy comes alive: drifting golden light and twinkling sparkles behind everything, in every theme'],
@@ -4137,10 +4214,11 @@ function openPremium(){
             <div style="color:var(--gray);font-size:12px;margin-bottom:10px">1 account<br>Sage: 25 chats a day</div>
             <button class="btn" style="margin:0" onclick="buyPremium('solo')">Get Solo</button>
           </div>
-          <div style="border:1.5px solid var(--line);border-radius:12px;padding:14px 10px;text-align:center">
+          <div style="border:1.5px solid var(--gold);border-radius:12px;padding:14px 10px;text-align:center;position:relative">
+            <div style="position:absolute;top:-9px;left:50%;transform:translateX(-50%);background:var(--navy);color:var(--gold-soft);font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;white-space:nowrap">THE TUTOR TIER</div>
             <div style="font-weight:700;color:var(--navy)">Unlimited</div>
             <div style="margin:6px 0"><span style="font-size:26px;font-weight:800;color:var(--navy)">${livePrices&&livePrices.unlimited?livePrices.unlimited:'$99.99'}</span><span style="color:var(--gray);font-size:12px"> / 3 mo</span></div>
-            <div style="color:var(--gray);font-size:12px;margin-bottom:10px">1 account<br><b>unlimited everything</b><br>+ all perks + Deep Explanations</div>
+            <div style="color:var(--gray);font-size:12px;margin-bottom:10px"><b>Sage becomes a real tutor</b> —<br>Writing Coach, test debriefs,<br>week plans on your home screen</div>
             <button class="btn" style="margin:0" onclick="buyPremium('unlimited')">Get Unlimited</button>
           </div>
           <div style="border:1.5px solid var(--gold);border-radius:12px;padding:14px 10px;text-align:center;position:relative">
@@ -4169,7 +4247,8 @@ function openPremium(){
       ${rowP('Sage, full strength','25 chats/day per kid — unlimited with Deep Explanations on the $100 plan')}
       ${rowP('Parent Reports, written','the AI-drafted narrative on top of your free numbers')}
       ${rowP('Writing Coach','Sage grades your SSAT essays — Unlimited & Family')}
-      <p class="section-instr" style="margin-top:12px">Founded and run by middle schoolers working toward college.</p>
+      <p class="section-instr" style="margin-top:12px"><b>Why not just use a chatbot?</b> A chatbot has never seen your kid answer a question. Sage has seen every one — every miss, every test, every gap — and turns that into plans, debriefs, and coaching aimed at exactly what your kid needs next. That's the difference between advice and a tutor.</p>
+      <p class="section-instr">Founded and run by middle schoolers working toward college.</p>
     </div>`;
   window.scrollTo({top:0,behavior:'smooth'});
 }
