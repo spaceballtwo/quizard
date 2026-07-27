@@ -1,5 +1,5 @@
 
-const APP_VERSION = '0.27.0';
+const APP_VERSION = '0.28.0';
 /* ===== Local accounts: each person has their own on-device SSAT account ===== */
 let store = { accounts: [], currentId: null };
 function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
@@ -1518,6 +1518,8 @@ function ensureFields(a){
   if(typeof a.premiumPlan!=='string') a.premiumPlan='';
   if(typeof a.freeTestUsed!=='boolean') a.freeTestUsed=false;
   if(typeof a.stats.bestComposite!=='number') a.stats.bestComposite=0;
+  if(!a.revDay || typeof a.revDay!=='object') a.revDay={d:'',n:0};
+  if(!Array.isArray(a.testHist)) a.testHist=[];
 }
 function dateStr(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function markActivity(){
@@ -2018,6 +2020,14 @@ function openFullTest(){
       ${best?`<p style="font-weight:700;color:var(--navy)">Best estimated score: ${best}</p>`:''}
       <button class="btn" onclick="startFullTest()">Begin the Quick Test &rarr;</button>
     </div>
+    ${isPremium() && account.testHist.length ? `
+    <div class="card">
+      <div class="section-title">${ico('paper',17)} Score Reports</div>
+      ${account.testHist.slice().reverse().slice(0,8).map(h=>{
+        const gaps=h.topicMiss?Object.entries(h.topicMiss).sort((a,b)=>b[1]-a[1]).slice(0,2).map(([ti,n])=>TOPICS[ti]?TOPICS[ti].title:'').filter(Boolean).join(', '):'';
+        return `<div class="tier-row"><span><b>${h.kind==='real'?'Real SSAT':'Quick Test'}</b> &middot; ${h.d}${gaps?`<br><span style="font-weight:400;font-size:12px;color:var(--gray)">points bled: ${gaps}</span>`:h.sq?`<br><span style="font-weight:400;font-size:12px;color:var(--gray)">Q ${h.sq} &middot; R ${h.sr} &middot; V ${h.sv}</span>`:''}</span><span class="tier-rp">${h.score}</span></div>`;
+      }).join('')}
+    </div>` : ``}
     <div class="card">
       <div class="section-title">${ico('flame',18)} The Real SSAT — 4 sections, ~95 minutes</div>
       <p class="section-instr">The full experience, structured like the actual test — sections lock behind you, each with its own clock:</p>
@@ -2072,7 +2082,14 @@ function renderTestResults(correct, wrongChosen, blanks, perSection){
   const est = estScaled(raw);
   const used = Math.min(FT_SECS, Math.round((Date.now()-testStartAt)/1000));
   let best=false;
-  if (account && est > account.stats.bestScaled){ account.stats.bestScaled = est; best = true; saveStore(); }
+  if (account && est > account.stats.bestScaled){ account.stats.bestScaled = est; best = true; }
+  if (account){
+    const topicMiss={};
+    QUIZ.forEach(sec=>sec.questions.forEach(q=>{ const ti=(q._ti!=null)?q._ti:((q._gen!=null)?GEN_TOPIC.get(q._gen):null); if(ti!=null&&q._missed) topicMiss[ti]=(topicMiss[ti]||0)+1; }));
+    account.testHist.push({ d:dateStr(new Date()), kind:'quick', score:est, correct, wrong:wrongChosen, blank:blanks, topicMiss });
+    if (account.testHist.length>20) account.testHist.shift();
+    saveStore();
+  }
   const res=document.getElementById('results');
   res.innerHTML=`
     <div class="card">
@@ -2100,6 +2117,87 @@ function renderTestResults(correct, wrongChosen, blanks, perSection){
 function closeFullTestToIntro(){
   goHome();
   openFullTest();
+}
+
+/* ===== Writing Coach: SSAT writing sample + Sage feedback (Unlimited & Family) ===== */
+const WRITING_PROMPTS = [
+  "The door at the end of the hallway had been locked for as long as anyone could remember...",
+  "Describe a time you changed your mind about something important. What changed it?",
+  "If you could give one rule to the whole world, what would it be and why?",
+  "The map was wrong, and that was the best thing that ever happened to me...",
+  "Is it better to be the smartest person in the room or the hardest worker? Argue your side.",
+  "Write about a small moment that turned out to matter more than it seemed.",
+  "The lights went out, and when they came back on, everything was different...",
+  "Should students grade their teachers? Take a position and defend it.",
+  "I opened my locker and found a note that wasn't meant for me...",
+  "What is something adults misunderstand about being your age? Explain it to them.",
+  "The last one to leave was supposed to lock up. I was the last one to leave...",
+  "Does winning matter? Use an example from your own life."
+];
+let writingPrompt='', writingSecs=0, writingTimer=null;
+function essayUrl(){ return serverUrl().replace(/^ws/,'http') + '/essay'; }
+function openWriting(){
+  if (!account){ showToast('Log into an account first'); return; }
+  if (!(isUnlimited() || account.premiumPlan==='family' || account.premiumPlan==='family-member' || store.familyPremium)){
+    showToast('The Writing Coach comes with Unlimited and Family plans');
+    navTo('premium'); return;
+  }
+  if (!account.onlineToken || !ows || ows.readyState!==1) ensureOnlineIdentity();
+  clearInterval(writingTimer);
+  writingPrompt = choice(WRITING_PROMPTS);
+  document.getElementById('intro').classList.add('hidden');
+  const el=document.getElementById('writing');
+  el.classList.remove('hidden');
+  el.innerHTML=`
+    <div class="card">
+      <div class="section-title">${ico('quill',17)} Writing Sample</div>
+      <p class="section-instr">The real SSAT gives you 25 minutes and one prompt — schools read what you write. Practice it here, then Sage coaches your essay: what worked, what to level up, one sentence rewritten to show you how.</p>
+      <div class="passage" style="font-style:italic">${esc(writingPrompt)}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin:8px 0">
+        <span class="clock-time" id="wrTime">25:00</span>
+        <button class="seg" style="flex:none" onclick="writingPrompt=choice(WRITING_PROMPTS); openWriting()">Different prompt</button>
+      </div>
+      <textarea id="essayBox" placeholder="Write your sample here — a strong one runs 2–4 paragraphs..." style="width:100%;min-height:260px;padding:12px;border:1.5px solid var(--line);border-radius:10px;font:15px/1.6 inherit;resize:vertical" oninput="document.getElementById('wrCount').textContent=this.value.length+' characters'"></textarea>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
+        <span id="wrCount" style="font-size:12px;color:var(--gray)">0 characters</span>
+        <button class="btn" style="width:auto;padding:10px 18px;margin:0" onclick="submitEssay()">Get Sage's feedback &rarr;</button>
+      </div>
+      <div id="essayOut"></div>
+      <button class="btn secondary" onclick="goHome()">Back to menu</button>
+    </div>`;
+  writingSecs=25*60;
+  writingTimer=setInterval(()=>{
+    writingSecs--;
+    const t=document.getElementById('wrTime');
+    if (t){ t.textContent=fmtTime(Math.max(0,writingSecs)); if(writingSecs<=60) t.style.background='var(--red)'; }
+    if (writingSecs===0){ showToast("Time! On the real test, pencils go down — but finish your thought and submit."); clearInterval(writingTimer); }
+  },1000);
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function submitEssay(){
+  const box=document.getElementById('essayBox');
+  const essay=(box&&box.value||'').trim();
+  if (essay.length<80){ showToast('Write at least a solid paragraph first'); return; }
+  const out=document.getElementById('essayOut');
+  if (out) out.innerHTML='<p class="section-instr" style="text-align:center">Sage is reading your essay&hellip;</p>';
+  fetch(essayUrl(), { method:'POST', headers:{'content-type':'application/json'},
+    body: JSON.stringify({ name:account.onlineName, token:account.onlineToken, prompt:writingPrompt, essay }) })
+  .then(r=>r.json())
+  .then(d=>{
+    if (!out) return;
+    if (d.reply){
+      const fm=s=>esc(s).replace(/\n\n/g,'</p><p style="margin-top:8px">').replace(/\n/g,'<br>');
+      out.innerHTML=`<div class="explain ok" style="margin-top:12px"><p>${fm(d.reply)}</p></div>`;
+      playCoachChime();
+    }
+    else if (d.error==='limit') out.innerHTML='<div class="explain" style="margin-top:12px">Two essays a day keeps the feedback sharp — bring the next one tomorrow.</div>';
+    else if (d.error==='tier'){ out.innerHTML=''; showToast('The Writing Coach comes with Unlimited and Family plans'); navTo('premium'); }
+    else if (d.error==='consent') out.innerHTML='<div class="explain" style="margin-top:12px">A parent needs to approve AI features first — open Sage once to approve.</div>';
+    else if (d.error==='short') out.innerHTML='<div class="explain" style="margin-top:12px">'+esc(d.msg||'Write a bit more first.')+'</div>';
+    else if (d.error==='auth'){ ensureOnlineIdentity(); out.innerHTML='<div class="explain" style="margin-top:12px">Reconnecting — press the button again in a moment.</div>'; }
+    else out.innerHTML='<div class="explain" style="margin-top:12px">Something went wrong — try again in a moment.</div>';
+  })
+  .catch(()=>{ if(out) out.innerHTML='<div class="explain" style="margin-top:12px">Can&rsquo;t reach the server — are you online?</div>'; });
 }
 
 /* ===== The Real SSAT: four locked, individually timed sections ===== */
@@ -2206,6 +2304,10 @@ function rtFinish(){
   let best=false;
   if (account && composite>account.stats.bestComposite){ account.stats.bestComposite=composite; best=true; }
   if (account && sq>account.stats.bestScaled){ account.stats.bestScaled=sq; }
+  if (account){
+    account.testHist.push({ d:dateStr(new Date()), kind:'real', score:composite, sq, sr, sv });
+    if (account.testHist.length>20) account.testHist.shift();
+  }
   markActivity(); saveStore();
   if (best) celebrate();
   const row=(k,v)=>`<div class="tier-row"><span>${k}</span><span class="tier-rp">${v}</span></div>`;
@@ -2340,6 +2442,18 @@ function updateVerbalSkill(kind, ok){
 }
 function loadStudy(){
   if (studyMode==='review' && (!account || !reviewQueue().length)){ openReview(); return; }
+  if (studyMode==='review' && !isPremium() && account.revDay.d===dateStr(new Date()) && account.revDay.n>=10){
+    document.getElementById('study').innerHTML=`
+      <div class="card" style="text-align:center">
+        <div style="color:var(--gold)">${ico('lock',36)}</div>
+        <div class="section-title" style="justify-content:center">That's 10 free reviews today</div>
+        <p class="section-instr">Your other misses are still scheduled and waiting. Premium reviews everything, every day, on the full spaced-repetition schedule.</p>
+        <button class="btn" onclick="navTo('premium')">Go Premium</button>
+        <button class="btn secondary" onclick="studyHome()">Back to menu</button>
+      </div>`;
+    document.getElementById('study').classList.remove('hidden');
+    return;
+  }
   studyAnswered=false;
   studyCurrent = studyMode==='verbal' ? getVerbalQuestion() : studyMode==='topic' ? getTopicQuestion() : studyMode==='review' ? getReviewQuestion() : getStudyQuestion();
   renderStudy();
@@ -2381,6 +2495,9 @@ function answerStudy(i){
   noteTopicResult(q, ok);
   if (!ok && studyMode!=='review') recordMiss(q, studyCurrent.passage);
   if (studyMode==='review' && account && studyCurrent._mm){
+    const today=dateStr(new Date());
+    if (account.revDay.d!==today){ account.revDay={d:today,n:0}; }
+    account.revDay.n++;
     const mm=studyCurrent._mm;
     if (ok){
       mm.box=(mm.box||0)+1;
@@ -2477,6 +2594,7 @@ function grade(force){
     else if (chosen === -1){ blanks++; }
     else {
       wrongChosen++;
+      QUIZ[si].questions[qi]._missed = true;
       recordMiss(QUIZ[si].questions[qi], QUIZ[si].passage);
       const ex = document.createElement('div');
       ex.className = 'explain';
@@ -2826,7 +2944,7 @@ function friendsHTML(){
     + `<div class="mlabel">Friends</div>`
     + (rows || '<p class="section-instr">No friends yet — send a request by player name. Friendship starts when they accept.</p>');
 }
-let acctBoard='global', lastBoard=[];
+let acctBoard='global', lastBoard=[], lastYou=null;
 function openFriendsPage(){
   if (!account){ showToast('Log into an account first'); return; }
   if (!account.onlineToken || !ows || ows.readyState!==1) ensureOnlineIdentity();
@@ -2845,6 +2963,7 @@ function boardHTML(){
   } else {
     rows = (lastBoard||[]).map((u,i)=>`<div class="tier-row ${oMe&&u.name===oMe.name?'tier-on':''}"><span>${i+1}. ${u.flair?ico('crown',12)+' ':''}${esc(u.name)}</span><span class="tier-rp">${u.rating!=null?u.rating:'&mdash;'} &middot; ${u.wins}W&ndash;${u.losses}L</span></div>`).join('')
       || '<p class="section-instr">Loading the ladder&hellip;</p>';
+    if (lastYou) rows += `<div class="tier-row" style="border-left:4px solid var(--gold)"><span><b>You</b></span><span class="tier-rp">#${lastYou.rank} of ${lastYou.total}</span></div>`;
   }
   return `
     <div class="seg-bar" style="margin:0 0 8px">
@@ -2919,7 +3038,7 @@ function showLeaderboard(){ oconnect(()=>osend({t:'leaderboard'})); }
 let syncTimer=null;
 function syncPayload(){ const a=account; return { xp:a.xp, rp:a.rp, streak:a.streak, bestStreak:a.bestStreak,
   lastPlayed:a.lastPlayed, achievements:a.achievements, stats:a.stats, bestRun:a.bestRun,
-  lastDaily:a.lastDaily, weekPoints:a.weekPoints, weekId:a.weekId, diff:a.diff, vote:a.vote, skill:a.skill, topics:a.topics, misses:a.misses, verbalSkill:a.verbalSkill, lessonsDone:a.lessonsDone, tstats:a.tstats, diagAt:a.diagAt, hist:a.hist, tourDone:a.tourDone, premium:a.premium, premiumPlan:a.premiumPlan, familyCode:a.familyCode||'', theme:a.theme||'', freeTestUsed:a.freeTestUsed }; }
+  lastDaily:a.lastDaily, weekPoints:a.weekPoints, weekId:a.weekId, diff:a.diff, vote:a.vote, skill:a.skill, topics:a.topics, misses:a.misses, verbalSkill:a.verbalSkill, lessonsDone:a.lessonsDone, tstats:a.tstats, diagAt:a.diagAt, hist:a.hist, tourDone:a.tourDone, premium:a.premium, premiumPlan:a.premiumPlan, familyCode:a.familyCode||'', theme:a.theme||'', freeTestUsed:a.freeTestUsed, testHist:a.testHist, revDay:a.revDay }; }
 function syncUp(){ if(!oMe || !account) return; osend({t:'sync_up', data:syncPayload(), updatedAt:account.updatedAt||Date.now()}); }
 function scheduleSync(){ if(!oMe || !account || !ows || ows.readyState!==1) return; clearTimeout(syncTimer); syncTimer=setTimeout(syncUp, 3000); }
 function applySync(data){ if(!account || !data) return; Object.assign(account, data); ensureFields(account); syncXPFromAccount(); saveStore(); }
@@ -3021,6 +3140,7 @@ function onlineMsg(m){
   }
   else if (m.t==='leaderboard'){
     lastBoard = m.top||[];
+    lastYou = m.you||null;
     const acct=document.getElementById('acctLeader');
     if (acct){ acct.innerHTML = boardHTML(); return; }
     const rows=(m.top||[]).map((u,i)=>`<div class="tier-row ${oMe&&u.name===oMe.name?'tier-on':''}"><span>${i+1}. ${u.flair?ico('crown',12)+' ':''}${esc(u.name)}</span><span class="tier-rp">${u.rating!=null?u.rating:'&mdash;'} &middot; ${u.wins}W&ndash;${u.losses}L</span></div>`).join('');
@@ -3299,7 +3419,7 @@ function closeLearn(){
 }
 
 /* ================= Sidebar navigation ================= */
-const MODE_DIVS = ['quiz','results','study','clock','versus','survival','daily','compete','achievements','reports','online','learn','vote','fulltest','coachpage','parentreport','gaps','premium','about','focus','friendspage','realtest'];
+const MODE_DIVS = ['quiz','results','study','clock','versus','survival','daily','compete','achievements','reports','online','learn','vote','fulltest','coachpage','parentreport','gaps','premium','about','focus','friendspage','realtest','writing'];
 function resetToHome(){
   const wasAssessing = fullTest || diagActive;
   clearInterval(clockTimer); clearTimeout(clockTimer);
@@ -3324,7 +3444,7 @@ function navTo(mode){
   playSwoosh();
   document.body.classList.remove('snav-open');
   resetToHome();
-  const map = { learn:openLearn, daily:openDaily, practice:start, fulltest:openFullTest, study:openStudy, verbal:openVerbal, review:openReview, coach:openCoachPage, report:openReport, gaps:openGaps, premium:openPremium, about:openAbout, focus:openFocus, friendspage:openFriendsPage,
+  const map = { learn:openLearn, daily:openDaily, practice:start, fulltest:openFullTest, study:openStudy, verbal:openVerbal, review:openReview, coach:openCoachPage, report:openReport, gaps:openGaps, premium:openPremium, about:openAbout, focus:openFocus, friendspage:openFriendsPage, writing:openWriting,
                 clock:openClock, survival:openSurvival, versus:openVersus, online:openOnline,
                 compete:openCompete, achievements:openAchievements, vote:openVote };
   if (mode !== 'home' && map[mode]) map[mode]();
@@ -3348,6 +3468,7 @@ function renderSidebar(){
     ${item('study','book','Study')}
     ${item('focus','flame','Focus Sprint')}
     ${item('verbal','alpha','Verbal')}
+    ${item('writing','quill','Writing')}
     ${item('review','refresh','Review Misses')}
     ${item('gaps','flag','Knowledge Map')}
     ${item('coach','chat','Coach')}
@@ -3768,6 +3889,7 @@ function renderDiagDone(s){
 
 /* ===== About: version, platform, what's new ===== */
 const CHANGELOG = [
+  ['0.28.0','Premium earns it: Writing Coach (Sage grades your essays), Score Reports with test history, Focus Sprints go premium, free review capped at 10/day — and the ladder shows YOUR rank'],
   ['0.27.0','Your Account page: player card, mutual friends with one-tap challenges, global + friends leaderboards; both race formats now swing ratings equally'],
   ['0.26.1','The academy comes alive: drifting golden light and twinkling sparkles behind everything, in every theme'],
   ['0.26.0','The Real SSAT: four timed sections — Quant, Reading, Verbal, Quant — scored 500-800 each with a 1500-2400 composite'],
@@ -3837,6 +3959,7 @@ function openAbout(){
 let focusTimer=null, focusLeft=0, focusScore=0, focusTotal=0, focusTarget=-1, focusCurrent=null, focusAnswered=false, focusXP=0;
 function openFocus(){
   if (!account){ showToast('Log into an account first'); return; }
+  if (premiumGate('Focus Sprint')) return;
   document.getElementById('intro').classList.add('hidden');
   const el=document.getElementById('focus');
   el.classList.remove('hidden');
@@ -4037,11 +4160,15 @@ function openPremium(){
           <button class="btn" style="width:auto;padding:9px 16px;margin:0" onclick="joinFamily()">Join</button>
         </div>`}
       <div class="mlabel">Always free</div>
-      ${rowF('Study mode')}${rowF('Daily Challenge')}${rowF('Verbal practice')}${rowF('Diagnostic & Knowledge Map')}${rowF('Review Misses (spaced repetition)')}${rowF('Online races, friends & challenges')}${rowF('One Full Test + your parent numbers')}${rowF('Sage — 3 chats a day')}
+      ${rowF('Study mode')}${rowF('Daily Challenge')}${rowF('Verbal practice')}${rowF('Diagnostic & Knowledge Map')}${rowF('Review Misses — 10 a day')}${rowF('Online races, friends & challenges')}${rowF('One Full Test + your parent numbers')}${rowF('Sage — 3 chats a day')}
       <div class="mlabel">Premium</div>
-      ${rowP('Unlimited Full Tests','score history and season tracking')}
+      ${rowP('Unlimited Full Tests + the Real SSAT','4 timed sections, composite score')}
+      ${rowP('Score Reports','test history with where the points bled')}
+      ${rowP('Focus Sprints','25 minutes aimed at your weakest gap')}
+      ${rowP('Unlimited Review','the full spaced-repetition schedule, every day')}
       ${rowP('Sage, full strength','25 chats/day per kid — unlimited with Deep Explanations on the $100 plan')}
       ${rowP('Parent Reports, written','the AI-drafted narrative on top of your free numbers')}
+      ${rowP('Writing Coach','Sage grades your SSAT essays — Unlimited & Family')}
       <p class="section-instr" style="margin-top:12px">Founded and run by middle schoolers working toward college.</p>
     </div>`;
   window.scrollTo({top:0,behavior:'smooth'});
