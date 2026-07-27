@@ -443,7 +443,7 @@
 </div>
 
 <script>
-const APP_VERSION = '0.31.5';
+const APP_VERSION = '0.32.0';
 /* ===== Local accounts: each person has their own on-device SSAT account ===== */
 let store = { accounts: [], currentId: null };
 function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
@@ -469,6 +469,19 @@ function rnd(min,max){ return Math.floor(Math.random()*(max-min+1))+min; }
 function choice(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
 function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
 function pick(arr,n){ return shuffle(arr.slice()).slice(0,n); }
+const BAD_SUB = ['fuck','shit','bitch','cunt','nigg','negro','faggot','fagot','retard','rape','rapist','nazi','hitler','kike','chink','gook','wetback','beaner','wigger','towelhead','raghead','tranny','lesbo','whore','slut','pussy','porn','penis','vagina','boob','dick','cock','tits','jizz','blowjob','handjob','rimjob','orgasm','orgy','hentai','milf','dildo','nutsack','ballsack','scrotum','testicle','nipple','incel','pedo','molest','asshole','dumbass','jackass','badass','stripper','gaylord','stfu','damn','piss','thot','suicide'];
+const BAD_EXACT = ['ass','sex','cum','hoe','hell','coon','anal','anus','semen','isis','meth','weed','jap','paki','homo','queer','gay','dyke','kys','kms','wtf','fag','spic','hooker','heroin','terrorist'];
+const LEET_MAP = { '0':'o','1':'i','3':'e','4':'a','5':'s','6':'g','7':'t','8':'b','9':'g' };
+function nameAllowed(name){
+  const mapped = String(name).toLowerCase().split('').map(c => LEET_MAP[c] || c).join('').replace(/[^a-z]/g,'');
+  const collapsed = mapped.replace(/(.)\1+/g,'$1');
+  const vswap = collapsed.replace(/v/g,'u');
+  for (const f of [mapped, collapsed, vswap]){
+    for (const b of BAD_SUB) if (f.includes(b)) return false;
+    for (const b of BAD_EXACT) if (f === b) return false;
+  }
+  return true;
+}
 /* test bubbles work like paper: tap your filled bubble again to erase it (blank > wrong guess at -1/4) */
 function radioToggle(r){
   if (r._wasOn){ r.checked=false; r._wasOn=false; }
@@ -1942,6 +1955,7 @@ function createAccount(){
   const name=(document.getElementById('newName').value||'').trim();
   const pin=(document.getElementById('newPin').value||'').trim();
   if(!name){ showToast('Please enter a name'); return; }
+  if(!nameAllowed(name)){ showToast("That name isn't allowed — pick something kinder"); return; }
   if(store.accounts.some(x=>x.name.toLowerCase()===name.toLowerCase())){ showToast('That name is taken — pick another'); return; }
   const a={ id:uid(), name, pinH: pin?pinHash(pin):'', xp:0 }; ensureFields(a);
   store.accounts.push(a); store.currentId=a.id; saveStore();
@@ -3634,15 +3648,19 @@ function friendsHTML(){
     + `<div class="mlabel">Friends</div>`
     + (rows || '<p class="section-instr">No friends yet — send a request by player name. Friendship starts when they accept.</p>');
 }
-let acctBoard='global', lastBoard=[], lastYou=null;
+let acctBoard='global', lastBoard=[], lastYou=null, lastWall=[];
 function openFriendsPage(){
   if (!account){ showToast('Log into an account first'); return; }
   if (!account.onlineToken || !ows || ows.readyState!==1) ensureOnlineIdentity();
-  setTimeout(()=>{ osend({t:'friends'}); osend({t:'leaderboard'}); }, 400);
+  setTimeout(()=>{ osend({t:'friends'}); osend({t:'leaderboard'}); osend({t:'wall'}); }, 400);
   document.getElementById('intro').classList.add('hidden');
   renderFriendsPage();
 }
 function obsidianQualified(){ return !!(oMe && oMe.rating>=1200) || !!(account && account.onlineRating>=1200); }
+function wallHTML(){
+  if (!lastWall || !lastWall.length) return '<p class="section-instr" style="text-align:center">The wall awaits its first name&hellip;</p>';
+  return lastWall.map(e=>`<div class="tier-row" style="border-left:4px solid var(--gold)"><span><b>⭐ ${esc(e.name)}</b>${oMe&&e.name===oMe.name?' <span style="font-size:11px;color:var(--gray)">(you)</span>':''}</span><span class="tier-rp">${esc(e.label)}</span></div>`).join('');
+}
 function boardHTML(){
   let rows;
   if (acctBoard==='obsidian'){
@@ -3684,7 +3702,7 @@ function renderFriendsPage(){
           <span style="font-size:12.5px;color:var(--gray)">★ Level ${level} &middot; ${tierIcon(tierIndex(a.rp),13)} ${t.name} &middot; ${a.rp} RP${oMe&&oMe.rating?` &middot; ${ico('globe',12)} ${oMe.rating} (${oMe.wins}W–${oMe.losses}L)`:''}</span></span>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">
-        ${chip('Math '+(a.skill||2).toFixed(1))}${chip('Analogies '+(a.verbalSkill.analogies||2).toFixed(1))}${chip('Reading '+(a.verbalSkill.reading||2).toFixed(1))}${chip('Synonyms '+(a.verbalSkill.synonyms||2).toFixed(1))}${a.streak?chip(a.streak+'-day streak'):''}${a.stats.bestComposite?chip('Best composite '+a.stats.bestComposite):''}${COURSES.map((c,ci)=>a.courseDone[ci]?`<span class="badge" style="background:linear-gradient(160deg,#e0c169,#ca9827);color:#1a2136;border-color:#a87f1e">✦ ${c.title}</span>`:'').join('')}
+        ${chip('Math '+(a.skill||2).toFixed(1))}${chip('Analogies '+(a.verbalSkill.analogies||2).toFixed(1))}${chip('Reading '+(a.verbalSkill.reading||2).toFixed(1))}${chip('Synonyms '+(a.verbalSkill.synonyms||2).toFixed(1))}${a.streak?chip(a.streak+'-day streak'):''}${a.stats.bestComposite?chip('Best composite '+a.stats.bestComposite):''}${COURSES.map((c,ci)=>a.courseDone[ci]?`<span class="badge" style="background:linear-gradient(160deg,#e0c169,#ca9827);color:#1a2136;border-color:#a87f1e">✦ ${c.title}</span>`:'').join('')}${(lastWall||[]).filter(e=>oMe&&e.name===oMe.name).map(e=>`<span class="badge" style="background:linear-gradient(160deg,#e0c169,#ca9827);color:#1a2136;border-color:#a87f1e">⭐ ${esc(e.label)} Champion</span>`).join('')}
       </div>
     </div>
     <div class="card">
@@ -3695,6 +3713,11 @@ function renderFriendsPage(){
         <input id="friendNamePg" maxlength="16" placeholder="Friend's player name" style="flex:1;padding:9px 12px;border:1.5px solid var(--line);border-radius:8px" />
         <button class="btn" style="width:auto;padding:9px 14px;margin:0" onclick="addFriendPg()">Request</button>
       </div>
+    </div>
+    <div class="card">
+      <div class="section-title">⭐ Wall of Champions</div>
+      <p class="section-instr">One name a month, forever. Win the Monthly Championship — last Saturday, every month — and yours joins them.</p>
+      <div id="wallBox">${wallHTML()}</div>
     </div>
     <div class="card">
       <div class="section-title">${ico('trophy',17)} Leaderboards</div>
@@ -3837,6 +3860,11 @@ function onlineMsg(m){
         <button class="btn secondary" onclick="renderOnlineHome()">Online home</button>
       </div>`;
   }
+  else if (m.t==='wall'){
+    lastWall = m.list||[];
+    const wb=document.getElementById('wallBox');
+    if (wb) wb.innerHTML = wallHTML();
+  }
   else if (m.t==='leaderboard'){
     lastBoard = m.top||[];
     lastYou = m.you||null;
@@ -3859,9 +3887,13 @@ function onlineMsg(m){
       } else {
         const when=new Date(m.startsAt);
         const hh=when.getHours()%12||12, mm=String(when.getMinutes()).padStart(2,'0'), ap=when.getHours()>=12?'PM':'AM';
-        card.innerHTML=`<span><b>${ico('trophy',14)} Bracket Tournament</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">${m.state==='reg'
-          ? `starts at ${hh}:${mm} ${ap} &middot; ${m.n} registered &middot; full matches to 21, 30 min between rounds`
-          : `LIVE — round ${m.round}, ${m.alive} players remain`}</span></span>
+        const day=when.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});
+        const title = m.monthly ? `\u2b50 ${m.mlabel} Championship` : `${ico('trophy',14)} Bracket Tournament`;
+        const sub = m.state!=='reg' ? `LIVE — round ${m.round}, ${m.alive} players remain`
+          : m.monthly ? `${day} at ${hh}:${mm} ${ap} &middot; ${m.n} registered &middot; the winner's name goes on the Wall of Champions`
+          : `starts at ${hh}:${mm} ${ap} &middot; ${m.n} registered &middot; full matches to 21, 30 min between rounds`;
+        if (m.monthly) card.style.borderLeft='4px solid var(--gold)'; else card.style.borderLeft='';
+        card.innerHTML=`<span><b${m.monthly?' style="color:var(--gold-deep,#a87f1e)"':''}>${title}</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">${sub}</span></span>
         ${m.state==='reg' ? (m.registered
           ? `<button class="seg" style="flex:none" onclick="osend({t:'tourney_leave'})">Leave</button>`
           : `<button class="seg" style="flex:none" onclick="osend({t:'tourney_join'})">Register</button>`) : ''}`;
@@ -3875,7 +3907,7 @@ function onlineMsg(m){
     if (s) s.innerHTML=`<div class="explain">${esc(m.msg||'')}</div>`;
   }
   else if (m.t==='stourney_result'){
-    if (m.yours){ celebrate(); showToast('🏆 CHAMPION! You won the tournament!'); }
+    if (m.yours){ celebrate(); showToast(m.monthly ? '⭐ MONTHLY CHAMPION! Your name goes on the Wall!' : '🏆 CHAMPION! You won the tournament!'); }
     else if (m.champion) showToast('Tournament over — champion: '+esc(m.champion));
     else showToast(m.msg||'Tournament cancelled');
     const s=document.getElementById('tourneyStatus');
@@ -4649,6 +4681,7 @@ function renderDiagDone(s){
 
 /* ===== About: version, platform, what's new ===== */
 const CHANGELOG = [
+  ['0.32.0','The Monthly Championship: last Saturday of every month — win it and your name goes on the Wall of Champions, forever. Plus a serious username filter'],
   ['0.31.5','Your leaderboard rank now always matches the ladder rows. Scores reach 800 again and every estimate shows your percentile'],
   ['0.31.4','Score estimates now curve like the real SSAT — the top of the scale is earned against a strong pool, estimates cap at 775'],
   ['0.31.3','Test bubbles erase like paper — tap your answer again to leave it blank. Family plan now shows it includes every tutor perk'],

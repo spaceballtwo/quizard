@@ -26,6 +26,38 @@ export default {
   }
 };
 
+/* Username filter. Normalizes leetspeak and repeats, then checks a substring list
+   (unambiguous profanity/slurs) and an exact list (short words with innocent hosts —
+   'ass' must not ban Cassie, 'sex' must not ban Essex). Server is the authority;
+   the client mirrors this for instant feedback. */
+const BAD_SUB = ['fuck','shit','bitch','cunt','nigg','negro','faggot','fagot','retard','rape','rapist','nazi','hitler','kike','chink','gook','wetback','beaner','wigger','towelhead','raghead','tranny','lesbo','whore','slut','pussy','porn','penis','vagina','boob','dick','cock','tits','jizz','blowjob','handjob','rimjob','orgasm','orgy','hentai','milf','dildo','nutsack','ballsack','scrotum','testicle','nipple','incel','pedo','molest','asshole','dumbass','jackass','badass','stripper','gaylord','stfu','damn','piss','thot','suicide'];
+const BAD_EXACT = ['ass','sex','cum','hoe','hell','coon','anal','anus','semen','isis','meth','weed','jap','paki','homo','queer','gay','dyke','kys','kms','wtf','fag','spic','hooker','heroin','terrorist'];
+const LEET = { '0':'o','1':'i','3':'e','4':'a','5':'s','6':'g','7':'t','8':'b','9':'g' };
+function nameOK(name){
+  const mapped = String(name).toLowerCase().split('').map(c => LEET[c] || c).join('').replace(/[^a-z]/g, '');
+  const collapsed = mapped.replace(/(.)\1+/g, '$1');
+  const vswap = collapsed.replace(/v/g,'u');
+  for (const f of [mapped, collapsed, vswap]){
+    for (const b of BAD_SUB) if (f.includes(b)) return false;
+    for (const b of BAD_EXACT) if (f === b) return false;
+  }
+  return true;
+}
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+/* Monthly Championship: last Saturday of the month, 17:00 UTC (1 PM ET). */
+function monthlySlot(now){
+  for (let add = 0; add < 2; add++){
+    const d = new Date(now); const y = d.getUTCFullYear(), mo = d.getUTCMonth() + add;
+    const last = new Date(Date.UTC(y, mo + 1, 0));
+    last.setUTCDate(last.getUTCDate() - ((last.getUTCDay() + 1) % 7));
+    last.setUTCHours(17, 0, 0, 0);
+    if (last.getTime() > now + 60e3) return last.getTime();
+  }
+  return null;
+}
+function monthlyLabel(ts){ const d = new Date(ts); return MONTH_NAMES[d.getUTCMonth()] + ' ' + d.getUTCFullYear(); }
+const MONTHLY_REG_MS = 48 * 3600e3;
+
 export class QuizardLobby {
   constructor(state, env){
     this.env = env;
@@ -98,13 +130,18 @@ export class QuizardLobby {
       const pass = String(m.pass || '');
       if (!/^[A-Za-z0-9_]{3,16}$/.test(name)) return this.send(conn, { t: 'auth', ok: false, msg: 'Name must be 3-16 letters, numbers, or _' });
       if (pass.length < 4) return this.send(conn, { t: 'auth', ok: false, msg: 'Password needs 4+ characters' });
-      let key = name.toLowerCase();
-      let finalName = name;
+      let cleanBase = name;
+      if (!nameOK(name)){
+        if (!m.auto) return this.send(conn, { t: 'auth', ok: false, msg: "That name isn't allowed here — pick something kinder" });
+        cleanBase = 'Wizard';   // auto flow must not dead-end; fall back to a clean base
+      }
+      let key = cleanBase.toLowerCase();
+      let finalName = cleanBase;
       if (await this.getUser(key)){
         if (!m.auto) return this.send(conn, { t: 'auth', ok: false, msg: 'That name is taken' });
         let found = null;
         for (let i = 2; i <= 99; i++){
-          const cand = (name.slice(0, 14) + i);
+          const cand = (cleanBase.slice(0, 14) + i);
           if (!await this.getUser(cand.toLowerCase())){ found = cand; break; }
         }
         if (!found) return this.send(conn, { t: 'auth', ok: false, msg: 'That name is taken' });
@@ -271,11 +308,17 @@ export class QuizardLobby {
       let st = await this.storage.get('stourney');
       const now = Date.now();
       if (!st || st.state === 'done' || (st.state === 'reg' && now > st.startsAt + 120e3)){
-        // next :00 or :30 mark that's at least 10 minutes away
-        let t0 = new Date(now + 10 * 60e3);
-        const mins = t0.getMinutes();
-        t0.setMinutes(mins < 30 ? 30 : 60, 0, 0);
-        st = { startsAt: t0.getTime(), roundAt: t0.getTime(), round: 0, state: 'reg', players: [], alive: [], winners: [], pendingCount: 0 };
+        const slot = monthlySlot(now);
+        if (slot && now >= slot - MONTHLY_REG_MS){
+          // championship weekend: the bracket slot IS the Monthly Championship
+          st = { startsAt: slot, roundAt: slot, round: 0, state: 'reg', players: [], alive: [], winners: [], pendingCount: 0, monthly: true, mlabel: monthlyLabel(slot) };
+        } else {
+          // next :00 or :30 mark that's at least 10 minutes away
+          let t0 = new Date(now + 10 * 60e3);
+          const mins = t0.getMinutes();
+          t0.setMinutes(mins < 30 ? 30 : 60, 0, 0);
+          st = { startsAt: t0.getTime(), roundAt: t0.getTime(), round: 0, state: 'reg', players: [], alive: [], winners: [], pendingCount: 0 };
+        }
       }
       if (st.state === 'reg' && !st.players.some(p => p.key === conn.user) && st.players.length < 32){
         const u = await this.getUser(conn.user);
@@ -295,8 +338,19 @@ export class QuizardLobby {
       }
     }
     else if (m.t === 'tourney_state'){
-      const st = await this.storage.get('stourney');
+      let st = await this.storage.get('stourney');
+      if (!st || st.state === 'done'){
+        const now = Date.now(), slot = monthlySlot(now);
+        if (slot && now >= slot - MONTHLY_REG_MS){
+          st = { startsAt: slot, roundAt: slot, round: 0, state: 'reg', players: [], alive: [], winners: [], pendingCount: 0, monthly: true, mlabel: monthlyLabel(slot) };
+          await this.storage.put('stourney', st);
+          await this.storage.setAlarm(st.startsAt);
+        }
+      }
       this.sendStState(conn, st);
+    }
+    else if (m.t === 'wall'){
+      this.send(conn, { t: 'wall', list: (await this.storage.get('wall')) || [] });
     }
     else if (m.t === 'arena_join'){
       if (!conn.user || conn.match) return;
@@ -711,7 +765,7 @@ Under 250 words, plain text, warm, specific to THEIR essay — never generic. Ne
   }
   sendStState(conn, st){
     if (!st || st.state === 'done'){ this.send(conn, { t: 'stourney_state', none: true }); return; }
-    this.send(conn, { t: 'stourney_state', state: st.state, startsAt: st.startsAt, roundAt: st.roundAt, round: st.round,
+    this.send(conn, { t: 'stourney_state', state: st.state, startsAt: st.startsAt, roundAt: st.roundAt, round: st.round, monthly: !!st.monthly, mlabel: st.mlabel || '',
       players: st.players.map(p => p.name), n: st.players.length,
       registered: !!(conn.user && st.players.some(p => p.key === conn.user)),
       alive: st.state === 'running' ? st.alive.length : st.players.length });
@@ -769,8 +823,14 @@ Under 250 words, plain text, warm, specific to THEIR essay — never generic. Ne
       if (champKey){
         const champU = await this.getUser(champKey);
         champU.tourneyWins = (champU.tourneyWins || 0) + 1;
+        if (st.monthly){
+          champU.champTitles = (champU.champTitles || []).concat(st.mlabel);
+          const wall = (await this.storage.get('wall')) || [];
+          wall.unshift({ name: champU.name, label: st.mlabel, at: Date.now() });
+          await this.storage.put('wall', wall.slice(0, 60));
+        }
         await this.putUser(champKey, champU);
-        for (const p of st.players){ const c = this.liveConn(p.key); if (c) this.send(c, { t: 'stourney_result', champion: champU.name, yours: p.key === champKey }); }
+        for (const p of st.players){ const c = this.liveConn(p.key); if (c) this.send(c, { t: 'stourney_result', champion: champU.name, yours: p.key === champKey, monthly: !!st.monthly }); }
       }
       return;
     }

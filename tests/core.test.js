@@ -277,5 +277,12 @@ account.premiumPlan='family-member';
 T('planLabel family member', planLabel()==='Family');
 account.premium=false; account.premiumPlan='';
 
+// username filter: leet + repeats caught, innocent hosts spared
+T('filter: clean names pass', nameAllowed('MathWizard') && nameAllowed('Cassie') && nameAllowed('Essex') && nameAllowed('Tycoon') && nameAllowed('hello') && nameAllowed('Sam_2013'));
+T('filter: profanity blocked', !nameAllowed('FuckThis') && !nameAllowed('shithead') && !nameAllowed('BitchKing'));
+T('filter: leetspeak blocked', !nameAllowed('Sh1tLord') && !nameAllowed('B1tch') && !nameAllowed('N1gg3r') && !nameAllowed('fvck') && !nameAllowed('Fuuuck') && nameAllowed('David') && nameAllowed('Kevin'));
+T('filter: slurs blocked', !nameAllowed('nigger123') && !nameAllowed('KikeHater') && !nameAllowed('ret4rd'));
+T('filter: exact-only words', !nameAllowed('ass') && nameAllowed('Cassandra') && !nameAllowed('sex') && nameAllowed('Sussex') && !nameAllowed('kys'));
+
 console.log(fails===0 ? 'CORE SUITE PASS' : fails+' FAILURES');
 process.exit(fails?1:0);
