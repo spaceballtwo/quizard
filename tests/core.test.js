@@ -260,5 +260,16 @@ T('tour starts', tourOn===true);
 endTour(false);
 T('tour done sticks', account.tourDone===true && tourOn===false);
 
+// tier labels name the plan, never a generic "Premium"
+account.premium=false; store.familyPremium=false; account.premiumPlan='';
+T('planLabel free', planLabel()==='Free');
+account.premium=true; account.premiumPlan='solo';
+T('planLabel solo', planLabel()==='Solo');
+account.premiumPlan='unlimited';
+T('planLabel tutor tier', /Tutor Tier/.test(planLabel()));
+account.premiumPlan='family-member';
+T('planLabel family member', planLabel()==='Family');
+account.premium=false; account.premiumPlan='';
+
 console.log(fails===0 ? 'CORE SUITE PASS' : fails+' FAILURES');
 process.exit(fails?1:0);

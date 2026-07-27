@@ -443,10 +443,18 @@
 </div>
 
 <script>
-const APP_VERSION = '0.31.1';
+const APP_VERSION = '0.31.2';
 /* ===== Local accounts: each person has their own on-device SSAT account ===== */
 let store = { accounts: [], currentId: null };
 function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
+function planLabel(){
+  if(!isPremium()) return 'Free';
+  const p=account&&account.premiumPlan;
+  if(p==='unlimited') return 'Unlimited \u2014 Tutor Tier';
+  if(p==='solo') return 'Solo';
+  if(p==='family') return 'Family';
+  return 'Family';   // family-member / familyPremium device flag
+}
 function isUnlimited(){ return !!(account && account.premiumPlan==='unlimited'); }
 function hasPerks(){ return isUnlimited() || !!(account && (account.premiumPlan==='family' || account.premiumPlan==='family-member' || store.familyPremium)); }
 function hasMidnight(){ return hasPerks(); }
@@ -1844,7 +1852,7 @@ function renderHome(){
     applyTheme();
     const pl=document.getElementById('premiumLine');
     if(pl) pl.innerHTML = isPremium()
-      ? `<span class="badge" style="background:linear-gradient(160deg,#e0c169,#ca9827);color:#1a2136;border-color:#a87f1e">${ico('crown',12)} Premium</span>`
+      ? `<span class="badge" style="background:linear-gradient(160deg,#e0c169,#ca9827);color:#1a2136;border-color:#a87f1e">${ico('crown',12)} ${planLabel()}</span>`
       : `<button class="seg" style="flex:none" onclick="navTo('premium')">${ico('crown',13)} Go Premium</button>`;
     const sBtn=document.getElementById('soundBtn'); if(sBtn) sBtn.innerHTML = soundOn?ico('volume',15)+' Sound: On':ico('mute',15)+' Sound: Off';
     document.querySelectorAll('#homeMain [data-ico]:empty').forEach(el2 => { el2.innerHTML = ico(el2.dataset.ico, +(el2.dataset.sz||24)); });
@@ -3643,7 +3651,7 @@ function renderFriendsPage(){
     <div class="card">
       <div style="display:flex;align-items:center;gap:14px">
         <span class="coach-ava" style="width:54px;height:54px;font-size:24px;font-weight:800;font-family:var(--serif)">${esc((a.name||'?')[0].toUpperCase())}</span>
-        <span><b style="font-size:18px;color:var(--navy)">${esc(a.name)}</b><br>
+        <span><b style="font-size:18px;color:var(--navy)">${esc(a.name)}</b>${isPremium()?` <span class="badge" style="background:linear-gradient(160deg,#e0c169,#ca9827);color:#1a2136;border-color:#a87f1e;font-size:10px;vertical-align:2px">${ico('crown',10)} ${planLabel()}</span>`:''}<br>
           <span style="font-size:12.5px;color:var(--gray)">★ Level ${level} &middot; ${tierIcon(tierIndex(a.rp),13)} ${t.name} &middot; ${a.rp} RP${oMe&&oMe.rating?` &middot; ${ico('globe',12)} ${oMe.rating} (${oMe.wins}W–${oMe.losses}L)`:''}</span></span>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">
@@ -4612,6 +4620,7 @@ function renderDiagDone(s){
 
 /* ===== About: version, platform, what's new ===== */
 const CHANGELOG = [
+  ['0.31.2','Your plan shows by name everywhere — Solo, Unlimited Tutor Tier, or Family — instead of a generic Premium badge'],
   ['0.31.1','Brackets become real events: register, play at the set start time, full first-to-21 matches, 30 minutes between rounds'],
   ['0.31.0','Two new courses (Word Mastery + Summit Problems), the hidden Obsidian League, and online tournaments: Arena and seeded Brackets'],
   ['0.30.0','Courses are now a summit: master every topic to unlock the Course Exam — pass it for the crest, +150 XP, and a gold ring on home'],
@@ -4671,7 +4680,7 @@ function openAbout(){
       <div class="tier-row"><span>Version</span><span class="tier-rp">v${APP_VERSION}</span></div>
       <div class="tier-row"><span>Running as</span><span class="tier-rp">${appPlatform()}</span></div>
       <div class="tier-row"><span>Online server</span><span class="tier-rp">${online}</span></div>
-      ${account?`<div class="tier-row"><span>Plan</span><span class="tier-rp">${isPremium()?(account.premiumPlan||'family member'):'free'}</span></div>`:''}
+      ${account?`<div class="tier-row"><span>Plan</span><span class="tier-rp">${planLabel()}</span></div>`:''}
       <div class="mlabel">What's new</div>
       ${CHANGELOG.map(([v,d])=>`<div class="tier-row"><span style="flex-shrink:0"><b>v${v}</b></span><span style="font-weight:400;font-size:12.5px;color:var(--gray);text-align:right">${d}</span></div>`).join('')}
       <div class="mlabel">SamTech</div>
@@ -4834,7 +4843,7 @@ function openPremium(){
     <div class="card">
       <div class="section-title">${ico('crown',17)} Quizard Premium</div>
       ${isP ? `
-        <div class="explain ok" style="margin-top:4px"><b>You're Premium.</b> Everything is unlocked — thanks for backing a small team.</div>
+        <div class="explain ok" style="margin-top:4px"><b>Your plan: ${planLabel()}.</b> Everything it unlocks is live — thanks for backing a small team.</div>
         ${hasPerks() ? `
           <div class="mlabel">${isUnlimited()?'Unlimited perks':'Family perks'}</div>
           <div class="tier-row"><span><b>Midnight theme</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">the academy after dark</span></span>
