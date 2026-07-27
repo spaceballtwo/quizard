@@ -1,5 +1,5 @@
 
-const APP_VERSION = '0.29.0';
+const APP_VERSION = '0.30.0';
 /* ===== Local accounts: each person has their own on-device SSAT account ===== */
 let store = { accounts: [], currentId: null };
 function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
@@ -1352,11 +1352,12 @@ function renderHomeCourses(){
   el.innerHTML = COURSES.map((c,ci)=>{
     const p = Math.round(courseProgress(c)*100);
     const mastered = c.topics.filter(id=>topicScore(id)>=TOPIC_MASTERY).length;
-    return `<button class="mbtn" style="padding:12px 10px" onclick="navTo('learn'); openCourse(${ci})">
-      <span style="width:40px;height:40px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:conic-gradient(#2f9150 ${p}%, #e8e0c9 0)">
-        <span style="width:29px;height:29px;border-radius:50%;background:var(--card);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--navy)">${p}%</span>
+    const done = !!account.courseDone[ci];
+    return `<button class="mbtn" style="padding:12px 10px;${done?'border-color:var(--gold);':''}" onclick="navTo('learn'); openCourse(${ci})">
+      <span style="width:40px;height:40px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:conic-gradient(${done?'var(--gold)':'#2f9150'} ${done?100:p}%, #e8e0c9 0)">
+        <span style="width:29px;height:29px;border-radius:50%;background:var(--card);display:flex;align-items:center;justify-content:center;font-size:${done?'13':'10'}px;font-weight:700;color:${done?'var(--gold)':'var(--navy)'}">${done?'✦':p+'%'}</span>
       </span>
-      <span>${c.title}<br><span style="font-weight:400;font-size:11px;color:var(--gray)">${mastered}/${c.topics.length} topics</span></span>
+      <span>${c.title}<br><span style="font-weight:400;font-size:11px;color:${done?'var(--gold)':'var(--gray)'}">${done?'course complete':mastered+'/'+c.topics.length+' topics'}</span></span>
     </button>`;
   }).join('');
 }
@@ -1522,6 +1523,7 @@ function ensureFields(a){
   if(!a.revDay || typeof a.revDay!=='object') a.revDay={d:'',n:0};
   if(!Array.isArray(a.testHist)) a.testHist=[];
   if(!a.weekPlan || typeof a.weekPlan!=='object') a.weekPlan=null;
+  if(!a.courseDone || typeof a.courseDone!=='object') a.courseDone={};
 }
 function dateStr(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function markActivity(){
@@ -2120,6 +2122,64 @@ function renderTestResults(correct, wrongChosen, blanks, perSection){
 function closeFullTestToIntro(){
   goHome();
   openFullTest();
+}
+
+/* ===== Course Exam: the summit — 10 questions, pass 8, earn the crest ===== */
+let ceState=null;
+function startCourseExam(ci){
+  const c=COURSES[ci];
+  const gens=[]; c.topics.forEach(id=>{ const t=TOPICS[topicIdxById(id)]; gens.push(...t.gens); });
+  const qs=[]; for(let i=0;i<10;i++){ const g=drawBag(gens,'ce_'+ci); qs.push(unseen(g)); }
+  ceState={ ci, qs, idx:0, correct:0, answered:false };
+  renderExamQ();
+}
+function renderExamQ(){
+  const s=ceState, q=s.qs[s.idx];
+  document.getElementById('learn').innerHTML=`
+    <div class="card">
+      <div class="study-head"><span>${COURSES[s.ci].title} — Course Exam</span><span class="study-score">${s.idx+1} of 10 &middot; need 8</span></div>
+      <div class="xp-track" style="margin-bottom:14px"><div style="height:100%;border-radius:999px;background:var(--gold);width:${s.idx*10}%"></div></div>
+      <div class="q-stem">${q.q}</div>${figHTML(q)}
+      ${q.choices.map((c2,i)=>`<label class="choice" id="ce-${i}" onclick="examAnswer(${i})"><span>${String.fromCharCode(65+i)}. ${c2}</span></label>`).join('')}
+    </div>`;
+  drawFigs();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function examAnswer(i){
+  const s=ceState; if (s.answered) return; s.answered=true;
+  const q=s.qs[s.idx], ok=(i===q.answer);
+  q.choices.forEach((c2,idx)=>{ const l=document.getElementById('ce-'+idx); if(l){ l.classList.add('locked'); l.onclick=null; if(idx===q.answer) l.classList.add('correct'); else if(idx===i) l.classList.add('wrong'); } });
+  noteTopicResult(q, ok);
+  if (ok){ s.correct++; playCorrect(); } else { playWrong(); recordMiss(q,''); }
+  answerFX(ok, document.getElementById('ce-'+i));
+  saveStore();
+  setTimeout(()=>{
+    s.answered=false; s.idx++;
+    if (s.idx>=10) finishExam();
+    else renderExamQ();
+  }, ok?650:1500);
+}
+function finishExam(){
+  const s=ceState, passed=s.correct>=8, c=COURSES[s.ci];
+  if (passed && account && !account.courseDone[s.ci]){
+    account.courseDone[s.ci]=true;
+    addXP(150);
+    saveStore();
+    celebrate();
+  }
+  document.getElementById('learn').innerHTML=`
+    <div class="card" style="text-align:center">
+      <div style="color:var(--gold)">${ico(passed?'crown':'flame',44)}</div>
+      <div class="section-title" style="justify-content:center">${passed?c.title+' — COMPLETE ✦':'So close'}</div>
+      <div class="score-big">${s.correct}/10</div>
+      ${passed
+        ? `<p class="section-instr" style="text-align:center">Crest earned. +150 XP. This course is finished — for good.</p>`
+        : `<p class="section-instr" style="text-align:center">You need 8. The misses just went to Review — sharpen up and take it again. The exam isn't going anywhere.</p>
+           <button class="btn" onclick="startCourseExam(${s.ci})">Retake the exam</button>`}
+      <button class="btn secondary" onclick="openCourse(${s.ci})">Back to the course</button>
+    </div>`;
+  ceState=null;
+  window.scrollTo({top:0,behavior:'smooth'});
 }
 
 /* ===== Week Plan: Sage's plan as a real checklist, built from the kid's own gaps ===== */
@@ -3062,7 +3122,7 @@ function renderFriendsPage(){
           <span style="font-size:12.5px;color:var(--gray)">★ Level ${level} &middot; ${tierIcon(tierIndex(a.rp),13)} ${t.name} &middot; ${a.rp} RP${oMe&&oMe.rating?` &middot; ${ico('globe',12)} ${oMe.rating} (${oMe.wins}W–${oMe.losses}L)`:''}</span></span>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">
-        ${chip('Math '+(a.skill||2).toFixed(1))}${chip('Analogies '+(a.verbalSkill.analogies||2).toFixed(1))}${chip('Reading '+(a.verbalSkill.reading||2).toFixed(1))}${chip('Synonyms '+(a.verbalSkill.synonyms||2).toFixed(1))}${a.streak?chip(a.streak+'-day streak'):''}${a.stats.bestComposite?chip('Best composite '+a.stats.bestComposite):''}
+        ${chip('Math '+(a.skill||2).toFixed(1))}${chip('Analogies '+(a.verbalSkill.analogies||2).toFixed(1))}${chip('Reading '+(a.verbalSkill.reading||2).toFixed(1))}${chip('Synonyms '+(a.verbalSkill.synonyms||2).toFixed(1))}${a.streak?chip(a.streak+'-day streak'):''}${a.stats.bestComposite?chip('Best composite '+a.stats.bestComposite):''}${COURSES.map((c,ci)=>a.courseDone[ci]?`<span class="badge" style="background:linear-gradient(160deg,#e0c169,#ca9827);color:#1a2136;border-color:#a87f1e">✦ ${c.title}</span>`:'').join('')}
       </div>
     </div>
     <div class="card">
@@ -3114,7 +3174,7 @@ function showLeaderboard(){ oconnect(()=>osend({t:'leaderboard'})); }
 let syncTimer=null;
 function syncPayload(){ const a=account; return { xp:a.xp, rp:a.rp, streak:a.streak, bestStreak:a.bestStreak,
   lastPlayed:a.lastPlayed, achievements:a.achievements, stats:a.stats, bestRun:a.bestRun,
-  lastDaily:a.lastDaily, weekPoints:a.weekPoints, weekId:a.weekId, diff:a.diff, vote:a.vote, skill:a.skill, topics:a.topics, misses:a.misses, verbalSkill:a.verbalSkill, lessonsDone:a.lessonsDone, tstats:a.tstats, diagAt:a.diagAt, hist:a.hist, tourDone:a.tourDone, premium:a.premium, premiumPlan:a.premiumPlan, familyCode:a.familyCode||'', theme:a.theme||'', freeTestUsed:a.freeTestUsed, testHist:a.testHist, revDay:a.revDay, weekPlan:a.weekPlan }; }
+  lastDaily:a.lastDaily, weekPoints:a.weekPoints, weekId:a.weekId, diff:a.diff, vote:a.vote, skill:a.skill, topics:a.topics, misses:a.misses, verbalSkill:a.verbalSkill, lessonsDone:a.lessonsDone, tstats:a.tstats, diagAt:a.diagAt, hist:a.hist, tourDone:a.tourDone, premium:a.premium, premiumPlan:a.premiumPlan, familyCode:a.familyCode||'', theme:a.theme||'', freeTestUsed:a.freeTestUsed, testHist:a.testHist, revDay:a.revDay, weekPlan:a.weekPlan, courseDone:a.courseDone }; }
 function syncUp(){ if(!oMe || !account) return; osend({t:'sync_up', data:syncPayload(), updatedAt:account.updatedAt||Date.now()}); }
 function scheduleSync(){ if(!oMe || !account || !ows || ows.readyState!==1) return; clearTimeout(syncTimer); syncTimer=setTimeout(syncUp, 3000); }
 function applySync(data){ if(!account || !data) return; Object.assign(account, data); ensureFields(account); syncXPFromAccount(); saveStore(); }
@@ -3330,11 +3390,23 @@ function openCourse(ci){
       <span><b>${t.title}</b><br><span style="font-weight:400;font-size:12.5px;color:var(--gray)">${t.sub}</span></span>
       <span class="tier-rp" style="${done?'color:var(--green);font-weight:700;':''}">${done?'✓ mastered':(cnt>0?cnt+'/'+TOPIC_MASTERY:'&rarr;')}</span></div>`;
   }).join('');
+  const mastered = c.topics.filter(id=>topicScore(id)>=TOPIC_MASTERY).length;
+  const ptsLeft = c.topics.reduce((s,id)=>s+Math.max(0,TOPIC_MASTERY-Math.min(topicScore(id),TOPIC_MASTERY)),0);
+  const allMastered = mastered===c.topics.length;
+  const done = !!(account && account.courseDone[ci]);
+  const examRow = done
+    ? `<div class="tier-row" style="border-left:4px solid var(--gold)"><span><b>${ico('crown',14)} Course complete</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">exam passed — crest earned</span></span><span class="tier-rp" style="color:var(--gold)">✦</span></div>`
+    : allMastered
+    ? `<div class="tier-row" style="border-left:4px solid var(--gold);cursor:pointer" onclick="startCourseExam(${ci})"><span><b>${ico('flame',14)} The Course Exam</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">10 questions, pass 8 — finish the course for good</span></span><span class="tier-rp">&rarr;</span></div>`
+    : `<div class="tier-row" style="opacity:.55"><span><b>${ico('lock',14)} The Course Exam</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">master all ${c.topics.length} topics to unlock — ${ptsLeft} mastery point${ptsLeft===1?'':'s'} to go</span></span><span class="tier-rp">${ico('lock',14)}</span></div>`;
   document.getElementById('learn').innerHTML = `
     <div class="card">
-      <div class="section-title">${ico('bulb',18)} ${c.title}</div>
+      <div class="section-title">${ico('bulb',18)} ${c.title} ${done?'<span style="color:var(--gold)">✦</span>':''}</div>
       <p class="section-instr">${c.desc}</p>
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--gray);margin-bottom:4px"><span>${mastered}/${c.topics.length} topics mastered</span><span>${done?'complete':ptsLeft+' points to the exam'}</span></div>
+      <div class="xp-track" style="margin-bottom:12px"><div style="height:100%;border-radius:999px;background:${done?'var(--gold)':'var(--green)'};width:${Math.round(courseProgress(c)*100)}%"></div></div>
       ${rows}
+      ${examRow}
       <button class="btn secondary" onclick="openLearn()">All courses</button>
     </div>`;
   window.scrollTo({top:0,behavior:'smooth'});
@@ -3965,6 +4037,7 @@ function renderDiagDone(s){
 
 /* ===== About: version, platform, what's new ===== */
 const CHANGELOG = [
+  ['0.30.0','Courses are now a summit: master every topic to unlock the Course Exam — pass it for the crest, +150 XP, and a gold ring on home'],
   ['0.29.0','Unlimited becomes the Tutor tier: week plans pinned to your home screen and personal test debriefs — built from YOUR data, which no chatbot has'],
   ['0.28.0','Premium earns it: Writing Coach (Sage grades your essays), Score Reports with test history, Focus Sprints go premium, free review capped at 10/day — and the ladder shows YOUR rank'],
   ['0.27.0','Your Account page: player card, mutual friends with one-tap challenges, global + friends leaderboards; both race formats now swing ratings equally'],
