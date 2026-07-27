@@ -268,6 +268,7 @@
 <body>
 <button class="menu-fab" onclick="toggleSidenav()" title="Menu"><span data-ico="menu" data-sz="22" style="display:flex"></span></button>
 <div id="sideveil" onclick="toggleSidenav()"></div>
+<canvas id="bgfx" style="position:fixed; inset:0; width:100%; height:100%; z-index:-1; pointer-events:none"></canvas>
 <nav id="sidebar"></nav>
 <div id="toast" class="toast hidden"></div>
 <canvas id="confetti" style="position:fixed; inset:0; width:100%; height:100%; pointer-events:none; z-index:60"></canvas>
@@ -437,7 +438,7 @@
 </div>
 
 <script>
-const APP_VERSION = '0.26.0';
+const APP_VERSION = '0.26.1';
 /* ===== Local accounts: each person has their own on-device SSAT account ===== */
 let store = { accounts: [], currentId: null };
 function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
@@ -4166,6 +4167,7 @@ function renderDiagDone(s){
 
 /* ===== About: version, platform, what's new ===== */
 const CHANGELOG = [
+  ['0.26.1','The academy comes alive: drifting golden light and twinkling sparkles behind everything, in every theme'],
   ['0.26.0','The Real SSAT: four timed sections — Quant, Reading, Verbal, Quant — scored 500-800 each with a 1500-2400 composite'],
   ['0.25.0','Longer races: first to 11 or 21 with bigger rating swings; friend requests need both sides; a real Friends page'],
   ['0.24.0','Real checkout on iOS via the App Store; live prices; restore purchases through Apple'],
@@ -4749,6 +4751,61 @@ function clearScratch(){ const t=document.getElementById('scratchText'); if(t){ 
 if ('serviceWorker' in navigator && location.protocol === 'https:'){
   navigator.serviceWorker.register('sw.js').catch(()=>{});
 }
+
+/* ===== Ambient background: drifting glows + twinkling sparkles, theme-aware ===== */
+(function bgfx(){
+  const c = document.getElementById('bgfx');
+  if (!c || !c.getContext) return;
+  const x = c.getContext('2d');
+  if (!x) return;
+  const reduced = matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W=0, H=0, frame=0;
+  function themeColors(){
+    const b = document.body.classList;
+    if (b.contains('midnight')) return { base:'#141a2b', blobs:['rgba(88,101,242,0.20)','rgba(202,152,39,0.16)','rgba(47,145,80,0.12)'], spark:'#eacd7f', starry:true };
+    if (b.contains('daybreak')) return { base:'#eef3fa', blobs:['rgba(120,170,255,0.30)','rgba(255,214,140,0.30)','rgba(150,220,180,0.22)'], spark:'#b8860b', starry:false };
+    return { base:'#f8f2e0', blobs:['rgba(224,193,105,0.42)','rgba(192,90,40,0.20)','rgba(47,145,80,0.16)'], spark:'#ca9827', starry:false };
+  }
+  function resize(){ W=c.width=window.innerWidth; H=c.height=window.innerHeight; }
+  window.addEventListener('resize', resize); resize();
+  const blobs = Array.from({length:3},(_,i)=>({ a:Math.random()*6.28, sp:0.0016+i*0.0009, r:Math.max(W,H)*(0.45+i*0.12), ox:[0.18,0.85,0.5][i], oy:[0.1,0.35,1.02][i] }));
+  const sparks = Array.from({length:34},()=>({ px:Math.random(), py:Math.random(), s:Math.random()*2.2+0.8, ph:Math.random()*6.28, tw:0.008+Math.random()*0.02, dx:(Math.random()-0.5)*0.00012, dy:-0.00008-Math.random()*0.0001 }));
+  function draw(){
+    frame++;
+    const t = themeColors();
+    x.clearRect(0,0,W,H);
+    x.fillStyle = t.base; x.fillRect(0,0,W,H);
+    blobs.forEach((b,i)=>{
+      b.a += b.sp;
+      const bx = b.ox*W + Math.cos(b.a)*W*0.06, by = b.oy*H + Math.sin(b.a*0.8)*H*0.05;
+      const g = x.createRadialGradient(bx,by,0,bx,by,b.r);
+      g.addColorStop(0, t.blobs[i]); g.addColorStop(1, 'rgba(0,0,0,0)');
+      x.fillStyle = g; x.fillRect(0,0,W,H);
+    });
+    sparks.forEach(s=>{
+      s.ph += s.tw; s.px += s.dx; s.py += s.dy;
+      if (s.py < -0.02){ s.py = 1.02; s.px = Math.random(); }
+      if (s.px < -0.02) s.px = 1.02; if (s.px > 1.02) s.px = -0.02;
+      const a = t.starry ? 0.25+0.55*Math.abs(Math.sin(s.ph)) : 0.10+0.30*Math.abs(Math.sin(s.ph));
+      x.globalAlpha = a;
+      x.fillStyle = t.spark;
+      const px = s.px*W, py = s.py*H, r = s.s;
+      x.beginPath();
+      x.moveTo(px, py-r*2); x.quadraticCurveTo(px+r*0.35, py-r*0.35, px+r*2, py);
+      x.quadraticCurveTo(px+r*0.35, py+r*0.35, px, py+r*2);
+      x.quadraticCurveTo(px-r*0.35, py+r*0.35, px-r*2, py);
+      x.quadraticCurveTo(px-r*0.35, py-r*0.35, px, py-r*2);
+      x.fill();
+      x.globalAlpha = 1;
+    });
+  }
+  if (reduced){ draw(); return; }
+  (function loop(){
+    if (frame % 2 === 0) draw();   // ~30fps — plenty for ambience, kind to batteries
+    else frame++;
+    requestAnimationFrame(loop);
+  })();
+})();
 
 /* ---------- Init ---------- */
 document.querySelectorAll('[data-ico]').forEach(el => { el.innerHTML = ico(el.dataset.ico, +(el.dataset.sz||24)); });
