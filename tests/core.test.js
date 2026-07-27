@@ -119,6 +119,18 @@ openReport();
 T('report teaser renders for free', true);
 account.premium=true;
 
+// --- account page ---
+lastFriends={list:[{name:'Zed',rating:1200},{name:'Amy',rating:900}],reqs:[]};
+lastBoard=[{name:'Top',rating:1500,wins:9,losses:1}];
+acctBoard='friends';
+const bh=boardHTML();
+T('friends board sorts by rating', bh.indexOf('Zed') < bh.indexOf('Amy'));
+T('friends board includes me', /\(you\)/.test(bh));
+acctBoard='global';
+T('global board renders', boardHTML().includes('Top'));
+renderFriendsPage();
+T('account page renders', true);
+
 // --- the Real SSAT ---
 account.premium=true;
 const secs=rtBuildSections();
