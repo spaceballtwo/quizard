@@ -1,5 +1,5 @@
 
-const APP_VERSION = '0.26.4';
+const APP_VERSION = '0.27.0';
 /* ===== Local accounts: each person has their own on-device SSAT account ===== */
 let store = { accounts: [], currentId: null };
 function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
@@ -2826,25 +2826,62 @@ function friendsHTML(){
     + `<div class="mlabel">Friends</div>`
     + (rows || '<p class="section-instr">No friends yet — send a request by player name. Friendship starts when they accept.</p>');
 }
+let acctBoard='global', lastBoard=[];
 function openFriendsPage(){
   if (!account){ showToast('Log into an account first'); return; }
   if (!account.onlineToken || !ows || ows.readyState!==1) ensureOnlineIdentity();
-  setTimeout(()=>osend({t:'friends'}), 400);
+  setTimeout(()=>{ osend({t:'friends'}); osend({t:'leaderboard'}); }, 400);
   document.getElementById('intro').classList.add('hidden');
   renderFriendsPage();
 }
+function boardHTML(){
+  let rows;
+  if (acctBoard==='friends'){
+    const me = { name: oMe?oMe.name:(account?account.name:'You'), rating: oMe?oMe.rating:(account?account.onlineRating:null), me:true };
+    const all = [me].concat((lastFriends.list||[]).map(f=>({name:f.name, rating:f.rating, flair:f.flair})));
+    all.sort((a,b)=>(b.rating||0)-(a.rating||0));
+    rows = all.map((u,i)=>`<div class="tier-row ${u.me?'tier-on':''}"><span>${i+1}. ${u.flair?ico('crown',12)+' ':''}${esc(u.name)}${u.me?' <span style="font-size:11px;color:var(--gray)">(you)</span>':''}</span><span class="tier-rp">${u.rating!=null?u.rating:'&mdash;'}</span></div>`).join('');
+    if (all.length<=1) rows += '<p class="section-instr">Add friends and this becomes your private ladder.</p>';
+  } else {
+    rows = (lastBoard||[]).map((u,i)=>`<div class="tier-row ${oMe&&u.name===oMe.name?'tier-on':''}"><span>${i+1}. ${u.flair?ico('crown',12)+' ':''}${esc(u.name)}</span><span class="tier-rp">${u.rating!=null?u.rating:'&mdash;'} &middot; ${u.wins}W&ndash;${u.losses}L</span></div>`).join('')
+      || '<p class="section-instr">Loading the ladder&hellip;</p>';
+  }
+  return `
+    <div class="seg-bar" style="margin:0 0 8px">
+      <button class="seg ${acctBoard==='global'?'seg-on':''}" onclick="acctBoard='global'; renderFriendsPage()">Global top 10</button>
+      <button class="seg ${acctBoard==='friends'?'seg-on':''}" onclick="acctBoard='friends'; renderFriendsPage()">Friends</button>
+    </div>${rows}`;
+}
 function renderFriendsPage(){
   const el=document.getElementById('friendspage');
+  if (!el) return;
   el.classList.remove('hidden');
+  const a=account;
+  const t=tierForRP(a.rp);
+  const chip=(label)=>`<span class="badge">${label}</span>`;
   el.innerHTML=`
     <div class="card">
+      <div style="display:flex;align-items:center;gap:14px">
+        <span class="coach-ava" style="width:54px;height:54px;font-size:24px;font-weight:800;font-family:var(--serif)">${esc((a.name||'?')[0].toUpperCase())}</span>
+        <span><b style="font-size:18px;color:var(--navy)">${esc(a.name)}</b><br>
+          <span style="font-size:12.5px;color:var(--gray)">★ Level ${level} &middot; ${tierIcon(tierIndex(a.rp),13)} ${t.name} &middot; ${a.rp} RP${oMe&&oMe.rating?` &middot; ${ico('globe',12)} ${oMe.rating} (${oMe.wins}W–${oMe.losses}L)`:''}</span></span>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">
+        ${chip('Math '+(a.skill||2).toFixed(1))}${chip('Analogies '+(a.verbalSkill.analogies||2).toFixed(1))}${chip('Reading '+(a.verbalSkill.reading||2).toFixed(1))}${chip('Synonyms '+(a.verbalSkill.synonyms||2).toFixed(1))}${a.streak?chip(a.streak+'-day streak'):''}${a.stats.bestComposite?chip('Best composite '+a.stats.bestComposite):''}
+      </div>
+    </div>
+    <div class="card">
       <div class="section-title">${ico('person',17)} Friends</div>
-      <p class="section-instr">Race a friend directly — first to 11 for a quick match, first to 21 for the real thing (bigger rating swings).</p>
+      <p class="section-instr">Mutual only — you both said yes. Green dot = online now; hit Race to challenge them.</p>
       <div id="friendsPageBox">${friendsHTML()}</div>
       <div style="display:flex;gap:6px;margin-top:10px">
         <input id="friendNamePg" maxlength="16" placeholder="Friend's player name" style="flex:1;padding:9px 12px;border:1.5px solid var(--line);border-radius:8px" />
         <button class="btn" style="width:auto;padding:9px 14px;margin:0" onclick="addFriendPg()">Request</button>
       </div>
+    </div>
+    <div class="card">
+      <div class="section-title">${ico('trophy',17)} Leaderboards</div>
+      <div id="acctLeader">${boardHTML()}</div>
       <button class="btn secondary" onclick="goHome()">Back to menu</button>
     </div>`;
   window.scrollTo({top:0,behavior:'smooth'});
@@ -2983,6 +3020,9 @@ function onlineMsg(m){
       </div>`;
   }
   else if (m.t==='leaderboard'){
+    lastBoard = m.top||[];
+    const acct=document.getElementById('acctLeader');
+    if (acct){ acct.innerHTML = boardHTML(); return; }
     const rows=(m.top||[]).map((u,i)=>`<div class="tier-row ${oMe&&u.name===oMe.name?'tier-on':''}"><span>${i+1}. ${u.flair?ico('crown',12)+' ':''}${esc(u.name)}</span><span class="tier-rp">${u.rating!=null?u.rating:'&mdash;'} &middot; ${u.wins}W&ndash;${u.losses}L</span></div>`).join('');
     document.getElementById('online').innerHTML=`
       <div class="card">
@@ -3316,7 +3356,7 @@ function renderSidebar(){
     ${item('survival','sword','Survival')}
     ${item('versus','swords','Versus')}
     ${item('online','globe','Online')}
-    ${item('friendspage','person','Friends')}
+    ${item('friendspage','person','My Account')}
     <div class="sdiv"></div>
     ${item('compete','trophy','Rank & League')}
     ${item('achievements','medal','Achievements')}
@@ -3728,6 +3768,7 @@ function renderDiagDone(s){
 
 /* ===== About: version, platform, what's new ===== */
 const CHANGELOG = [
+  ['0.27.0','Your Account page: player card, mutual friends with one-tap challenges, global + friends leaderboards; both race formats now swing ratings equally'],
   ['0.26.1','The academy comes alive: drifting golden light and twinkling sparkles behind everything, in every theme'],
   ['0.26.0','The Real SSAT: four timed sections — Quant, Reading, Verbal, Quant — scored 500-800 each with a 1500-2400 composite'],
   ['0.25.0','Longer races: first to 11 or 21 with bigger rating swings; friend requests need both sides; a real Friends page'],
