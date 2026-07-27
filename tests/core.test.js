@@ -140,6 +140,23 @@ openFocus();
 T('focus gated for free (no crash)', true);
 account.premium=true; account.premiumPlan='unlimited';
 
+// --- course exam ---
+account.courseDone={};
+T('courseDone synced', 'courseDone' in syncPayload());
+startCourseExam(0);
+T('exam: 10 questions', ceState && ceState.qs.length===10);
+T('exam: valid MCs', ceState.qs.every(q=>q.q && q.choices.length>=4 && q.choices[q.answer]!=null));
+T('exam: questions from course topics', ceState.qs.every(q=>{ const ti=(q._gen!=null)?GEN_TOPIC.get(q._gen):null; return ti==null || COURSES[0].topics.includes(TOPICS[ti].id); }));
+// simulate pass
+ceState.correct=9; ceState.idx=10;
+const xpBefore=account.xp;
+finishExam();
+T('exam pass completes course + XP', account.courseDone[0]===true && account.xp===xpBefore+150);
+// second pass no double XP
+const xp2=account.xp; ceState={ci:0,qs:[],idx:10,correct:9,answered:false};
+finishExam();
+T('no double reward', account.xp===xp2);
+
 // --- tutor tier: week plan + debrief ---
 account.premium=true; account.premiumPlan='unlimited';
 account.tstats={0:[10,2], 5:[10,3]};
