@@ -140,6 +140,25 @@ openFocus();
 T('focus gated for free (no crash)', true);
 account.premium=true; account.premiumPlan='unlimited';
 
+// --- tutor tier: week plan + debrief ---
+account.premium=true; account.premiumPlan='unlimited';
+account.tstats={0:[10,2], 5:[10,3]};
+buildWeekPlan();
+T('week plan: 7 items', account.weekPlan.items.length===7);
+T('week plan: gap lesson first', /Lesson:/.test(account.weekPlan.items[0].label));
+T('week plan fresh', weekPlanFresh()===true);
+T('week plan synced', syncPayload().weekPlan.items.length===7);
+account.weekPlan.items.forEach((x,i)=>{ if(i<6) x.done=true; });
+planToggle(6);
+T('completing plan marks all done', account.weekPlan.items.every(x=>x.done));
+account.weekPlan.created='2026-01-01';
+T('stale plan detected', weekPlanFresh()===false);
+account.testHist=[{d:'x',kind:'quick',score:617,correct:15,wrong:6,blank:4,topicMiss:{0:2}}];
+T('tutorTier true for unlimited', tutorTier()===true);
+account.premiumPlan='solo';
+T('tutorTier false for solo', !tutorTier());
+account.premiumPlan='unlimited';
+
 // --- account page ---
 lastFriends={list:[{name:'Zed',rating:1200},{name:'Amy',rating:900}],reqs:[]};
 lastBoard=[{name:'Top',rating:1500,wins:9,losses:1}];
