@@ -1,5 +1,5 @@
 
-const APP_VERSION = '0.26.3';
+const APP_VERSION = '0.26.4';
 /* ===== Local accounts: each person has their own on-device SSAT account ===== */
 let store = { accounts: [], currentId: null };
 function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
@@ -4325,7 +4325,7 @@ if ('serviceWorker' in navigator && location.protocol === 'https:'){
     const b = document.body.classList;
     if (b.contains('midnight')) return { base:'#121828', blobs:['rgba(96,110,255,0.30)','rgba(224,168,42,0.22)','rgba(56,180,110,0.16)','rgba(190,80,200,0.12)'], spark:'#ffe9a8', starry:true };
     if (b.contains('daybreak')) return { base:'#e8f0fb', blobs:['rgba(95,155,255,0.36)','rgba(255,200,90,0.34)','rgba(120,220,170,0.24)','rgba(255,130,150,0.14)'], spark:'#a8760a', starry:false };
-    return { base:'#f6efd8', blobs:['rgba(236,190,70,0.45)','rgba(220,100,40,0.26)','rgba(60,160,90,0.20)','rgba(150,110,220,0.12)'], spark:'#b8860b', starry:false };
+    return { base:'#f6efd8', blobs:['rgba(236,190,70,0.45)','rgba(220,100,40,0.26)','rgba(60,160,90,0.18)','rgba(235,140,100,0.16)'], spark:'#b8860b', starry:false };
   }
   function resize(){ W=c.width=window.innerWidth; H=c.height=window.innerHeight; }
   window.addEventListener('resize', resize); resize();
