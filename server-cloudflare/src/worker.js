@@ -374,15 +374,18 @@ export class QuizardLobby {
     else if (m.t === 'leaderboard'){
       const users = await this.storage.list({ prefix: 'u:' });
       const min = Number(m.min) || 0;
-      const all = [...users.values()].filter(u => u.rating >= min);
-      const top = all.sort((a, b) => b.rating - a.rating).slice(0, 10)
+      // one deterministic order for BOTH the list and your rank — ties broken by
+      // wins then name, so "#8 of 28" always means row 8 of this exact ladder
+      const all = [...users.values()].filter(u => u.rating >= min)
+        .sort((a, b) => b.rating - a.rating || (b.wins||0) - (a.wins||0) || (a.name < b.name ? -1 : 1));
+      const top = all.slice(0, 10)
         .map(u => ({ name: u.name, rating: u.showRating === false ? null : u.rating, wins: u.wins, losses: u.losses, flair: !!(u.data && ['unlimited','family','family-member'].includes(u.data.premiumPlan)) }));
       let you = null;
       if (conn.user){
         const me = await this.getUser(conn.user);
         if (me){
-          const rank = 1 + all.filter(u => u.rating > me.rating).length;
-          you = { rank, total: all.length, rating: me.rating };
+          const idx = all.findIndex(u => u.name === me.name);
+          you = { rank: idx < 0 ? all.length + 1 : idx + 1, total: all.length, rating: me.rating };
         }
       }
       this.send(conn, { t: 'leaderboard', top, you });

@@ -443,7 +443,7 @@
 </div>
 
 <script>
-const APP_VERSION = '0.31.4';
+const APP_VERSION = '0.31.5';
 /* ===== Local accounts: each person has their own on-device SSAT account ===== */
 let store = { accounts: [], currentId: null };
 function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
@@ -2605,16 +2605,27 @@ function fmtTime(s){ return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); }
 /* Normed estimate: the real SSAT curves scores against a strong pool (private-school
    applicants), so the top of the scale is far harder to reach than a straight line —
    and our items run a touch easier than real Upper Level. Anchors approximate real
-   raw→scaled tables; estimates cap at 775 (an 800 is a perfect day on the real curve). */
+   raw→scaled tables; a perfect paper still earns the full 800. */
 function scaledCurve(raw, n){
   const pct=Math.max(0, raw)/n;
-  const A=[[0,500],[0.25,555],[0.5,620],[0.7,670],[0.85,710],[0.95,745],[1,775]];
+  const A=[[0,500],[0.25,555],[0.5,620],[0.7,670],[0.85,710],[0.95,755],[1,800]];
   for(let i=1;i<A.length;i++){
     if(pct<=A[i][0]){ const [x0,y0]=A[i-1],[x1,y1]=A[i];
       return Math.round(y0+(pct-x0)/(x1-x0)*(y1-y0)); }
   }
-  return 775;
+  return 800;
 }
+/* scaled → SSAT percentile, anchored to published Upper Level norm tables */
+function pctileFor(scaled){
+  const A=[[500,1],[550,10],[600,30],[650,55],[700,78],[750,92],[800,99]];
+  const s=Math.max(500,Math.min(800,scaled));
+  for(let i=1;i<A.length;i++){
+    if(s<=A[i][0]){ const [x0,y0]=A[i-1],[x1,y1]=A[i];
+      return Math.max(1,Math.min(99,Math.round(y0+(s-x0)/(x1-x0)*(y1-y0)))); }
+  }
+  return 99;
+}
+function ordinal(n){ const v=n%100; if(v>=11&&v<=13) return n+'th'; return n+(['th','st','nd','rd'][n%10]||'th'); }
 function estScaled(raw){ return scaledCurve(raw, FT_N); }
 
 function renderTestResults(correct, wrongChosen, blanks, perSection){
@@ -2634,7 +2645,7 @@ function renderTestResults(correct, wrongChosen, blanks, perSection){
   const res=document.getElementById('results');
   res.innerHTML=`
     <div class="card">
-      <div class="score-ring"><div class="score-big">&asymp; ${est}</div><div class="score-sub">estimated SSAT score (500–800 scale)</div></div>
+      <div class="score-ring"><div class="score-big">&asymp; ${est}</div><div class="score-sub">estimated SSAT score (500–800) &middot; ~${ordinal(pctileFor(est))} percentile</div></div>
       ${best?`<div class="verdict v-strong">★ New personal best!</div>`:''}
       <div class="stats">
         <div class="stat"><b>${correct}</b><span>correct</span></div>
@@ -2647,7 +2658,7 @@ function renderTestResults(correct, wrongChosen, blanks, perSection){
           <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
           <div style="width:38px;text-align:right">${s.got}/${s.total}</div></div>`; }).join('')}
       <p style="text-align:center;color:var(--gray);font-size:13.5px;margin-top:10px">Raw score: ${correct} − ¼&times;${wrongChosen} = <b>${raw.toFixed(2).replace(/\.?0+$/,'')}</b> of ${FT_N} &middot; time used ${fmtTime(used)}</p>
-      <p style="color:var(--gray);font-size:12.5px;text-align:center">Rough estimate, curved like the real test — SSAT takers are a strong pool, so the top of the scale is earned slowly. Estimates cap at 775; treat &plusmn;30 as the honest range.</p>
+      <p style="color:var(--gray);font-size:12.5px;text-align:center">Rough estimate, curved like the real test — SSAT takers are a strong pool, so the top of the scale is earned slowly. Percentile is your standing among real test takers. Treat &plusmn;30 as the honest range.</p>
       <p style="color:var(--gray);font-size:13.5px;margin-top:10px">Scroll up to review — explanations show under every question you missed, with a lesson link.</p>
       ${tutorTier()?`<button class="btn" onclick="sageDebrief('quick')">Sage's debrief &rarr;</button>`:''}
       <button class="btn" onclick="closeFullTestToIntro()">Take another test &rarr;</button>
@@ -2976,9 +2987,9 @@ function rtFinish(){
     <div class="card">
       <div class="score-ring"><div class="score-big">&asymp; ${composite}</div><div class="score-sub">estimated SSAT composite (1500–2400)</div></div>
       ${best?`<div class="verdict v-strong">★ New best composite!</div>`:''}
-      ${row('Quantitative', '&asymp; '+sq+' &middot; '+areas.quant.correct+'/'+areas.quant.n+' right, '+areas.quant.blank+' blank')}
-      ${row('Reading', '&asymp; '+sr+' &middot; '+areas.reading.correct+'/'+areas.reading.n+' right, '+areas.reading.blank+' blank')}
-      ${row('Verbal', '&asymp; '+sv+' &middot; '+areas.verbal.correct+'/'+areas.verbal.n+' right, '+areas.verbal.blank+' blank')}
+      ${row('Quantitative', '&asymp; '+sq+' &middot; ~'+ordinal(pctileFor(sq))+' %ile &middot; '+areas.quant.correct+'/'+areas.quant.n+' right, '+areas.quant.blank+' blank')}
+      ${row('Reading', '&asymp; '+sr+' &middot; ~'+ordinal(pctileFor(sr))+' %ile &middot; '+areas.reading.correct+'/'+areas.reading.n+' right, '+areas.reading.blank+' blank')}
+      ${row('Verbal', '&asymp; '+sv+' &middot; ~'+ordinal(pctileFor(sv))+' %ile &middot; '+areas.verbal.correct+'/'+areas.verbal.n+' right, '+areas.verbal.blank+' blank')}
       <p style="color:var(--gray);font-size:12.5px;text-align:center;margin-top:10px">Rough estimates — the real test scales against everyone who took it. Misses went to Review; gaps went to your Knowledge Map.</p>
       ${tutorTier()?`<button class="btn" onclick="sageDebrief('real')">Sage's debrief &rarr;</button>`:''}
       <button class="btn" onclick="goHome()">Back to menu</button>
@@ -4638,6 +4649,7 @@ function renderDiagDone(s){
 
 /* ===== About: version, platform, what's new ===== */
 const CHANGELOG = [
+  ['0.31.5','Your leaderboard rank now always matches the ladder rows. Scores reach 800 again and every estimate shows your percentile'],
   ['0.31.4','Score estimates now curve like the real SSAT — the top of the scale is earned against a strong pool, estimates cap at 775'],
   ['0.31.3','Test bubbles erase like paper — tap your answer again to leave it blank. Family plan now shows it includes every tutor perk'],
   ['0.31.2','Your plan shows by name everywhere — Solo, Unlimited, or Family — instead of a generic Premium badge'],
