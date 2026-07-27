@@ -443,7 +443,7 @@
 </div>
 
 <script>
-const APP_VERSION = '0.30.0';
+const APP_VERSION = '0.31.0';
 /* ===== Local accounts: each person has their own on-device SSAT account ===== */
 let store = { accounts: [], currentId: null };
 function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
@@ -1561,6 +1561,72 @@ const COURSES = [
   { id:'geometry', title:'Geometry',               desc:'Triangles, shapes, and the coordinate plane', topics:['triangles','shapes','coordinate'] },
   { id:'data',     title:'Data, Chance & Words',   desc:'Averages, probability, and word problems',    topics:['averages','probability','wordproblems'] }
 ];
+/* ===== Expansion topics: wrapper gens keep Knowledge-Map attribution clean ===== */
+function genWMAnalogy(){ return Math.random()<0.12 ? choice(POOL.analogies) : genAnalogy(); }
+function genWMSynonym(){ return choice(POOL.synonyms); }
+function genWMAnalogy2(){ return genAnalogy(); }
+function genSPRates(){ return choice([genAvgSpeed, genPipesTogether, genTwoVarWord])(); }
+function genSPNumTheory(){ return choice([genUnitsDigit, genRemainder, genLcm, genCustomOp])(); }
+function genSPAlgebra(){ return choice([genSystemEq, genFactoredQuad, genFunctionEval, genExponentQuotient])(); }
+function genSPGeo(){ return choice([genRectRatioArea, genPolygonAngles, genRectDiagonal])(); }
+TOPICS.push(
+  { id:'wm_ana1', verbal:true, title:'Analogy Foundations', sub:'bridge sentences and relationship types',
+    gens:[genWMAnalogy],
+    lesson:`<p><b>Every analogy is a hidden sentence.</b> CUB is to BEAR isn't about animals — it's the sentence "a cub is a young bear." Find that sentence and the answer finds itself.</p>
+      <p><b>The bridge method:</b> build your sentence from the FIRST pair before you even look at the choices. Then test each choice in the exact same sentence. "A kitten is a young cat" — fits. "A dog is a young kennel" — nonsense. Cross it off.</p>
+      <div class="passage"><b>Worked example:</b> QUILL is to PORCUPINE. Bridge: "a quill is the sharp covering of a porcupine." Now test: THORN is to ROSE — "a thorn is the sharp covering of a rose." Fits perfectly.</div>
+      <p><b>The big relationship families</b> you'll see again and again: part/whole (petal : flower), worker/tool (surgeon : scalpel), young/adult (foal : horse), degree (warm : scorching), object/function (knife : cut), and word/opposite (scarce : plentiful).</p>
+      <p><b>The trap to expect:</b> one answer will share a TOPIC with the question (bear → another animal) but not the RELATIONSHIP. Topics are bait. Relationships are the answer.</p>
+      <p>Precision beats vibes: if two choices seem to fit, make your bridge sentence more specific — "a cub is a <i>young</i> bear," not "a cub is related to a bear."</p>`},
+  { id:'wm_syn', verbal:true, title:'Synonyms & Roots', sub:'word parts that unlock meanings',
+    gens:[genWMSynonym],
+    lesson:`<p><b>You know more words than you think</b> — because English words are built from parts you've already met.</p>
+      <p><b>Prefixes flip or aim a word:</b> BEN- means good (benevolent, benefit). MAL- means bad (malice, malfunction). CIRCUM- means around (circumference). Spot the prefix and you have half the meaning.</p>
+      <p><b>Roots carry the core:</b> DICT = say (predict, dictate, contradict). SPEC = look (inspect, spectator, spectacle). CRED = believe (credible, incredulous). PORT = carry (transport, portable).</p>
+      <div class="passage"><b>Worked example:</b> INCREDULOUS. IN- (not) + CRED (believe) = "not believing." So when the test asks for the closest meaning, you're hunting for <i>skeptical</i> — even if you've never seen the word before.</div>
+      <p><b>Elimination wins ties:</b> on the SSAT, wrong choices are often the right word's OPPOSITE, a sound-alike (statue/statute), or a word from the same setting but different meaning. Kill those three and guess from what's left — the odds are now with you.</p>
+      <p><b>Charge check:</b> decide if the word FEELS positive or negative before defining it. LOATHE feels negative — so cross out every positive choice instantly.</p>`},
+  { id:'wm_ana2', verbal:true, title:'Advanced Analogies', sub:'degree, function, and lack',
+    gens:[genWMAnalogy2],
+    lesson:`<p>The hardest analogies use <b>subtle relationships</b> — here are the three that decide top scores.</p>
+      <p><b>1. Degree:</b> both words mean the same thing at different intensity. ANNOYED is to FURIOUS as DAMP is to SOAKED. The bridge: "___ is a much stronger version of ___." Watch the direction — mild to extreme is not extreme to mild.</p>
+      <p><b>2. Function:</b> what a thing is FOR. ANCHOR is to MOOR as RULER is to MEASURE. Bridge: "the purpose of an ___ is to ___."</p>
+      <p><b>3. Lack:</b> the sneakiest — one word means the ABSENCE of the other. ARID is to MOISTURE as NAIVE is to EXPERIENCE. Bridge: "something ___ lacks ___." Kids who miss these read them as synonyms; they're closer to opposites.</p>
+      <div class="passage"><b>Worked example:</b> PENNILESS is to MONEY. Not "penniless people want money" (too loose). The tight bridge: "penniless means lacking money." Test: ANONYMOUS is to NAME — "anonymous means lacking a name." Locked in.</div>
+      <p><b>Direction discipline:</b> always test choices in the same order as the stem. Reversing the order is the #1 advanced-analogy error — the test writers know it and set traps for it.</p>`},
+  { id:'sp_rates', title:'Rates, Work & Motion', sub:'speed, together-work, and two travelers',
+    gens:[genSPRates],
+    lesson:`<p><b>Every rate problem is the same equation wearing different clothes:</b> amount = rate × time. Distance problems, painting-a-fence problems, filling-a-pool problems — all of them.</p>
+      <p><b>Average speed is the famous trap:</b> it is NOT the average of the speeds. It's total distance ÷ total time, always. Drive somewhere at 30 and back at 60? The slow half eats more time, so the answer is 40, not 45.</p>
+      <div class="passage"><b>Worked example:</b> A pipe fills a tank in 6 hours; another in 3. Together? Think per-hour: pipe one does 1/6 per hour, pipe two does 1/3. Together 1/6 + 1/3 = 1/2 per hour → 2 hours total.</div>
+      <p><b>The together-work rule:</b> add the RATES, never the times. Two workers never take longer together than the faster one alone — use that to sanity-check your answer.</p>
+      <p><b>Two-traveler setups:</b> moving toward each other, their speeds ADD (closing the gap fast). Same direction, SUBTRACT (the gap closes slowly). Draw the arrows before you compute anything.</p>`},
+  { id:'sp_numth', title:'Number Detective', sub:'remainders, cycles, and hidden patterns',
+    gens:[genSPNumTheory],
+    lesson:`<p>Top-2% problems love numbers too big to compute — <b>because they're testing whether you hunt the pattern instead.</b></p>
+      <p><b>Units digits run in cycles.</b> Powers of 7 end in 7, 9, 3, 1, 7, 9, 3, 1... forever, repeating every 4. So the units digit of 7^41? 41 = 4×10 + 1 → first slot of the cycle → 7. You never compute 7^41; you compute 41 mod 4.</p>
+      <div class="passage"><b>Worked example:</b> What's the remainder when 100 is divided by 7? 7×14 = 98, so remainder 2. Remainders are just "what's left after the biggest multiple that fits."</div>
+      <p><b>LCM = when cycles line up.</b> Buses every 6 and every 8 minutes leave together — next time together? LCM(6,8)=24. Any "when do they meet again" problem is an LCM problem in a costume.</p>
+      <p><b>Made-up operators</b> (a ◆ b = 2a + b or whatever the test invents) are pure instruction-following: substitute slowly, compute inside-out, and never let the weird symbol scare you — it's defined right there in the problem.</p>`},
+  { id:'sp_alg', title:'Algebra Boss Fights', sub:'systems, quadratics, and function notation',
+    gens:[genSPAlgebra],
+    lesson:`<p>Three algebra bosses guard the top scores. Each has a clean opening move.</p>
+      <p><b>Systems (two equations):</b> the opening is elimination — stack the equations and add or subtract to kill a variable. x+y=10, x−y=4 → add: 2x=14 → x=7, y=3. If adding doesn't kill anything, multiply one equation first.</p>
+      <p><b>Factored quadratics:</b> if (x−3)(x+5)=0, then x=3 or x=−5 — because anything times zero is zero. The test's favorite follow-up: "what is the SUM of the solutions?" 3+(−5)=−2. Answer the question they asked, not the one you expected.</p>
+      <div class="passage"><b>Worked example:</b> f(x) = 3x − 2. What is f(4)? Function notation is a machine: feed in 4 wherever x appears → 3(4) − 2 = 10. f(4) is NOT f times 4 — it's "the machine's output when the input is 4."</div>
+      <p><b>Exponent quotients:</b> same base dividing → subtract exponents. 5^9 ÷ 5^6 = 5^3 = 125. Multiplying → add. Power of a power → multiply. Three rules, no exceptions, worth ten points a season.</p>`},
+  { id:'sp_geo', title:'Geometry Masters', sub:'diagonals, polygons, and ratio areas',
+    gens:[genSPGeo],
+    lesson:`<p>Advanced geometry is spotting <b>the hidden simple shape inside the fancy one.</b></p>
+      <p><b>Every rectangle hides two right triangles.</b> A diagonal question IS a Pythagorean question: 6 by 8 rectangle → diagonal² = 36+64 = 100 → 10. Memorize the triples (3-4-5, 5-12-13, 8-15-17) and these become ten-second points.</p>
+      <p><b>Polygon interior angles:</b> (n−2)×180. A hexagon: 4×180 = 720. Why it works: any polygon splits into (n−2) triangles from one corner, and each triangle contributes 180°.</p>
+      <div class="passage"><b>Worked example:</b> Two rectangles have the same height, but one is 3× as wide. Areas? Same height means area scales exactly with width — 3× the area. Ratio problems about area often never need actual numbers.</div>
+      <p><b>The master habit:</b> when a figure looks new, draw one line — a diagonal, a height, a radius — and watch it fall apart into triangles and rectangles you already own.</p>`}
+);
+COURSES.push(
+  { id:'words',  title:'Word Mastery',    desc:'The verbal section, taught — analogies, roots, and the traps', topics:['wm_ana1','wm_syn','wm_ana2'] },
+  { id:'summit', title:'Summit Problems', desc:'The hardest material on the test — where top scores are made', topics:['sp_rates','sp_numth','sp_alg','sp_geo'] }
+);
 function topicIdxById(id){ return TOPICS.findIndex(t=>t.id===id); }
 function courseOfTopic(i){ const id=TOPICS[i].id; return COURSES.findIndex(c=>c.topics.includes(id)); }
 function courseProgress(c){ let got=0; c.topics.forEach(id=>{ got+=Math.min(topicScore(id),TOPIC_MASTERY); }); return got/(c.topics.length*TOPIC_MASTERY); }
@@ -1809,7 +1875,7 @@ function renderNextUp(){
   const el=document.getElementById('nextUp'); if(!el || !account) return;
   let mode, title, sub;
   if (!account.diagAt){
-    mode='gaps'; title='Find your gaps'; sub='46-question diagnostic maps all four skills';
+    mode='gaps'; title='Find your gaps'; sub='the full diagnostic maps all four skills';
   } else if (dueMisses().length){
     const d=dueMisses().length;
     mode='review'; title='Review your misses'; sub=d+' review'+(d===1?'':'s')+' due today · spaced just right';
@@ -1968,6 +2034,7 @@ function ensureFields(a){
   if(!Array.isArray(a.testHist)) a.testHist=[];
   if(!a.weekPlan || typeof a.weekPlan!=='object') a.weekPlan=null;
   if(!a.courseDone || typeof a.courseDone!=='object') a.courseDone={};
+  if(typeof a.obsidianSeen!=='boolean') a.obsidianSeen=false;
 }
 function dateStr(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function markActivity(){
@@ -3479,6 +3546,12 @@ function renderOnlineHome(msg){
       <p class="section-instr" style="margin:0 0 10px">Progress backs up to the cloud automatically.</p>
       <button class="btn" onclick="findMatch(11)">Quick match — first to 11 &rarr;</button>
       <button class="btn" onclick="findMatch(21)">Full match — first to 21 &rarr;</button>
+      <div class="mlabel">Tournaments</div>
+      <div id="tourneyBox">
+        <div class="tier-row" style="cursor:pointer" onclick="osend({t:'tourney_join'}); showToast('Looking for 4 players…')"><span><b>${ico('trophy',14)} Bracket</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">4 players, seeded by rating — semifinals, then the final</span></span><span class="tier-rp">Join &rarr;</span></div>
+        <div class="tier-row" style="cursor:pointer" onclick="arenaActive=true; osend({t:'arena_join'}); showToast('Arena joined — races start when an opponent arrives')"><span><b>${ico('flame',14)} Arena</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">10 minutes, quick races to 5 — wins score points, most points takes it</span></span><span class="tier-rp">Join &rarr;</span></div>
+        <div id="tourneyStatus"></div>
+      </div>
       <button class="btn secondary" onclick="showLeaderboard()">Leaderboard</button>
       <button class="btn secondary" onclick="navTo('friendspage')">Friends &amp; requests</button>
       <div class="mlabel">Friends</div>
@@ -3532,9 +3605,16 @@ function openFriendsPage(){
   document.getElementById('intro').classList.add('hidden');
   renderFriendsPage();
 }
+function obsidianQualified(){ return !!(oMe && oMe.rating>=1200) || !!(account && account.onlineRating>=1200); }
 function boardHTML(){
   let rows;
-  if (acctBoard==='friends'){
+  if (acctBoard==='obsidian'){
+    rows = (lastBoard||[]).map((u,i)=>`<div class="tier-row ${oMe&&u.name===oMe.name?'tier-on':''}" style="border-left:3px solid #3a3060"><span>${i+1}. ${u.flair?ico('crown',12)+' ':''}${esc(u.name)}</span><span class="tier-rp">${u.rating!=null?u.rating:'&mdash;'} &middot; ${u.wins}W&ndash;${u.losses}L</span></div>`).join('')
+      || '<p class="section-instr">The chamber is empty tonight&hellip;</p>';
+    if (lastYou) rows += `<div class="tier-row" style="border-left:4px solid var(--gold)"><span><b>You</b></span><span class="tier-rp">#${lastYou.rank} of ${lastYou.total}</span></div>`;
+    rows = `<p class="section-instr" style="margin-top:0">⬢ The Obsidian League — rating 1200+. Few enter. Fewer stay.</p>` + rows;
+  }
+  else if (acctBoard==='friends'){
     const me = { name: oMe?oMe.name:(account?account.name:'You'), rating: oMe?oMe.rating:(account?account.onlineRating:null), me:true };
     const all = [me].concat((lastFriends.list||[]).map(f=>({name:f.name, rating:f.rating, flair:f.flair})));
     all.sort((a,b)=>(b.rating||0)-(a.rating||0));
@@ -3547,8 +3627,9 @@ function boardHTML(){
   }
   return `
     <div class="seg-bar" style="margin:0 0 8px">
-      <button class="seg ${acctBoard==='global'?'seg-on':''}" onclick="acctBoard='global'; renderFriendsPage()">Global top 10</button>
+      <button class="seg ${acctBoard==='global'?'seg-on':''}" onclick="acctBoard='global'; osend({t:'leaderboard'}); renderFriendsPage()">Global top 10</button>
       <button class="seg ${acctBoard==='friends'?'seg-on':''}" onclick="acctBoard='friends'; renderFriendsPage()">Friends</button>
+      ${obsidianQualified()?`<button class="seg ${acctBoard==='obsidian'?'seg-on':''}" style="color:#5a4d8a" onclick="acctBoard='obsidian'; osend({t:'leaderboard', min:1200}); renderFriendsPage()">⬢ Obsidian</button>`:''}
     </div>${rows}`;
 }
 function renderFriendsPage(){
@@ -3592,7 +3673,7 @@ function addFriendPg(){
   osend({t:'friend_add', name});
   if(inp) inp.value='';
 }
-let findMatchLen=11;
+let findMatchLen=11, arenaActive=false;
 function addFriend(){
   const inp=document.getElementById('friendName');
   const name=(inp&&inp.value||'').trim();
@@ -3684,7 +3765,7 @@ function onlineMsg(m){
     document.getElementById('online').innerHTML=`
       <div class="card" style="text-align:center">
         <div class="section-title" style="justify-content:center">${ico('swords',17)} Matched!</div>
-        <p class="section-instr">You vs <b>${esc(oOpp.name)}</b>${oOpp.rating!=null?` (${oOpp.rating} rating)`:''}. First to ${m.winPoints} points. Get ready&hellip;</p>
+        <p class="section-instr">${m.label?`<b style="color:var(--gold)">${esc(m.label)}</b> &middot; `:''}You vs <b>${esc(oOpp.name)}</b>${oOpp.rating!=null?` (${oOpp.rating} rating)`:''}. First to ${m.winPoints} points. Get ready&hellip;</p>
       </div>`;
   }
   else if (m.t==='round'){
@@ -3705,6 +3786,7 @@ function onlineMsg(m){
   }
   else if (m.t==='match_end'){
     oState='idle'; applyAssessmentUI();
+    if (account && m.rating>=1200 && !account.obsidianSeen){ account.obsidianSeen=true; saveStore(); celebrate(); showToast('⬢ You have been noticed. The Obsidian League is open to you — see My Account.'); }
     if(m.score) oScore=m.score;
     if(oMe){ oMe.rating=m.rating; if(m.won) oMe.wins++; else oMe.losses++; }
     if(account){ account.onlineRating=m.rating; saveStore(); renderRankChip(); }
@@ -3730,6 +3812,43 @@ function onlineMsg(m){
         ${rows||'<div class="acct-empty">No players yet.</div>'}
         <button class="btn secondary" onclick="renderOnlineHome()">Back</button>
       </div>`;
+  }
+  else if (m.t==='tourney_wait'){
+    const s=document.getElementById('tourneyStatus');
+    if (s) s.innerHTML = m.n>0 ? `<p class="section-instr">Bracket lobby: ${m.n}/${m.need} players — waiting for challengers&hellip;</p>` : '';
+  }
+  else if (m.t==='tourney_start'){
+    playFanfare();
+    const s=document.getElementById('tourneyStatus');
+    const br=(m.bracket||[]).map(b=>`#${b.seed} ${esc(b.name)}${b.rating!=null?' ('+b.rating+')':''}`).join(' &middot; ');
+    if (s) s.innerHTML=`<div class="explain ok">Tournament on! You are seed #${m.seed}. ${br}</div>`;
+    showToast('Tournament starting — you are seed #'+m.seed);
+  }
+  else if (m.t==='tourney_round'){
+    showToast(m.msg||'The final is forming…');
+  }
+  else if (m.t==='tourney_result'){
+    if (m.yours){ celebrate(); showToast('🏆 CHAMPION! You won the tournament!'); }
+    else showToast('Tournament over — champion: '+esc(m.champion||''));
+    const s=document.getElementById('tourneyStatus');
+    if (s) s.innerHTML=`<div class="explain ${m.yours?'ok':''}">Champion: <b>${esc(m.champion||'')}</b>${m.yours?' — that\'s YOU ✦':''}</div>`;
+  }
+  else if (m.t==='arena_state'){
+    const s=document.getElementById('tourneyStatus');
+    if (s){
+      const rows=(m.top||[]).map((u,i)=>`${i+1}. ${esc(u.name)} — ${u.pts}`).join('<br>');
+      s.innerHTML=`<div class="explain"><b>Arena &middot; ${fmtTime(m.secs)} left</b><br>${rows||'first race pending…'}</div>`;
+    }
+  }
+  else if (m.t==='arena_next'){
+    if (arenaActive && m.secs>3) setTimeout(()=>{ if(arenaActive && oState==='idle') osend({t:'arena_join'}); }, 2500);
+  }
+  else if (m.t==='arena_result'){
+    arenaActive=false;
+    playFanfare();
+    showToast('Arena over — champion: '+esc(m.champion||'nobody'));
+    const s=document.getElementById('tourneyStatus');
+    if (s) s.innerHTML=`<div class="explain ok"><b>Arena final standings</b><br>${(m.top||[]).map((u,i)=>`${i+1}. ${esc(u.name)} — ${u.pts} pts`).join('<br>')}</div>`;
   }
   else if (m.t==='friends'){
     lastFriends = { list: m.list||[], reqs: m.reqs||[] };
@@ -4019,6 +4138,7 @@ function resetToHome(){
   clearInterval(focusTimer);
   clearInterval(rtTimer);
   if (rtActive){ rtActive=false; osend({t:'assess_end'}); }
+  arenaActive=false;
   if (oState==='queued'){ osend({t:'cancel_queue'}); oState='idle'; }
   if (oState==='racing'){ try{ ows.close(); }catch(e){} ows=null; oState='idle'; }
   MODE_DIVS.forEach(id=>{ const el=document.getElementById(id); if(el){ el.classList.add('hidden'); el.innerHTML=''; }});
@@ -4351,8 +4471,8 @@ function openGaps(){
         ? `<button class="btn" onclick="startDiag(true)">Resume the diagnostic (question ${store.diagState.idx+1} of ${store.diagState.items.length})</button>
            <button class="btn secondary" onclick="startDiag()">Start over instead</button>`
         : account.diagAt
-        ? `<button class="btn secondary" onclick="startDiag()">Retake the diagnostic (46 questions)</button>`
-        : `<button class="btn" onclick="startDiag()">Start the diagnostic (46 questions)</button>`}
+        ? `<button class="btn secondary" onclick="startDiag()">Retake the diagnostic (${TOPICS.filter(t=>!t.verbal).length*2+18} questions)</button>`
+        : `<button class="btn" onclick="startDiag()">Start the diagnostic (${TOPICS.filter(t=>!t.verbal).length*2+18} questions)</button>`}
       <div class="mlabel">Everything so far</div>
       ${chartBlockHTML('gapChart')}
       ${reportFactsRows(reportFacts())}
@@ -4375,7 +4495,7 @@ function applyAssessmentUI(){ document.body.classList.toggle('assessing', assess
    seeds all four skills, ends in a placement summary. ~46 questions, ~30 min. */
 function buildDiagItems(){
   const items=[];
-  TOPICS.forEach((t,i)=>{ for(let k=0;k<2;k++){
+  TOPICS.forEach((t,i)=>{ if(t.verbal) return; for(let k=0;k<2;k++){
     const g=drawBag(t.gens,'dg_'+t.id); const q=g();
     items.push({ q:{q:q.q, choices:q.choices, answer:q.answer, why:q.why, draw:q.draw||null}, ti:i, kind:'math' });
   }});
@@ -4481,6 +4601,7 @@ function renderDiagDone(s){
 
 /* ===== About: version, platform, what's new ===== */
 const CHANGELOG = [
+  ['0.31.0','Two new courses (Word Mastery + Summit Problems), the hidden Obsidian League, and online tournaments: Arena and seeded Brackets'],
   ['0.30.0','Courses are now a summit: master every topic to unlock the Course Exam — pass it for the crest, +150 XP, and a gold ring on home'],
   ['0.29.0','Unlimited becomes the Tutor tier: week plans pinned to your home screen and personal test debriefs — built from YOUR data, which no chatbot has'],
   ['0.28.0','Premium earns it: Writing Coach (Sage grades your essays), Score Reports with test history, Focus Sprints go premium, free review capped at 10/day — and the ladder shows YOUR rank'],
