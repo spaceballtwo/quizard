@@ -5,7 +5,7 @@
 // Deploy: npx wrangler deploy   →  wss://quizard-server.<your-subdomain>.workers.dev
 
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'content-type' };
-const MATCH_FORMATS = { 11: 16, 21: 32 };   // points -> elo K factor
+const MATCH_FORMATS = { 11: 24, 21: 24 };   // both formats swing ratings equally
 const ROUND_TIMEOUT_MS = 45000;
 
 function enc(s){ return new TextEncoder().encode(s); }
