@@ -443,7 +443,7 @@
 </div>
 
 <script>
-const APP_VERSION = '0.31.0';
+const APP_VERSION = '0.31.1';
 /* ===== Local accounts: each person has their own on-device SSAT account ===== */
 let store = { accounts: [], currentId: null };
 function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
@@ -3533,7 +3533,7 @@ function voteScreenVisible(){ const el=document.getElementById('vote'); return e
 function renderOnlineHome(msg){
   const o=document.getElementById('online'); if(!o) return;
   if(!onlineScreenVisible()) return;
-  if (oMe) setTimeout(()=>osend({t:'friends'}), 50);
+  if (oMe) setTimeout(()=>{ osend({t:'friends'}); osend({t:'tourney_state'}); }, 50);
   o.innerHTML=`
   <div class="card">
     <div class="section-title">${ico('globe',17)} Online — live races</div>
@@ -3548,7 +3548,7 @@ function renderOnlineHome(msg){
       <button class="btn" onclick="findMatch(21)">Full match — first to 21 &rarr;</button>
       <div class="mlabel">Tournaments</div>
       <div id="tourneyBox">
-        <div class="tier-row" style="cursor:pointer" onclick="osend({t:'tourney_join'}); showToast('Looking for 4 players…')"><span><b>${ico('trophy',14)} Bracket</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">4 players, seeded by rating — semifinals, then the final</span></span><span class="tier-rp">Join &rarr;</span></div>
+        <div id="bracketCard" class="tier-row"><span><b>${ico('trophy',14)} Bracket Tournament</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">loading schedule&hellip;</span></span></div>
         <div class="tier-row" style="cursor:pointer" onclick="arenaActive=true; osend({t:'arena_join'}); showToast('Arena joined — races start when an opponent arrives')"><span><b>${ico('flame',14)} Arena</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">10 minutes, quick races to 5 — wins score points, most points takes it</span></span><span class="tier-rp">Join &rarr;</span></div>
         <div id="tourneyStatus"></div>
       </div>
@@ -3813,25 +3813,36 @@ function onlineMsg(m){
         <button class="btn secondary" onclick="renderOnlineHome()">Back</button>
       </div>`;
   }
-  else if (m.t==='tourney_wait'){
-    const s=document.getElementById('tourneyStatus');
-    if (s) s.innerHTML = m.n>0 ? `<p class="section-instr">Bracket lobby: ${m.n}/${m.need} players — waiting for challengers&hellip;</p>` : '';
+  else if (m.t==='stourney_state'){
+    const card=document.getElementById('bracketCard');
+    if (card){
+      if (m.none){
+        card.innerHTML=`<span><b>${ico('trophy',14)} Bracket Tournament</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">no event scheduled — be the first to sign up</span></span>
+          <button class="seg" style="flex:none" onclick="osend({t:'tourney_join'})">Schedule one</button>`;
+      } else {
+        const when=new Date(m.startsAt);
+        const hh=when.getHours()%12||12, mm=String(when.getMinutes()).padStart(2,'0'), ap=when.getHours()>=12?'PM':'AM';
+        card.innerHTML=`<span><b>${ico('trophy',14)} Bracket Tournament</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">${m.state==='reg'
+          ? `starts at ${hh}:${mm} ${ap} &middot; ${m.n} registered &middot; full matches to 21, 30 min between rounds`
+          : `LIVE — round ${m.round}, ${m.alive} players remain`}</span></span>
+        ${m.state==='reg' ? (m.registered
+          ? `<button class="seg" style="flex:none" onclick="osend({t:'tourney_leave'})">Leave</button>`
+          : `<button class="seg" style="flex:none" onclick="osend({t:'tourney_join'})">Register</button>`) : ''}`;
+      }
+    }
   }
-  else if (m.t==='tourney_start'){
+  else if (m.t==='stourney_round'){
     playFanfare();
+    showToast(m.msg||'Tournament round update');
     const s=document.getElementById('tourneyStatus');
-    const br=(m.bracket||[]).map(b=>`#${b.seed} ${esc(b.name)}${b.rating!=null?' ('+b.rating+')':''}`).join(' &middot; ');
-    if (s) s.innerHTML=`<div class="explain ok">Tournament on! You are seed #${m.seed}. ${br}</div>`;
-    showToast('Tournament starting — you are seed #'+m.seed);
+    if (s) s.innerHTML=`<div class="explain">${esc(m.msg||'')}</div>`;
   }
-  else if (m.t==='tourney_round'){
-    showToast(m.msg||'The final is forming…');
-  }
-  else if (m.t==='tourney_result'){
+  else if (m.t==='stourney_result'){
     if (m.yours){ celebrate(); showToast('🏆 CHAMPION! You won the tournament!'); }
-    else showToast('Tournament over — champion: '+esc(m.champion||''));
+    else if (m.champion) showToast('Tournament over — champion: '+esc(m.champion));
+    else showToast(m.msg||'Tournament cancelled');
     const s=document.getElementById('tourneyStatus');
-    if (s) s.innerHTML=`<div class="explain ${m.yours?'ok':''}">Champion: <b>${esc(m.champion||'')}</b>${m.yours?' — that\'s YOU ✦':''}</div>`;
+    if (s) s.innerHTML = m.champion ? `<div class="explain ${m.yours?'ok':''}">Champion: <b>${esc(m.champion)}</b>${m.yours?' — that\'s YOU ✦':''}</div>` : '';
   }
   else if (m.t==='arena_state'){
     const s=document.getElementById('tourneyStatus');
@@ -4601,6 +4612,7 @@ function renderDiagDone(s){
 
 /* ===== About: version, platform, what's new ===== */
 const CHANGELOG = [
+  ['0.31.1','Brackets become real events: register, play at the set start time, full first-to-21 matches, 30 minutes between rounds'],
   ['0.31.0','Two new courses (Word Mastery + Summit Problems), the hidden Obsidian League, and online tournaments: Arena and seeded Brackets'],
   ['0.30.0','Courses are now a summit: master every topic to unlock the Course Exam — pass it for the crest, +150 XP, and a gold ring on home'],
   ['0.29.0','Unlimited becomes the Tutor tier: week plans pinned to your home screen and personal test debriefs — built from YOUR data, which no chatbot has'],

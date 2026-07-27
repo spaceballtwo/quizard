@@ -34,7 +34,6 @@ export class QuizardLobby {
     this.nextMatchId = 1;
     this.userConns = new Map();   // key -> live conn (best effort; only valid while the DO is warm)
     this.pending = new Map();     // challenged key -> { from, conn, ts }
-    this.tqueue = [];             // bracket tournament waiting room (4 players)
     this.arena = null;            // { endsAt, scores, names, queue, players }
   }
 
@@ -78,7 +77,6 @@ export class QuizardLobby {
 
   onClose(conn){
     this.queue = this.queue.filter(c => c !== conn);
-    this.tqueue = this.tqueue.filter(c => c !== conn);
     if (this.arena) this.arena.queue = this.arena.queue.filter(c => c !== conn);
     if (conn.user && this.userConns.get(conn.user) === conn) this.userConns.delete(conn.user);
     if (conn.match) this.forfeit(conn.match, conn);
@@ -269,24 +267,36 @@ export class QuizardLobby {
       if (p && p.conn.ws.readyState === 1) this.send(p.conn, { t: 'challenge_result', ok: false, msg: 'They passed on the race' });
     }
     else if (m.t === 'tourney_join'){
-      if (!conn.user || conn.match || this.tqueue.includes(conn)) return;
-      this.tqueue.push(conn);
-      this.tqueue = this.tqueue.filter(c => c.ws.readyState === 1);
-      this.tqueue.forEach(c => this.send(c, { t: 'tourney_wait', n: this.tqueue.length, need: 4 }));
-      if (this.tqueue.length >= 4){
-        const four = this.tqueue.splice(0, 4);
-        const rated = [];
-        for (const c of four){ const u = await this.getUser(c.user); rated.push({ conn: c, name: u.name, rating: u.rating }); }
-        rated.sort((a, b) => b.rating - a.rating);
-        const t = { id: this.nextMatchId++, conns: rated.map(r => r.conn), names: rated.map(r => r.name), winners: [], finalStarted: false };
-        rated.forEach((r, i) => this.send(r.conn, { t: 'tourney_start', seed: i + 1, bracket: rated.map((x, j) => ({ seed: j + 1, name: x.name, rating: x.rating })) }));
-        await this.startMatch(rated[0].conn, rated[3].conn, 11, { tourney: t, label: 'Semifinal' });
-        await this.startMatch(rated[1].conn, rated[2].conn, 11, { tourney: t, label: 'Semifinal' });
+      if (!conn.user) return;
+      let st = await this.storage.get('stourney');
+      const now = Date.now();
+      if (!st || st.state === 'done' || (st.state === 'reg' && now > st.startsAt + 120e3)){
+        // next :00 or :30 mark that's at least 10 minutes away
+        let t0 = new Date(now + 10 * 60e3);
+        const mins = t0.getMinutes();
+        t0.setMinutes(mins < 30 ? 30 : 60, 0, 0);
+        st = { startsAt: t0.getTime(), roundAt: t0.getTime(), round: 0, state: 'reg', players: [], alive: [], winners: [], pendingCount: 0 };
       }
+      if (st.state === 'reg' && !st.players.some(p => p.key === conn.user) && st.players.length < 32){
+        const u = await this.getUser(conn.user);
+        st.players.push({ key: conn.user, name: u.name, rating: u.rating });
+      }
+      await this.storage.put('stourney', st);
+      await this.storage.setAlarm(st.startsAt);
+      this.broadcastStState(st);
     }
     else if (m.t === 'tourney_leave'){
-      this.tqueue = this.tqueue.filter(c => c !== conn);
-      this.send(conn, { t: 'tourney_wait', n: -1 });
+      const st = await this.storage.get('stourney');
+      if (st && st.state === 'reg'){
+        st.players = st.players.filter(p => p.key !== conn.user);
+        await this.storage.put('stourney', st);
+        this.broadcastStState(st);
+        this.sendStState(conn, st);   // the leaver hears the result too
+      }
+    }
+    else if (m.t === 'tourney_state'){
+      const st = await this.storage.get('stourney');
+      this.sendStState(conn, st);
     }
     else if (m.t === 'arena_join'){
       if (!conn.user || conn.match) return;
@@ -592,7 +602,7 @@ Under 250 words, plain text, warm, specific to THEIR essay — never generic. Ne
   async startMatch(a, b, len, ctx){
     const winPoints = MATCH_FORMATS[len] ? len : 11;
     const match = { id: this.nextMatchId++, players: [a, b], score: [0, 0], round: 0, answered: new Set(), roundWon: false, done: false, timer: null, winPoints,
-                    tourney: ctx && ctx.tourney, arena: !!(ctx && ctx.arena), label: (ctx && ctx.label) || null };
+                    st: !!(ctx && ctx.st), arena: !!(ctx && ctx.arena), label: (ctx && ctx.label) || null };
     a.match = b.match = match;
     await this.lockForMatch([a.user, b.user], true);
     const ua = await this.getUser(a.user), ub = await this.getUser(b.user);
@@ -686,26 +696,85 @@ Under 250 words, plain text, warm, specific to THEIR essay — never generic. Ne
     } else if (match.arena && this.arena){
       this.endArena();
     }
-    const t = match.tourney;
-    if (t){
-      if (!t.finalStarted){
-        t.winners.push(w);
-        const wname = t.names[t.conns.indexOf(w)] || 'Winner';
-        t.conns.forEach(c => { if (c.ws.readyState === 1) this.send(c, { t: 'tourney_round', msg: wname + ' advances to the final' }); });
-        if (t.winners.length === 2){
-          t.finalStarted = true;
-          const [f1, f2] = t.winners;
-          if (f1.ws.readyState === 1 && f2.ws.readyState === 1 && !f1.match && !f2.match){
-            setTimeout(() => this.startMatch(f1, f2, 11, { tourney: t, label: 'FINAL' }).catch(()=>{}), 3000);
-          }
-        }
-      } else {
-        const champU = await this.getUser(w.user);
-        champU.tourneyWins = (champU.tourneyWins || 0) + 1;
-        await this.putUser(w.user, champU);
-        t.conns.forEach(c => { if (c.ws.readyState === 1) this.send(c, { t: 'tourney_result', champion: champU.name, yours: c === w }); });
+    if (match.st){
+      const st = await this.storage.get('stourney');
+      if (st && st.state === 'running'){
+        st.winners.push(w.user);
+        st.pendingCount = Math.max(0, st.pendingCount - 1);
+        await this.storage.put('stourney', st);
+        if (st.pendingCount === 0) await this.finishRound(st);
       }
     }
+  }
+  sendStState(conn, st){
+    if (!st || st.state === 'done'){ this.send(conn, { t: 'stourney_state', none: true }); return; }
+    this.send(conn, { t: 'stourney_state', state: st.state, startsAt: st.startsAt, roundAt: st.roundAt, round: st.round,
+      players: st.players.map(p => p.name), n: st.players.length,
+      registered: !!(conn.user && st.players.some(p => p.key === conn.user)),
+      alive: st.state === 'running' ? st.alive.length : st.players.length });
+  }
+  broadcastStState(st){
+    for (const p of st.players){ const c = this.liveConn(p.key); if (c) this.sendStState(c, st); }
+  }
+  async alarm(){
+    const st = await this.storage.get('stourney');
+    if (!st || st.state === 'done') return;
+    if (st.state === 'reg'){
+      if (st.players.length < 2){
+        st.state = 'done';
+        await this.storage.put('stourney', st);
+        for (const p of st.players){ const c = this.liveConn(p.key); if (c) this.send(c, { t: 'stourney_result', champion: null, msg: 'Not enough players this time — tournament cancelled' }); }
+        return;
+      }
+      st.state = 'running';
+      st.alive = st.players.slice().sort((a, b) => b.rating - a.rating).map(p => p.key);
+      st.round = 0;
+    }
+    await this.startRound(st);
+  }
+  async startRound(st){
+    st.round++;
+    st.winners = [];
+    const alive = st.alive;   // already seeded order
+    const pairs = [];
+    let byes = [];
+    let pool = alive.slice();
+    if (pool.length % 2 === 1){ byes.push(pool.shift()); }   // top seed sits the odd round out
+    while (pool.length >= 2){ pairs.push([pool.shift(), pool.pop()]); }   // best vs worst remaining
+    st.winners = byes.slice();
+    let live = 0;
+    const label = alive.length <= 2 ? 'FINAL' : 'Round ' + st.round;
+    for (const [k1, k2] of pairs){
+      const c1 = this.liveConn(k1), c2 = this.liveConn(k2);
+      const free1 = c1 && !c1.match, free2 = c2 && !c2.match;
+      if (free1 && free2){ live++; await this.startMatch(c1, c2, 21, { st: true, label }); }
+      else if (free1){ st.winners.push(k1); if (c1) this.send(c1, { t: 'stourney_round', msg: 'Your opponent was absent — you advance' }); }
+      else if (free2){ st.winners.push(k2); if (c2) this.send(c2, { t: 'stourney_round', msg: 'Your opponent was absent — you advance' }); }
+      else { st.winners.push(k1); }   // both absent: higher seed advances
+    }
+    st.pendingCount = live;
+    await this.storage.put('stourney', st);
+    for (const p of st.players){ const c = this.liveConn(p.key); if (c && !c.match) this.send(c, { t: 'stourney_round', msg: label + ' is underway — ' + st.alive.length + ' players remain' }); }
+    if (live === 0) await this.finishRound(st);
+  }
+  async finishRound(st){
+    st.alive = st.players.filter(p => st.winners.includes(p.key)).sort((a, b) => b.rating - a.rating).map(p => p.key);
+    if (st.alive.length <= 1){
+      st.state = 'done';
+      await this.storage.put('stourney', st);
+      const champKey = st.alive[0];
+      if (champKey){
+        const champU = await this.getUser(champKey);
+        champU.tourneyWins = (champU.tourneyWins || 0) + 1;
+        await this.putUser(champKey, champU);
+        for (const p of st.players){ const c = this.liveConn(p.key); if (c) this.send(c, { t: 'stourney_result', champion: champU.name, yours: p.key === champKey }); }
+      }
+      return;
+    }
+    st.roundAt = Date.now() + 30 * 60e3;
+    await this.storage.put('stourney', st);
+    await this.storage.setAlarm(st.roundAt);
+    for (const p of st.players){ const c = this.liveConn(p.key); if (c) this.send(c, { t: 'stourney_round', msg: st.alive.length + ' players left — next round in 30 minutes. Be online!', at: st.roundAt }); }
   }
   sendArenaState(){
     const a = this.arena; if (!a) return;
