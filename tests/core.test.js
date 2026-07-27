@@ -119,6 +119,27 @@ openReport();
 T('report teaser renders for free', true);
 account.premium=true;
 
+// --- premium value build ---
+account.premium=true; account.premiumPlan='unlimited';
+T('writing prompts bank', WRITING_PROMPTS.length>=10 && WRITING_PROMPTS.every(p=>p.length>20));
+T('essay url', /\/essay$/.test(essayUrl()));
+// review cap: free users stop at 10/day
+account.premium=false; account.premiumPlan=''; store.familyPremium=false;
+account.revDay={d:dateStr(new Date()), n:10};
+account.misses=[{q:'x',choices:['a','b','c','d','e'],answer:0,why:'',box:0,due:dateStr(new Date())}];
+studyMode='review'; loadStudy();
+T('free review capped at 10 (no crash, upsell path)', true);
+account.premium=true; account.premiumPlan='unlimited';
+// test history capture shape
+account.testHist=[];
+account.testHist.push({d:dateStr(new Date()),kind:'quick',score:617,correct:15,wrong:6,blank:4,topicMiss:{0:2,3:1}});
+T('testHist synced', Array.isArray(syncPayload().testHist));
+// focus gated for free
+account.premium=false; account.premiumPlan='';
+openFocus();
+T('focus gated for free (no crash)', true);
+account.premium=true; account.premiumPlan='unlimited';
+
 // --- account page ---
 lastFriends={list:[{name:'Zed',rating:1200},{name:'Amy',rating:900}],reqs:[]};
 lastBoard=[{name:'Top',rating:1500,wins:9,losses:1}];
