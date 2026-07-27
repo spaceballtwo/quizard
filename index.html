@@ -443,14 +443,14 @@
 </div>
 
 <script>
-const APP_VERSION = '0.31.2';
+const APP_VERSION = '0.31.3';
 /* ===== Local accounts: each person has their own on-device SSAT account ===== */
 let store = { accounts: [], currentId: null };
 function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
 function planLabel(){
   if(!isPremium()) return 'Free';
   const p=account&&account.premiumPlan;
-  if(p==='unlimited') return 'Unlimited \u2014 Tutor Tier';
+  if(p==='unlimited') return 'Unlimited';
   if(p==='solo') return 'Solo';
   if(p==='family') return 'Family';
   return 'Family';   // family-member / familyPremium device flag
@@ -469,6 +469,11 @@ function rnd(min,max){ return Math.floor(Math.random()*(max-min+1))+min; }
 function choice(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
 function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
 function pick(arr,n){ return shuffle(arr.slice()).slice(0,n); }
+/* test bubbles work like paper: tap your filled bubble again to erase it (blank > wrong guess at -1/4) */
+function radioToggle(r){
+  if (r._wasOn){ r.checked=false; r._wasOn=false; }
+  else { document.getElementsByName(r.name).forEach(o=>o._wasOn=false); r._wasOn=true; }
+}
 
 /* ===== Icon set: hand-drawn line glyphs (stroke = currentColor, so they inherit text color) ===== */
 const ICONS = {
@@ -2891,7 +2896,7 @@ function rtBegin(){
   s.questions.forEach((q,i)=>{
     if (q.passage && q.passage!==lastPassage){ inner+=`<div class="passage">${q.passage}</div>`; lastPassage=q.passage; }
     inner+=`<div class="q"><div class="q-stem"><span class="q-num">${i+1}.</span> ${q.q}</div>${figHTML(q)}`
-      + q.choices.map((c,ci)=>`<label class="choice"><input type="radio" name="rt${i}" value="${ci}"><span>${String.fromCharCode(65+ci)}. ${c}</span></label>`).join('')
+      + q.choices.map((c,ci)=>`<label class="choice"><input type="radio" name="rt${i}" value="${ci}" onclick="radioToggle(this)"><span>${String.fromCharCode(65+ci)}. ${c}</span></label>`).join('')
       + `</div>`;
   });
   inner+=`<button class="btn" onclick="rtGrade(false)">Finish section &rarr;</button>`;
@@ -3202,7 +3207,7 @@ function newSet(n){
       qDiv.className = 'q'; qDiv.id = `q-${gnum}`;
       let html = `<div class="q-stem"><span class="q-num">${gnum}.</span> ${qq.q}</div>` + figHTML(qq);
       qq.choices.forEach((c, ci) => {
-        html += `<label class="choice"><input type="radio" name="q${gnum}" value="${ci}"><span>${String.fromCharCode(65+ci)}. ${c}</span></label>`;
+        html += `<label class="choice"><input type="radio" name="q${gnum}" value="${ci}" onclick="radioToggle(this)"><span>${String.fromCharCode(65+ci)}. ${c}</span></label>`;
       });
       html += reportLineHTML('practice', gnum);
       qDiv.innerHTML = html;
@@ -4620,7 +4625,8 @@ function renderDiagDone(s){
 
 /* ===== About: version, platform, what's new ===== */
 const CHANGELOG = [
-  ['0.31.2','Your plan shows by name everywhere — Solo, Unlimited Tutor Tier, or Family — instead of a generic Premium badge'],
+  ['0.31.3','Test bubbles erase like paper — tap your answer again to leave it blank. Family plan now shows it includes every tutor perk'],
+  ['0.31.2','Your plan shows by name everywhere — Solo, Unlimited, or Family — instead of a generic Premium badge'],
   ['0.31.1','Brackets become real events: register, play at the set start time, full first-to-21 matches, 30 minutes between rounds'],
   ['0.31.0','Two new courses (Word Mastery + Summit Problems), the hidden Obsidian League, and online tournaments: Arena and seeded Brackets'],
   ['0.30.0','Courses are now a summit: master every topic to unlock the Course Exam — pass it for the crest, +150 XP, and a gold ring on home'],
@@ -4874,7 +4880,7 @@ function openPremium(){
             <button class="btn" style="margin:0" onclick="buyPremium('solo')">Get Solo</button>
           </div>
           <div style="border:1.5px solid var(--gold);border-radius:12px;padding:14px 10px;text-align:center;position:relative">
-            <div style="position:absolute;top:-9px;left:50%;transform:translateX(-50%);background:var(--navy);color:var(--gold-soft);font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;white-space:nowrap">THE TUTOR TIER</div>
+            <div style="position:absolute;top:-9px;left:50%;transform:translateX(-50%);background:var(--navy);color:var(--gold-soft);font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;white-space:nowrap">TUTOR INCLUDED</div>
             <div style="font-weight:700;color:var(--navy)">Unlimited</div>
             <div style="margin:6px 0"><span style="font-size:26px;font-weight:800;color:var(--navy)">${livePrices&&livePrices.unlimited?livePrices.unlimited:'$99.99'}</span><span style="color:var(--gray);font-size:12px"> / 3 mo</span></div>
             <div style="color:var(--gray);font-size:12px;margin-bottom:10px"><b>Sage becomes a real tutor</b> —<br>Writing Coach, test debriefs,<br>week plans on your home screen</div>
@@ -4884,7 +4890,7 @@ function openPremium(){
             <div style="position:absolute;top:-9px;left:50%;transform:translateX(-50%);background:var(--gold);color:#1a2136;font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;white-space:nowrap">BEST VALUE</div>
             <div style="font-weight:700;color:var(--navy)">Family</div>
             <div style="margin:6px 0"><span style="font-size:26px;font-weight:800;color:var(--navy)">${livePrices&&livePrices.family?livePrices.family:'$349.99'}</span><span style="color:var(--gray);font-size:12px"> / 3 mo</span></div>
-            <div style="color:var(--gray);font-size:12px;margin-bottom:10px">up to 6 accounts, each kid their own<br>all perks: crown, Midnight, weekly plans</div>
+            <div style="color:var(--gray);font-size:12px;margin-bottom:10px">up to 6 accounts, each kid their own<br>every Unlimited perk included — tutor,<br>Writing Coach, debriefs, week plans</div>
             <button class="btn" style="margin:0" onclick="buyPremium('family')">Get Family</button>
           </div>
         </div>

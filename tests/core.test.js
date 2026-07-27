@@ -266,7 +266,7 @@ T('planLabel free', planLabel()==='Free');
 account.premium=true; account.premiumPlan='solo';
 T('planLabel solo', planLabel()==='Solo');
 account.premiumPlan='unlimited';
-T('planLabel tutor tier', /Tutor Tier/.test(planLabel()));
+T('planLabel unlimited (tutor not exclusive to it — family has it too)', planLabel()==='Unlimited');
 account.premiumPlan='family-member';
 T('planLabel family member', planLabel()==='Family');
 account.premium=false; account.premiumPlan='';
