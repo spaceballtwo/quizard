@@ -87,8 +87,8 @@ T('verbal skill moves', account.verbalSkill.analogies>2);
 // --- diagnostic v2 ---
 store.diagState=null;
 const di=buildDiagItems();
-T('diag: 46 items', di.length===TOPICS.length*2+18);
-T('diag: 2 per math topic', TOPICS.every((t,i)=>di.filter(x=>x.ti===i).length===2));
+T('diag: math topics ×2 + 18 verbal', di.length===TOPICS.filter(t=>!t.verbal).length*2+18);
+T('diag: 2 per math topic', TOPICS.every((t,i)=>t.verbal || di.filter(x=>x.ti===i).length===2));
 T('diag: 6+6+6 verbal', di.filter(x=>x.kind==='analogies').length===6 && di.filter(x=>x.kind==='synonyms').length===6 && di.filter(x=>x.kind==='reading').length===6);
 T('diag: reading carries passages', di.filter(x=>x.kind==='reading').every(x=>x.passage && x.passage.length>50));
 T('diag: all valid serializable MCs', di.every(x=>x.q.q && x.q.choices.length>=4 && x.q.choices[x.q.answer]!=null && x.q.why));
@@ -139,6 +139,21 @@ account.premium=false; account.premiumPlan='';
 openFocus();
 T('focus gated for free (no crash)', true);
 account.premium=true; account.premiumPlan='unlimited';
+
+// --- expansion ---
+T('20 topics now', TOPICS.length===20);
+T('6 courses now', COURSES.length===6);
+T('verbal topics flagged', TOPICS.filter(t=>t.verbal).length===3);
+T('new topics have long lessons', TOPICS.slice(-7).every(t=>t.lesson && t.lesson.length>800));
+T('wrapper gens attributed', GEN_TOPIC.get(genSPRates)===topicIdxById('sp_rates') && GEN_TOPIC.get(genWMAnalogy)===topicIdxById('wm_ana1'));
+for(let i=0;i<300;i++){ const q=genSPNumTheory(); if(!q.q||!q.choices[q.answer]){ T('wrapper gens valid', false); break; } if(i===299) T('wrapper gens valid', true); }
+T('word mastery drills serve verbal', (()=>{ const q=genWMSynonym(); return q.q===q.q.toUpperCase() || q.choices.length===5; })());
+// obsidian
+oMe={name:'X',rating:1250,wins:0,losses:0};
+T('obsidian qualified at 1250', obsidianQualified()===true);
+oMe={name:'X',rating:900,wins:0,losses:0}; account.onlineRating=0;
+T('obsidian hidden below 1200', obsidianQualified()===false);
+oMe=null;
 
 // --- course exam ---
 account.courseDone={};
