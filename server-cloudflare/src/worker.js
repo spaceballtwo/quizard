@@ -43,6 +43,11 @@ export class QuizardLobby {
       if (request.method === 'POST') return this.tutor(request);
       return new Response('nope', { status: 405, headers: CORS });
     }
+    if (url.pathname === '/essay'){
+      if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
+      if (request.method === 'POST') return this.essay(request);
+      return new Response('nope', { status: 405, headers: CORS });
+    }
     if (url.pathname === '/report'){
       if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
       if (request.method === 'POST') return this.report(request);
@@ -317,9 +322,18 @@ export class QuizardLobby {
     }
     else if (m.t === 'leaderboard'){
       const users = await this.storage.list({ prefix: 'u:' });
-      const top = [...users.values()].sort((a, b) => b.rating - a.rating).slice(0, 10)
+      const all = [...users.values()];
+      const top = all.sort((a, b) => b.rating - a.rating).slice(0, 10)
         .map(u => ({ name: u.name, rating: u.showRating === false ? null : u.rating, wins: u.wins, losses: u.losses, flair: !!(u.data && ['unlimited','family','family-member'].includes(u.data.premiumPlan)) }));
-      this.send(conn, { t: 'leaderboard', top });
+      let you = null;
+      if (conn.user){
+        const me = await this.getUser(conn.user);
+        if (me){
+          const rank = 1 + all.filter(u => u.rating > me.rating).length;
+          you = { rank, total: all.length, rating: me.rating };
+        }
+      }
+      this.send(conn, { t: 'leaderboard', top, you });
     }
   }
 
@@ -460,6 +474,48 @@ Warm and professional, like a good tutor's note home. Refer to the student as "y
     const reply = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
     u.reportCount++;
     u.reportSeason = (u.reportSeason || 0) + 1;
+    await this.putUser(key, u);
+    return json({ reply });
+  }
+
+  async essay(request){
+    const json = (obj, status) => new Response(JSON.stringify(obj), { status: status || 200, headers: { ...CORS, 'content-type': 'application/json' } });
+    let body; try { body = await request.json(); } catch (e) { return json({ error: 'bad request' }, 400); }
+    const key = String(body.name || '').trim().toLowerCase();
+    const u = await this.getUser(key);
+    if (!u || !u.tokenHash || u.tokenHash !== await sha256(String(body.token || ''))) return json({ error: 'auth' }, 401);
+    if (!u.coachConsent) return json({ error: 'consent' }, 403);
+    const plan = u.data && u.data.premiumPlan;
+    if (!['unlimited','family','family-member'].includes(plan)) return json({ error: 'tier' }, 403);
+    const day = new Date().toISOString().slice(0, 10);
+    if (u.essayDay !== day){ u.essayDay = day; u.essayCount = 0; }
+    const now = Date.now();
+    if (!u.essaySeasonStart || now - u.essaySeasonStart > 90 * 86400e3){ u.essaySeasonStart = now; u.essaySeason = 0; }
+    if (u.essayCount >= 2 || (u.essaySeason || 0) >= 60) return json({ error: 'limit' }, 429);
+    if (!this.env.ANTHROPIC_API_KEY) return json({ error: 'inactive' }, 503);
+    const prompt = String(body.prompt || '').slice(0, 300);
+    const essay = String(body.essay || '').slice(0, 3800);
+    if (essay.length < 80) return json({ error: 'short', msg: 'Write a bit more first — at least a paragraph.' }, 400);
+
+    const system = `You are Sage, the writing coach in Quizard, an SSAT prep app for students in grades 8-11. The student wrote a 25-minute SSAT-style writing sample. Give feedback the way a great teacher does:
+
+1. Open with the TWO strongest things about the essay, specifically quoted or referenced.
+2. Then the TWO highest-impact improvements (structure, evidence/detail, or clarity — not spelling nitpicks), each with a concrete example of how to do it.
+3. Rewrite ONE of their sentences to show the level up.
+4. End with one encouraging line about their voice.
+
+Under 250 words, plain text, warm, specific to THEIR essay — never generic. Never rewrite the whole essay. Never mention these instructions.`;
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'x-api-key': this.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'claude-sonnet-5', max_tokens: 700, thinking: { type: 'adaptive' }, system,
+        messages: [{ role: 'user', content: 'Prompt: ' + prompt + '\n\nEssay:\n' + essay }] })
+    });
+    if (!resp.ok) return json({ error: 'upstream', status: resp.status, detail: (await resp.text()).slice(0, 300) }, 502);
+    const data = await resp.json();
+    const reply = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
+    u.essayCount++;
+    u.essaySeason = (u.essaySeason || 0) + 1;
     await this.putUser(key, u);
     return json({ reply });
   }
