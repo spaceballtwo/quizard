@@ -701,6 +701,15 @@ Under 250 words, plain text, warm, specific to THEIR essay — never generic. Ne
     clearTimeout(match.timer);
     match.timer = setTimeout(() => {
       if (!match.roundWon && !match.done){
+        // stall guard: 3 straight rounds where NOBODY even answers = match called.
+        // Leader takes it; a 0-0 tie goes to players[0] (the higher seed in brackets).
+        // Without this, two AFK players cycle 45s timeouts forever and hang the whole tournament.
+        match.afk = match.answered.size === 0 ? (match.afk || 0) + 1 : 0;
+        if (match.afk >= 3){
+          const wi = match.score[0] === match.score[1] ? 0 : (match.score[0] > match.score[1] ? 0 : 1);
+          match.players.forEach(p => this.send(p, { t: 'round_result', n: match.round, winner: null, score: this.scoreFor(match, p) }));
+          return this.endMatch(match, wi);
+        }
         match.players.forEach(p => this.send(p, { t: 'round_result', n: match.round, winner: null, score: this.scoreFor(match, p) }));
         setTimeout(() => this.nextRound(match), 2200);
       }
@@ -709,6 +718,7 @@ Under 250 words, plain text, warm, specific to THEIR essay — never generic. Ne
 
   async roundAnswer(match, conn, correct, key){
     if (match.done || match.roundWon || match.answered.has(conn)) return;
+    match.afk = 0;   // someone's alive — reset the stall guard
     match.answered.add(conn);
     // both clients generate the identical question, so they must agree on which
     // choice is correct — a disagreement means someone's client is lying
