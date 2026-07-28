@@ -86,6 +86,27 @@ export class QuizardLobby {
       if (request.method === 'POST') return this.report(request);
       return new Response('nope', { status: 405, headers: CORS });
     }
+    if (url.pathname === '/admin'){
+      // maintenance, gated on the ADMIN_KEY wrangler secret (never in source)
+      const json = (obj, status) => new Response(JSON.stringify(obj), { status: status || 200, headers: { 'content-type': 'application/json' } });
+      if (request.method !== 'POST') return new Response('nope', { status: 405 });
+      const body = await request.json().catch(() => null);
+      if (!body || !this.env.ADMIN_KEY || body.key !== this.env.ADMIN_KEY) return json({ error: 'no' }, 403);
+      const users = await this.storage.list({ prefix: 'u:' });
+      if (body.action === 'list'){
+        return json({ names: [...users.values()].map(u => ({ name: u.name, rating: u.rating, wins: u.wins, losses: u.losses })) });
+      }
+      if (body.action === 'purge'){
+        const keep = new Set((body.keep || []).map(s => String(s).toLowerCase()));
+        const gone = [], kept = [];
+        for (const [k, u] of users){
+          if (keep.has(u.name.toLowerCase())) kept.push(u.name);
+          else { await this.storage.delete(k); gone.push(u.name); }
+        }
+        return json({ deleted: gone, kept });
+      }
+      return json({ error: 'unknown action' }, 400);
+    }
     if (request.headers.get('Upgrade') !== 'websocket'){
       return new Response('Quizard server OK\n', { status: 200, headers: { 'content-type': 'text/plain' } });
     }
@@ -758,7 +779,11 @@ Under 250 words, plain text, warm, specific to THEIR essay — never generic. Ne
       if (st && st.state === 'running'){
         st.winners.push(w.user);
         st.pendingCount = Math.max(0, st.pendingCount - 1);
+        const wp = st.players.find(p => p.key === w.user);
+        const row = (st.rounds && st.rounds[st.round - 1] || []).find(e => !e.w && wp && (e.a === wp.name || e.b === wp.name));
+        if (row) row.w = wp.name;
         await this.storage.put('stourney', st);
+        this.broadcastStState(st);   // bracket picture updates as results land
         if (st.pendingCount === 0) await this.finishRound(st);
       }
     }
@@ -767,6 +792,8 @@ Under 250 words, plain text, warm, specific to THEIR essay — never generic. Ne
     if (!st || st.state === 'done'){ this.send(conn, { t: 'stourney_state', none: true }); return; }
     this.send(conn, { t: 'stourney_state', state: st.state, startsAt: st.startsAt, roundAt: st.roundAt, round: st.round, monthly: !!st.monthly, mlabel: st.mlabel || '',
       players: st.players.map(p => p.name), n: st.players.length,
+      seeds: st.players.slice().sort((a, b) => b.rating - a.rating).map(p => p.name),
+      rounds: st.rounds || [],
       registered: !!(conn.user && st.players.some(p => p.key === conn.user)),
       alive: st.state === 'running' ? st.alive.length : st.players.length });
   }
@@ -793,22 +820,26 @@ Under 250 words, plain text, warm, specific to THEIR essay — never generic. Ne
     st.round++;
     st.winners = [];
     const alive = st.alive;   // already seeded order
+    const nameOf = k => { const p = st.players.find(p => p.key === k); return p ? p.name : k; };
     const pairs = [];
     let byes = [];
     let pool = alive.slice();
     if (pool.length % 2 === 1){ byes.push(pool.shift()); }   // top seed sits the odd round out
     while (pool.length >= 2){ pairs.push([pool.shift(), pool.pop()]); }   // best vs worst remaining
     st.winners = byes.slice();
+    st.rounds = st.rounds || [];
+    const drawn = byes.map(k => ({ a: nameOf(k), b: null, w: nameOf(k) }));   // bracket picture rows
     let live = 0;
     const label = alive.length <= 2 ? 'FINAL' : 'Round ' + st.round;
     for (const [k1, k2] of pairs){
       const c1 = this.liveConn(k1), c2 = this.liveConn(k2);
       const free1 = c1 && !c1.match, free2 = c2 && !c2.match;
-      if (free1 && free2){ live++; await this.startMatch(c1, c2, 21, { st: true, label }); }
-      else if (free1){ st.winners.push(k1); if (c1) this.send(c1, { t: 'stourney_round', msg: 'Your opponent was absent — you advance' }); }
-      else if (free2){ st.winners.push(k2); if (c2) this.send(c2, { t: 'stourney_round', msg: 'Your opponent was absent — you advance' }); }
-      else { st.winners.push(k1); }   // both absent: higher seed advances
+      if (free1 && free2){ live++; drawn.push({ a: nameOf(k1), b: nameOf(k2), w: null }); await this.startMatch(c1, c2, 21, { st: true, label }); }
+      else if (free1){ st.winners.push(k1); drawn.push({ a: nameOf(k1), b: nameOf(k2), w: nameOf(k1) }); if (c1) this.send(c1, { t: 'stourney_round', msg: 'Your opponent was absent — you advance' }); }
+      else if (free2){ st.winners.push(k2); drawn.push({ a: nameOf(k1), b: nameOf(k2), w: nameOf(k2) }); if (c2) this.send(c2, { t: 'stourney_round', msg: 'Your opponent was absent — you advance' }); }
+      else { st.winners.push(k1); drawn.push({ a: nameOf(k1), b: nameOf(k2), w: nameOf(k1) }); }   // both absent: higher seed advances
     }
+    st.rounds[st.round - 1] = drawn;
     st.pendingCount = live;
     await this.storage.put('stourney', st);
     for (const p of st.players){ const c = this.liveConn(p.key); if (c && !c.match) this.send(c, { t: 'stourney_round', msg: label + ' is underway — ' + st.alive.length + ' players remain' }); }

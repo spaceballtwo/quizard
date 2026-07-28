@@ -443,7 +443,7 @@
 </div>
 
 <script>
-const APP_VERSION = '0.32.0';
+const APP_VERSION = '0.32.1';
 /* ===== Local accounts: each person has their own on-device SSAT account ===== */
 let store = { accounts: [], currentId: null };
 function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
@@ -3600,6 +3600,7 @@ function renderOnlineHome(msg){
       <div class="mlabel">Tournaments</div>
       <div id="tourneyBox">
         <div id="bracketCard" class="tier-row"><span><b>${ico('trophy',14)} Bracket Tournament</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">loading schedule&hellip;</span></span></div>
+        <div id="bracketPic"></div>
         <div class="tier-row" style="cursor:pointer" onclick="arenaActive=true; osend({t:'arena_join'}); showToast('Arena joined — races start when an opponent arrives')"><span><b>${ico('flame',14)} Arena</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">10 minutes, quick races to 5 — wins score points, most points takes it</span></span><span class="tier-rp">Join &rarr;</span></div>
         <div id="tourneyStatus"></div>
       </div>
@@ -3657,6 +3658,35 @@ function openFriendsPage(){
   renderFriendsPage();
 }
 function obsidianQualified(){ return !!(oMe && oMe.rating>=1200) || !!(account && account.onlineRating>=1200); }
+/* The bracket picture: one column per round, winners in gold. During registration
+   it projects Round 1 from the current seeds so players can see who they'd draw. */
+function bracketHTML(m){
+  if (!m || m.none) return '';
+  const cols=[];
+  const box=(a,b,w)=>{
+    const line=(nm,isW)=>nm==null
+      ? `<div style="padding:3px 8px;color:var(--gray);font-size:11.5px;font-style:italic">bye — advances</div>`
+      : `<div style="padding:3px 8px;font-size:12.5px;${isW?'font-weight:800;color:var(--gold-deep,#a87f1e)':''}">${isW?'✓ ':''}${esc(nm)}</div>`;
+    return `<div style="border:1.5px solid ${w?'var(--gold)':'var(--line)'};border-radius:9px;overflow:hidden">${line(a,w&&w===a)}<div style="border-top:1px solid var(--line)"></div>${b!=null||a==null?line(b,w&&w===b):''}${!w?`<div style="padding:2px 8px;font-size:10.5px;color:var(--gray)">playing&hellip;</div>`:''}</div>`;
+  };
+  if ((m.rounds||[]).length){
+    m.rounds.forEach((r,i)=>{
+      const isFinal = r.length===1 && r[0].b!=null;
+      cols.push({ label: isFinal?'FINAL':'Round '+(i+1), boxes: r.map(e=>box(e.a,e.b,e.w)) });
+    });
+  } else if (m.state==='reg' && (m.seeds||[]).length>=2){
+    const pool=m.seeds.slice(), boxes=[];
+    if (pool.length%2===1) boxes.push(box(pool.shift(),null,null).replace('playing&hellip;','top seed'));
+    while (pool.length>=2) boxes.push(box(pool.shift(),pool.pop(),null).replace('playing&hellip;','projected'));
+    cols.push({ label:'Round 1 (projected — seeds shift as players join)', boxes });
+  }
+  if (!cols.length) return '';
+  return `<div style="display:flex;gap:12px;overflow-x:auto;padding:10px 4px 6px;align-items:stretch">${cols.map(c=>`
+    <div style="display:flex;flex-direction:column;min-width:132px;flex-shrink:0">
+      <div style="font-size:10.5px;font-weight:800;letter-spacing:1px;color:var(--gray);text-transform:uppercase;margin-bottom:6px">${c.label}</div>
+      <div style="flex:1;display:flex;flex-direction:column;justify-content:space-around;gap:8px">${c.boxes.join('')}</div>
+    </div>`).join('')}</div>`;
+}
 function wallHTML(){
   if (!lastWall || !lastWall.length) return '<p class="section-instr" style="text-align:center">The wall awaits its first name&hellip;</p>';
   return lastWall.map(e=>`<div class="tier-row" style="border-left:4px solid var(--gold)"><span><b>⭐ ${esc(e.name)}</b>${oMe&&e.name===oMe.name?' <span style="font-size:11px;color:var(--gray)">(you)</span>':''}</span><span class="tier-rp">${esc(e.label)}</span></div>`).join('');
@@ -3899,6 +3929,8 @@ function onlineMsg(m){
           : `<button class="seg" style="flex:none" onclick="osend({t:'tourney_join'})">Register</button>`) : ''}`;
       }
     }
+    const bp=document.getElementById('bracketPic');
+    if (bp) bp.innerHTML = bracketHTML(m);
   }
   else if (m.t==='stourney_round'){
     playFanfare();
@@ -4681,6 +4713,7 @@ function renderDiagDone(s){
 
 /* ===== About: version, platform, what's new ===== */
 const CHANGELOG = [
+  ['0.32.1','See the bracket: live tournament picture with every round, winners in gold — and projected Round 1 pairings while registration is open'],
   ['0.32.0','The Monthly Championship: last Saturday of every month — win it and your name goes on the Wall of Champions, forever. Plus a serious username filter'],
   ['0.31.5','Your leaderboard rank now always matches the ladder rows. Scores reach 800 again and every estimate shows your percentile'],
   ['0.31.4','Score estimates now curve like the real SSAT — the top of the scale is earned against a strong pool, estimates cap at 775'],

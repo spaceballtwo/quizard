@@ -284,5 +284,14 @@ T('filter: leetspeak blocked', !nameAllowed('Sh1tLord') && !nameAllowed('B1tch')
 T('filter: slurs blocked', !nameAllowed('nigger123') && !nameAllowed('KikeHater') && !nameAllowed('ret4rd'));
 T('filter: exact-only words', !nameAllowed('ass') && nameAllowed('Cassandra') && !nameAllowed('sex') && nameAllowed('Sussex') && !nameAllowed('kys'));
 
+// bracket picture (pure function over stourney_state payloads)
+const bReg = bracketHTML({state:'reg', seeds:['Ace','Bo','Cy','Dee','Eve'], rounds:[], n:5});
+T('bracket: reg preview seeds best-vs-worst', bReg.includes('Ace') && bReg.includes('projected') && bReg.indexOf('Bo')<bReg.indexOf('Eve') && bReg.includes('top seed'));
+const bLive = bracketHTML({state:'running', rounds:[[{a:'Ace',b:'Dee',w:'Ace'},{a:'Bo',b:'Cy',w:null}],[{a:'Ace',b:null,w:'Ace'}]], n:4});
+T('bracket: winner gets the check', bLive.includes('✓ Ace') && bLive.includes('playing'));
+const bFinal = bracketHTML({state:'running', rounds:[[{a:'Ace',b:'Bo',w:null}]], n:2});
+T('bracket: last pair labeled FINAL', bFinal.includes('FINAL'));
+T('bracket: empty states render nothing', bracketHTML({none:true})==='' && bracketHTML({state:'reg', seeds:['Solo1'], rounds:[]})==='');
+
 console.log(fails===0 ? 'CORE SUITE PASS' : fails+' FAILURES');
 process.exit(fails?1:0);
