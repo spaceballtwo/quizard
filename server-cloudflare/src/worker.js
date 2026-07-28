@@ -865,10 +865,12 @@ Under 250 words, plain text, warm, specific to THEIR essay — never generic. Ne
       }
       return;
     }
-    st.roundAt = Date.now() + 30 * 60e3;
+    // rounds roll as soon as every match is done — a 2-minute breather, no more.
+    // (long fixed gaps just scattered the players and caused walkovers)
+    st.roundAt = Date.now() + 2 * 60e3;
     await this.storage.put('stourney', st);
     await this.storage.setAlarm(st.roundAt);
-    for (const p of st.players){ const c = this.liveConn(p.key); if (c) this.send(c, { t: 'stourney_round', msg: st.alive.length + ' players left — next round in 30 minutes. Be online!', at: st.roundAt }); }
+    for (const p of st.players){ const c = this.liveConn(p.key); if (c) this.send(c, { t: 'stourney_round', msg: st.alive.length + ' players left — next round starts in 2 minutes. Stay ready!', at: st.roundAt }); }
   }
   sendArenaState(){
     const a = this.arena; if (!a) return;

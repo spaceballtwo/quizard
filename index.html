@@ -443,7 +443,7 @@
 </div>
 
 <script>
-const APP_VERSION = '0.32.1';
+const APP_VERSION = '0.32.2';
 /* ===== Local accounts: each person has their own on-device SSAT account ===== */
 let store = { accounts: [], currentId: null };
 function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
@@ -3921,7 +3921,7 @@ function onlineMsg(m){
         const title = m.monthly ? `\u2b50 ${m.mlabel} Championship` : `${ico('trophy',14)} Bracket Tournament`;
         const sub = m.state!=='reg' ? `LIVE — round ${m.round}, ${m.alive} players remain`
           : m.monthly ? `${day} at ${hh}:${mm} ${ap} &middot; ${m.n} registered &middot; the winner's name goes on the Wall of Champions`
-          : `starts at ${hh}:${mm} ${ap} &middot; ${m.n} registered &middot; full matches to 21, 30 min between rounds`;
+          : `starts at ${hh}:${mm} ${ap} &middot; ${m.n} registered &middot; full matches to 21, rounds roll as soon as everyone finishes`;
         if (m.monthly) card.style.borderLeft='4px solid var(--gold)'; else card.style.borderLeft='';
         card.innerHTML=`<span><b${m.monthly?' style="color:var(--gold-deep,#a87f1e)"':''}>${title}</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">${sub}</span></span>
         ${m.state==='reg' ? (m.registered
@@ -4713,6 +4713,7 @@ function renderDiagDone(s){
 
 /* ===== About: version, platform, what's new ===== */
 const CHANGELOG = [
+  ['0.32.2','Tournament rounds now roll as soon as everyone finishes — a 2-minute breather between rounds, a whole bracket in about an hour'],
   ['0.32.1','See the bracket: live tournament picture with every round, winners in gold — and projected Round 1 pairings while registration is open'],
   ['0.32.0','The Monthly Championship: last Saturday of every month — win it and your name goes on the Wall of Champions, forever. Plus a serious username filter'],
   ['0.31.5','Your leaderboard rank now always matches the ladder rows. Scores reach 800 again and every estimate shows your percentile'],
