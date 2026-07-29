@@ -10,8 +10,8 @@ function ask(ws,msg,want){ return new Promise(res=>{ const h=raw=>{ const d=JSON
   const pms=[ask(A,null,'match_start'), ask(B,null,'match_start')];
   A.send(JSON.stringify({t:'queue', wantLen:11})); B.send(JSON.stringify({t:'queue', wantLen:11}));
   const [ma,mb]=await Promise.all(pms);
-  const ok = ma && mb && typeof ma.d==='number' && ma.d===mb.d;
-  console.log('both 0.33 ->', ok ? '✓ shared d='+ma.d+' (1000-rated ⇒ 0)' : 'FAIL '+JSON.stringify([ma&&ma.d, mb&&mb.d]));
+  const ok = ma && mb && ma.d==null && mb.d==null;
+  console.log('both 0.33 ->', ok ? '✓ d withheld — flat pool at every rating (chess rule)' : 'FAIL '+JSON.stringify([ma&&ma.d, mb&&mb.d]));
   for (const w of [A,B]) await ask(w,{t:'delete_account'});
   console.log('teardown done');
   // mixed versions: one client with no v — d must be withheld

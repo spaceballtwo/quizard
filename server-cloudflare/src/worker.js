@@ -693,12 +693,11 @@ Under 250 words, plain text, warm, specific to THEIR essay — never generic. Ne
     a.match = b.match = match;
     await this.lockForMatch([a.user, b.user], true);
     const ua = await this.getUser(a.user), ub = await this.getUser(b.user);
-    // shared difficulty: only when BOTH clients can scale (0.33+), else legacy mix —
-    // a 0.32 iOS client racing a 0.33 client must still generate identical questions
-    let d = null;
-    if (vAtLeast(a.appv, [0,33,0]) && vAtLeast(b.appv, [0,33,0])){
-      d = Math.round(Math.max(0, Math.min(1, ((ua.rating + ub.rating) / 2 - 1000) / 400)) * 100) / 100;
-    }
+    // The race pool is FLAT at every rating — like chess, the game never changes,
+    // only the opponents get better. (Rating-scaled questions shipped in 0.33.0 and
+    // were rolled back same-day on Sam's call; d stays null. The client still honors
+    // a shared d if one is ever sent, and vAtLeast/appv remain for future protocol gating.)
+    const d = null;
     match.d = d;
     this.send(a, { t: 'match_start', d, opp: { name: ub.name, rating: this.visibleRating(ub), flair: !!(ub.data && ['unlimited','family','family-member'].includes(ub.data.premiumPlan)) }, winPoints: match.winPoints, label: match.label });
     this.send(b, { t: 'match_start', d, opp: { name: ua.name, rating: this.visibleRating(ua), flair: !!(ua.data && ['unlimited','family','family-member'].includes(ua.data.premiumPlan)) }, winPoints: match.winPoints, label: match.label });
