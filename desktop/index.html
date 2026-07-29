@@ -443,7 +443,7 @@
 </div>
 
 <script>
-const APP_VERSION = '0.32.2';
+const APP_VERSION = '0.33.0';
 /* ===== Local accounts: each person has their own on-device SSAT account ===== */
 let store = { accounts: [], currentId: null };
 function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
@@ -1383,7 +1383,13 @@ function updateSkill(ok, tier){
 function weightedChoice(){ const r=Math.random(); return r<0.30 ? choice(L1_GENS) : r<0.75 ? choice(L2_GENS) : choice(L3_GENS); }
 function statelessPick(){ if (isEasy()) return Math.random()<0.4 ? choice(L1_GENS) : choice(EASY_GENS); return weightedChoice(); }
 /* Races are competitive — mostly hard questions so speed alone can't win. */
-function raceChoice(){ const r=Math.random(); return r<0.10 ? choice(L1_GENS) : r<0.50 ? choice(L2_GENS) : choice(L3_GENS); }
+function raceChoice(d){
+  const r=Math.random();
+  if (typeof d!=='number') return r<0.10 ? choice(L1_GENS) : r<0.50 ? choice(L2_GENS) : choice(L3_GENS);   // legacy mix (pre-0.33 opponent)
+  // d: 0 = 1000-rated match … 1 = 1400+. Climbing the ladder makes the math harder for BOTH players equally.
+  const w1=0.40-0.36*d, w2=0.45-0.05*d;
+  return r<w1 ? choice(L1_GENS) : r<w1+w2 ? choice(L2_GENS) : choice(L3_GENS);
+}
 
 /* ================= Analogy engine: relationship banks -> thousands of distinct questions ================= */
 const ANALOGY_REL = [
@@ -3561,15 +3567,15 @@ function ensureOnlineIdentity(){
 function onlineAuthAttempt(){
   if (!account) return;
   if (oAuthStage===0){
-    if (account.onlineToken && account.onlineName) return osend({t:'token_login', name:account.onlineName, token:account.onlineToken});
+    if (account.onlineToken && account.onlineName) return osend({t:'token_login', name:account.onlineName, token:account.onlineToken, v:APP_VERSION});
     oAuthStage = 1;
   }
   if (oAuthStage===1){
-    if (account.onlineSecret && account.onlineName) return osend({t:'login', name:account.onlineName, pass:account.onlineSecret});
+    if (account.onlineSecret && account.onlineName) return osend({t:'login', name:account.onlineName, pass:account.onlineSecret, v:APP_VERSION});
     oAuthStage = 2;
   }
   if (!account.onlineSecret){ account.onlineSecret = randSecret(); saveStore(); }
-  osend({t:'register', name:sanitizeOnlineName(account.name), pass:account.onlineSecret, auto:true});
+  osend({t:'register', name:sanitizeOnlineName(account.name), pass:account.onlineSecret, auto:true, v:APP_VERSION});
 }
 function closeOnline(){
   if (ows){ try{ ows.close(); }catch(e){} ows=null; }
@@ -3795,7 +3801,7 @@ function scheduleSync(){ if(!oMe || !account || !ows || ows.readyState!==1) retu
 function applySync(data){ if(!account || !data) return; Object.assign(account, data); ensureFields(account); syncXPFromAccount(); saveStore(); }
 
 /* Both players generate the identical question from the server's seed. */
-function genRaceQuestion(seed){ return withSeed(seed, ()=>{ if (Math.random()<0.3) return vShortQ().q; return raceChoice()(); }); }
+function genRaceQuestion(seed, d){ return withSeed(seed, ()=>{ if (Math.random()<0.3) return vShortQ().q; return raceChoice(d)(); }); }
 
 function renderRace(){
   const q=oRaceQ;
@@ -3851,6 +3857,7 @@ function onlineMsg(m){
     renderOnlineHome();
   }
   else if (m.t==='match_start'){
+    raceDiff = (typeof m.d==='number') ? m.d : null;
     oState='racing'; applyAssessmentUI(); oOpp=m.opp; oScore={you:0,opp:0};
     document.getElementById('online').innerHTML=`
       <div class="card" style="text-align:center">
@@ -3860,7 +3867,7 @@ function onlineMsg(m){
   }
   else if (m.t==='round'){
     oRound=m.n; oAnswered=false; if(m.score) oScore=m.score;
-    oRaceQ=genRaceQuestion(m.seed);
+    oRaceQ=genRaceQuestion(m.seed, raceDiff);
     renderRace();
   }
   else if (m.t==='round_result'){
@@ -4315,6 +4322,7 @@ function renderSidebar(){
 
 /* ================= Coach: open-ended AI tutor, anchored to the missed question ================= */
 let coachCtx=null, coachMsgs=[], coachBusy=false, coachTarget='panel', coachLiveAns=null;
+let raceDiff=null;   // shared match difficulty from the server (both players get the same value)
 function coachHost(){
   if (coachTarget==='page'){ const d=document.getElementById('coachDock'); if (d) return d; coachTarget='panel'; }
   return document.getElementById('coachPanel');
@@ -4713,6 +4721,7 @@ function renderDiagDone(s){
 
 /* ===== About: version, platform, what's new ===== */
 const CHANGELOG = [
+  ['0.33.0','Races scale with the ladder: the higher the match rating, the harder the questions — same questions for both players, always fair'],
   ['0.32.2','Tournament rounds now roll as soon as everyone finishes — a 2-minute breather between rounds, a whole bracket in about an hour'],
   ['0.32.1','See the bracket: live tournament picture with every round, winners in gold — and projected Round 1 pairings while registration is open'],
   ['0.32.0','The Monthly Championship: last Saturday of every month — win it and your name goes on the Wall of Champions, forever. Plus a serious username filter'],

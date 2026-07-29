@@ -43,6 +43,12 @@ function nameOK(name){
   }
   return true;
 }
+function vAtLeast(v, min){
+  const p = String(v || '').split('.').map(n => parseInt(n, 10));
+  if (p.some(isNaN) || p.length < 3) return false;
+  for (let i = 0; i < 3; i++){ if (p[i] > min[i]) return true; if (p[i] < min[i]) return false; }
+  return true;
+}
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 /* Monthly Championship: last Saturday of the month, 17:00 UTC (1 PM ET). */
 function monthlySlot(now){
@@ -145,6 +151,7 @@ export class QuizardLobby {
 
   async handle(conn, m){
     if (m.t === 'register'){
+      conn.appv = String(m.v || '');
       conn.regs = (conn.regs || 0) + 1;
       if (conn.regs > 5) return conn.ws.close();
       const name = String(m.name || '').trim().slice(0, 16);
@@ -176,6 +183,7 @@ export class QuizardLobby {
       this.send(conn, { t: 'auth', ok: true, name: finalName, token, data: null, dataUpdatedAt: 0, ...this.publicStats(u) });
     }
     else if (m.t === 'login'){
+      conn.appv = String(m.v || '');
       if (conn.authFails >= 5){ this.send(conn, { t: 'auth', ok: false, msg: 'Too many attempts — reconnect and try again' }); return conn.ws.close(); }
       const key = String(m.name || '').trim().toLowerCase();
       const u = await this.getUser(key);
@@ -186,6 +194,7 @@ export class QuizardLobby {
       this.send(conn, { t: 'auth', ok: true, name: u.name, token, data: u.data || null, dataUpdatedAt: u.dataUpdatedAt || 0, ...this.publicStats(u) });
     }
     else if (m.t === 'token_login'){
+      conn.appv = String(m.v || '');
       const key = String(m.name || '').trim().toLowerCase();
       const u = await this.getUser(key);
       if (!u || !u.tokenHash || u.tokenHash !== await sha256(String(m.token || ''))) return this.send(conn, { t: 'auth', ok: false, msg: 'Session expired — log in again' });
@@ -684,8 +693,15 @@ Under 250 words, plain text, warm, specific to THEIR essay — never generic. Ne
     a.match = b.match = match;
     await this.lockForMatch([a.user, b.user], true);
     const ua = await this.getUser(a.user), ub = await this.getUser(b.user);
-    this.send(a, { t: 'match_start', opp: { name: ub.name, rating: this.visibleRating(ub), flair: !!(ub.data && ['unlimited','family','family-member'].includes(ub.data.premiumPlan)) }, winPoints: match.winPoints, label: match.label });
-    this.send(b, { t: 'match_start', opp: { name: ua.name, rating: this.visibleRating(ua), flair: !!(ua.data && ['unlimited','family','family-member'].includes(ua.data.premiumPlan)) }, winPoints: match.winPoints, label: match.label });
+    // shared difficulty: only when BOTH clients can scale (0.33+), else legacy mix —
+    // a 0.32 iOS client racing a 0.33 client must still generate identical questions
+    let d = null;
+    if (vAtLeast(a.appv, [0,33,0]) && vAtLeast(b.appv, [0,33,0])){
+      d = Math.round(Math.max(0, Math.min(1, ((ua.rating + ub.rating) / 2 - 1000) / 400)) * 100) / 100;
+    }
+    match.d = d;
+    this.send(a, { t: 'match_start', d, opp: { name: ub.name, rating: this.visibleRating(ub), flair: !!(ub.data && ['unlimited','family','family-member'].includes(ub.data.premiumPlan)) }, winPoints: match.winPoints, label: match.label });
+    this.send(b, { t: 'match_start', d, opp: { name: ua.name, rating: this.visibleRating(ua), flair: !!(ua.data && ['unlimited','family','family-member'].includes(ua.data.premiumPlan)) }, winPoints: match.winPoints, label: match.label });
     setTimeout(() => this.nextRound(match), 2500);
   }
 

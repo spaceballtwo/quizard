@@ -293,5 +293,15 @@ const bFinal = bracketHTML({state:'running', rounds:[[{a:'Ace',b:'Bo',w:null}]],
 T('bracket: last pair labeled FINAL', bFinal.includes('FINAL'));
 T('bracket: empty states render nothing', bracketHTML({none:true})==='' && bracketHTML({state:'reg', seeds:['Solo1'], rounds:[]})==='');
 
+// rating-scaled races: same seed+d => same question; higher d => harder tier mix
+let det2=true;
+for(let s=1;s<=300;s++){ const a=genRaceQuestion(s,0.75), b=genRaceQuestion(s,0.75); if(a.q!==b.q||a.answer!==b.answer){det2=false;break;} }
+T('race: deterministic with shared difficulty', det2);
+function tierShare(d){ let n3=0,N=600;
+  for(let s=1;s<=N;s++){ const g=withSeed(s,()=>raceChoice(d)); if(L3_GENS.includes(g)) n3++; }
+  return n3/N; }
+T('race: d=1 pulls hard tier way up', tierShare(1) > tierShare(0) + 0.25);
+T('race: legacy mix unchanged without d', (function(){ const g=withSeed(7,()=>raceChoice()); return L1_GENS.includes(g)||L2_GENS.includes(g)||L3_GENS.includes(g); })());
+
 console.log(fails===0 ? 'CORE SUITE PASS' : fails+' FAILURES');
 process.exit(fails?1:0);

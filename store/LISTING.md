@@ -53,7 +53,7 @@ Quizard is not affiliated with or endorsed by SSATB/EMA. SSAT is a registered tr
 ## App Review notes (paste in "Notes" field — see REVIEW-NOTES.md for the full version)
 Demo account: QuizardDemo / WizardHat2026 (Unlimited tier unlocked)
 
-## Screenshots (6.9" — 1320×2868, in this folder)
+## Screenshots (6.5" — 1242×2688, in this folder)
 1-home.png — the academy home
 2-map.png — Knowledge Map
 3-results.png — test scoring with percentile
