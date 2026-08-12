@@ -303,5 +303,29 @@ function tierShare(d){ let n3=0,N=600;
 T('race: d=1 pulls hard tier way up', tierShare(1) > tierShare(0) + 0.25);
 T('race: legacy mix unchanged without d', (function(){ const g=withSeed(7,()=>raceChoice()); return L1_GENS.includes(g)||L2_GENS.includes(g)||L3_GENS.includes(g); })());
 
+// App Review path: an online sign-in must exist and actually wire the account up
+store.accounts=[]; store.currentId=null; account=null;
+// capture what gets written into #accountBar (the stub returns a new element per call)
+const _byId0=document.getElementById; const _bar={ innerHTML:'' };
+document.getElementById=(id)=> id==='accountBar' ? _bar : _byId0(id);
+renderLogin();
+T('login screen offers online sign-in', _bar.innerHTML.includes('showOnlineSignIn'));
+showOnlineSignIn();
+T('online sign-in form renders', /oiName[\s\S]*oiPass/.test(_bar.innerHTML));
+document.getElementById=_byId0;
+// the stub hands back a fresh element each call, so pin the two inputs for this check
+const _byId=document.getElementById;
+const _fields={ oiName:{value:'QuizardDemo'}, oiPass:{value:'WizardHat2026'} };
+document.getElementById=(id)=>_fields[id]||_byId(id);
+doOnlineSignIn();
+document.getElementById=_byId;
+T('sign-in creates+selects the account', !!account && account.name==='QuizardDemo');
+T('sign-in stores online credentials', account.onlineName==='QuizardDemo' && account.onlineSecret==='WizardHat2026');
+T('sign-in clears any stale token', account.onlineToken==='');
+T('sign-in arms the pull flag (timestamps cannot decide — saveStore stamps now)', oPullNext===true);
+// a restored paid account arrives with a plan but no flag — isPremium must still be true
+const _restored={ id:'r1', name:'Restored', premiumPlan:'unlimited' }; ensureFields(_restored);
+T('plan implies premium after restore', _restored.premium===true);
+
 console.log(fails===0 ? 'CORE SUITE PASS' : fails+' FAILURES');
 process.exit(fails?1:0);

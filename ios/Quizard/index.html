@@ -443,7 +443,7 @@
 </div>
 
 <script>
-const APP_VERSION = '0.33.1';
+const APP_VERSION = '0.34.0';
 /* ===== Local accounts: each person has their own on-device SSAT account ===== */
 let store = { accounts: [], currentId: null };
 function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
@@ -1936,7 +1936,34 @@ function renderLogin(){
       <input id="loginPass" type="password" placeholder="Password" maxlength="32" />
       <div class="acct-btns"><button class="btn" onclick="doLogin()">Log in</button>
         <button class="btn secondary" onclick="showNewAccount()">Create account</button></div>
+      <button class="btn secondary" style="margin-top:6px" onclick="showOnlineSignIn()">Sign in with an online account</button>
     </div>`;
+}
+/* Signing into an existing SERVER account — the only way onto a fresh device
+   (and the door App Review needs; the form above is device-local only). */
+function showOnlineSignIn(){
+  document.getElementById('accountBar').innerHTML = `<div class="acct-box">
+      <div class="acct-title">Sign in with an online account</div>
+      <p class="section-instr" style="margin:2px 0 8px">Use the player name and password from your Quizard online account. Your progress comes with you.</p>
+      <input id="oiName" placeholder="Player name" maxlength="20" autocomplete="off" />
+      <input id="oiPass" type="password" placeholder="Password" maxlength="64" />
+      <div class="acct-btns"><button class="btn" onclick="doOnlineSignIn()">Sign in</button>
+        <button class="btn secondary" onclick="renderLogin()">Back</button></div>
+    </div>`;
+}
+function doOnlineSignIn(){
+  const name=(document.getElementById('oiName').value||'').trim();
+  const pass=(document.getElementById('oiPass').value||'').trim();
+  if(!name||!pass){ showToast('Enter your player name and password'); return; }
+  showToast('Signing in\u2026');
+  // make a local account to receive the synced progress, then log the server in as it
+  let a=store.accounts.find(x=>x.name.toLowerCase()===name.toLowerCase());
+  if(!a){ a={ id:uid(), name, pinH:'', xp:0 }; ensureFields(a); store.accounts.push(a); }
+  a.onlineName=name; a.onlineSecret=pass; a.onlineToken='';
+  store.currentId=a.id; account=a; saveStore();   // note: saveStore stamps updatedAt=now,
+  oPullNext=true;   // so the PULL is forced by this flag, not by timestamp comparison
+  oAuthStage=1; oconnect(onlineAuthAttempt);
+  renderHome();
 }
 function doLogin(){
   const name=(document.getElementById('loginName').value||'').trim();
@@ -2061,6 +2088,8 @@ function ensureFields(a){
   if(typeof a.tourDone!=='boolean') a.tourDone=false;
   if(typeof a.premium!=='boolean') a.premium=false;
   if(typeof a.premiumPlan!=='string') a.premiumPlan='';
+  // a synced/restored account can arrive with a plan but no flag — the plan is the truth
+  if(a.premiumPlan && !a.premium) a.premium=true;
   if(typeof a.freeTestUsed!=='boolean') a.freeTestUsed=false;
   if(typeof a.stats.bestComposite!=='number') a.stats.bestComposite=0;
   if(!a.revDay || typeof a.revDay!=='object') a.revDay={d:'',n:0};
@@ -3849,8 +3878,9 @@ function onlineMsg(m){
       account.onlineName=m.name;
       account.onlineRating=m.rating;
       if (m.token) account.onlineToken=m.token;
-      if (m.data && (m.dataUpdatedAt||0) > (account.updatedAt||0)) applySync(m.data);
-      else syncUp();
+      if (m.data && (oPullNext || (m.dataUpdatedAt||0) > (account.updatedAt||0))) applySync(m.data);
+      else if (!oPullNext) syncUp();
+      oPullNext = false;
       saveStore();
       osend({t:'set_vote', vote:account.vote||''});   // keep the server tally in step; reply carries live counts
     }
@@ -4323,6 +4353,7 @@ function renderSidebar(){
 /* ================= Coach: open-ended AI tutor, anchored to the missed question ================= */
 let coachCtx=null, coachMsgs=[], coachBusy=false, coachTarget='panel', coachLiveAns=null;
 let raceDiff=null;   // shared match difficulty from the server (both players get the same value)
+let oPullNext=false;  // set by an explicit sign-in: take the server's copy, don't overwrite it
 function coachHost(){
   if (coachTarget==='page'){ const d=document.getElementById('coachDock'); if (d) return d; coachTarget='panel'; }
   return document.getElementById('coachPanel');
@@ -4721,6 +4752,7 @@ function renderDiagDone(s){
 
 /* ===== About: version, platform, what's new ===== */
 const CHANGELOG = [
+  ['0.34.0','Sign in with your online account on any device — your progress, plan, and rating come with you'],
   ['0.33.1','Races are a level playing field: the same SSAT-weight question pool at every rating — like chess, the game never changes, only the opponents get better'],
   ['0.32.2','Tournament rounds now roll as soon as everyone finishes — a 2-minute breather between rounds, a whole bracket in about an hour'],
   ['0.32.1','See the bracket: live tournament picture with every round, winners in gold — and projected Round 1 pairings while registration is open'],
