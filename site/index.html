@@ -443,7 +443,7 @@
 </div>
 
 <script>
-const APP_VERSION = '0.34.0';
+const APP_VERSION = '0.34.1';
 /* ===== Local accounts: each person has their own on-device SSAT account ===== */
 let store = { accounts: [], currentId: null };
 function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
@@ -4752,6 +4752,7 @@ function renderDiagDone(s){
 
 /* ===== About: version, platform, what's new ===== */
 const CHANGELOG = [
+  ['0.34.1','Subscription details spelled out on the Premium page — length, price, auto-renewal, and links to the Privacy Policy and Terms of Use'],
   ['0.34.0','Sign in with your online account on any device — your progress, plan, and rating come with you'],
   ['0.33.1','Races are a level playing field: the same SSAT-weight question pool at every rating — like chess, the game never changes, only the opponents get better'],
   ['0.32.2','Tournament rounds now roll as soon as everyone finishes — a 2-minute breather between rounds, a whole bracket in about an hour'],
@@ -5028,8 +5029,9 @@ function openPremium(){
             <button class="btn" style="margin:0" onclick="buyPremium('family')">Get Family</button>
           </div>
         </div>
-        ${nativeStore() ? `<p class="section-instr" style="text-align:center;margin-top:6px">Billed through the App Store. Auto-renews each season; cancel anytime in Settings. <a href="https://spaceballtwo.github.io/quizard/privacy.html" style="color:var(--amber)">Privacy</a></p>`
-          : `<p class="section-instr" style="text-align:center;margin-top:6px">Beta preview: no card needed yet — tapping unlocks instantly while we're in beta.</p>`}
+        ${nativeStore() ? `<p class="section-instr" style="text-align:center;margin-top:6px">Each plan is an auto-renewable subscription: 3 months (one season), at the price shown. Billed through the App Store; renews automatically each season until canceled in Settings.</p>
+        <p class="section-instr" style="text-align:center;margin-top:2px"><a href="https://spaceballtwo.github.io/quizard/privacy.html" style="color:var(--amber)">Privacy Policy</a> &nbsp;&middot;&nbsp; <a href="https://www.apple.com/legal/internet-services/itunes/dev/stdeula/" style="color:var(--amber)">Terms of Use (EULA)</a></p>`
+          : `<p class="section-instr" style="text-align:center;margin-top:6px">Beta preview: no card needed yet — tapping unlocks instantly while we're in beta. <a href="https://spaceballtwo.github.io/quizard/privacy.html" style="color:var(--amber)">Privacy Policy</a> &middot; <a href="https://www.apple.com/legal/internet-services/itunes/dev/stdeula/" style="color:var(--amber)">Terms of Use</a></p>`}
         <button class="btn secondary" onclick="restorePurchases()">Restore Purchases</button>
         <div class="mlabel">Have a family code?</div>
         <div style="display:flex;gap:6px">

@@ -50,6 +50,9 @@ All questions are original, written and hand-checked by us. Spot a bad one? Tap 
 
 Quizard is not affiliated with or endorsed by SSATB/EMA. SSAT is a registered trademark of the Enrollment Management Association.
 
+Privacy Policy: https://spaceballtwo.github.io/quizard/privacy.html
+Terms of Use (EULA): https://www.apple.com/legal/internet-services/itunes/dev/stdeula/
+
 ## App Review notes (paste in "Notes" field — see REVIEW-NOTES.md for the full version)
 Demo account: QuizardDemo / WizardHat2026 (Unlimited tier unlocked)
 
