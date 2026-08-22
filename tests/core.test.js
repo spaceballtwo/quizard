@@ -326,6 +326,17 @@ T('sign-in arms the pull flag (timestamps cannot decide — saveStore stamps now
 // a restored paid account arrives with a plan but no flag — isPremium must still be true
 const _restored={ id:'r1', name:'Restored', premiumPlan:'unlimited' }; ensureFields(_restored);
 T('plan implies premium after restore', _restored.premium===true);
+// the reviewer's actual path: typing online creds into the FIRST login form must work
+store.accounts=[]; store.currentId=null; account=null; oPullNext=false; oPullShellId=null;
+const _f2={ loginName:{value:'QuizardDemo'}, loginPass:{value:'WizardHat2026'} }, _o2=document.getElementById;
+document.getElementById=(id)=>_f2[id]||_o2(id);
+doLogin();
+document.getElementById=_o2;
+T('login form falls through to online sign-in', !!account && account.name==='QuizardDemo' && oPullNext===true && account.onlineSecret==='WizardHat2026');
+T('fallthrough tracks the shell for cleanup', oPullShellId===account.id);
+// a wrong password must clean up completely — no ghost account, no silent success
+failedOnlineSignIn('Wrong name or password');
+T('failed sign-in removes the shell and lands on login', account===null && store.accounts.length===0 && oPullNext===false && oPullShellId===null);
 
 console.log(fails===0 ? 'CORE SUITE PASS' : fails+' FAILURES');
 process.exit(fails?1:0);

@@ -443,7 +443,7 @@
 </div>
 
 <script>
-const APP_VERSION = '0.34.1';
+const APP_VERSION = '0.35.0';
 /* ===== Local accounts: each person has their own on-device SSAT account ===== */
 let store = { accounts: [], currentId: null };
 function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
@@ -1932,7 +1932,7 @@ function nextUpGo(m){
 function renderLogin(){
   document.getElementById('accountBar').innerHTML = `<div class="acct-box">
       <div class="acct-title">Log in to Quizard</div>
-      <input id="loginName" placeholder="Name" maxlength="20" autocomplete="off" />
+      <input id="loginName" placeholder="Name" maxlength="20" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" />
       <input id="loginPass" type="password" placeholder="Password" maxlength="32" />
       <div class="acct-btns"><button class="btn" onclick="doLogin()">Log in</button>
         <button class="btn secondary" onclick="showNewAccount()">Create account</button></div>
@@ -1945,7 +1945,7 @@ function showOnlineSignIn(){
   document.getElementById('accountBar').innerHTML = `<div class="acct-box">
       <div class="acct-title">Sign in with an online account</div>
       <p class="section-instr" style="margin:2px 0 8px">Use the player name and password from your Quizard online account. Your progress comes with you.</p>
-      <input id="oiName" placeholder="Player name" maxlength="20" autocomplete="off" />
+      <input id="oiName" placeholder="Player name" maxlength="20" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" />
       <input id="oiPass" type="password" placeholder="Password" maxlength="64" />
       <div class="acct-btns"><button class="btn" onclick="doOnlineSignIn()">Sign in</button>
         <button class="btn secondary" onclick="renderLogin()">Back</button></div>
@@ -1955,14 +1955,32 @@ function doOnlineSignIn(){
   const name=(document.getElementById('oiName').value||'').trim();
   const pass=(document.getElementById('oiPass').value||'').trim();
   if(!name||!pass){ showToast('Enter your player name and password'); return; }
+  onlineSignInWith(name, pass);
+}
+/* Sign into an existing SERVER account with typed credentials — used by the
+   explicit online form AND as the fallthrough when the login form gets a name
+   that doesn't exist on this device (that's what App Review will type). */
+function onlineSignInWith(name, pass){
   showToast('Signing in\u2026');
-  // make a local account to receive the synced progress, then log the server in as it
   let a=store.accounts.find(x=>x.name.toLowerCase()===name.toLowerCase());
-  if(!a){ a={ id:uid(), name, pinH:'', xp:0 }; ensureFields(a); store.accounts.push(a); }
+  if(!a){ a={ id:uid(), name, pinH:'', xp:0 }; ensureFields(a); store.accounts.push(a); oPullShellId=a.id; }
+  else oPullShellId=null;
   a.onlineName=name; a.onlineSecret=pass; a.onlineToken='';
   store.currentId=a.id; account=a; saveStore();   // note: saveStore stamps updatedAt=now,
   oPullNext=true;   // so the PULL is forced by this flag, not by timestamp comparison
   oAuthStage=1; oconnect(onlineAuthAttempt);
+  renderHome();
+  // the server going quiet must never look like success
+  setTimeout(()=>{ if(oPullNext && (!ows || ows.readyState!==1)) failedOnlineSignIn('Could not reach the server — check your internet connection and try again'); }, 9000);
+}
+function failedOnlineSignIn(msg){
+  oPullNext=false;
+  if (oPullShellId){   // remove the empty shell so a typo doesn't leave a ghost account
+    store.accounts=store.accounts.filter(x=>x.id!==oPullShellId);
+    if(store.currentId===oPullShellId){ store.currentId=null; account=null; }
+    oPullShellId=null; saveStore();
+  }
+  showToast(msg||'Could not sign in');
   renderHome();
 }
 function doLogin(){
@@ -1970,7 +1988,12 @@ function doLogin(){
   const pass=(document.getElementById('loginPass').value||'').trim();
   if(!name){ showToast('Enter your name'); return; }
   const a=store.accounts.find(x=>x.name.toLowerCase()===name.toLowerCase());
-  if(!a){ showToast('No account with that name'); return; }
+  if(!a){
+    // not on this device — try it as an online account (this is the path App Review takes)
+    if(!pass){ showToast('No account with that name on this device — enter your online password to sign in'); return; }
+    onlineSignInWith(name, pass);
+    return;
+  }
   if(a.pinH && a.pinH!==pinHash(pass)){ showToast('Incorrect password'); return; }
   setCurrent(a.id);
 }
@@ -3868,10 +3891,12 @@ function raceAnswer(i){
 function onlineMsg(m){
   if (m.t==='auth'){
     if (!m.ok){
+      if (oPullNext) return failedOnlineSignIn(m.msg||'Could not sign in');   // stop — never fall through to registering a new account
       if (oAuthStage < 2){ oAuthStage++; onlineAuthAttempt(); return; }
       fillVoteLocal();
       return renderOnlineHome(m.msg||'Could not connect');
     }
+    const wasPull = oPullNext;
     oAuthStage = 0;
     oMe={name:m.name, rating:m.rating, wins:m.wins, losses:m.losses, showRating:m.showRating!==false};
     if (account){
@@ -3880,7 +3905,8 @@ function onlineMsg(m){
       if (m.token) account.onlineToken=m.token;
       if (m.data && (oPullNext || (m.dataUpdatedAt||0) > (account.updatedAt||0))) applySync(m.data);
       else if (!oPullNext) syncUp();
-      oPullNext = false;
+      oPullNext = false; oPullShellId = null;
+      if (wasPull){ showToast('Signed in as '+m.name); renderHome(); }
       saveStore();
       osend({t:'set_vote', vote:account.vote||''});   // keep the server tally in step; reply carries live counts
     }
@@ -4354,6 +4380,7 @@ function renderSidebar(){
 let coachCtx=null, coachMsgs=[], coachBusy=false, coachTarget='panel', coachLiveAns=null;
 let raceDiff=null;   // shared match difficulty from the server (both players get the same value)
 let oPullNext=false;  // set by an explicit sign-in: take the server's copy, don't overwrite it
+let oPullShellId=null; // local shell created for that sign-in — removed again if the sign-in fails
 function coachHost(){
   if (coachTarget==='page'){ const d=document.getElementById('coachDock'); if (d) return d; coachTarget='panel'; }
   return document.getElementById('coachPanel');
@@ -4752,6 +4779,7 @@ function renderDiagDone(s){
 
 /* ===== About: version, platform, what's new ===== */
 const CHANGELOG = [
+  ['0.35.0','One login for everything: type your online account into any sign-in form and it just works — with clear messages when something goes wrong'],
   ['0.34.1','Subscription details spelled out on the Premium page — length, price, auto-renewal, and links to the Privacy Policy and Terms of Use'],
   ['0.34.0','Sign in with your online account on any device — your progress, plan, and rating come with you'],
   ['0.33.1','Races are a level playing field: the same SSAT-weight question pool at every rating — like chess, the game never changes, only the opponents get better'],
