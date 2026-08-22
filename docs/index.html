@@ -4964,6 +4964,7 @@ let livePrices = null;
 function nativeStore(){ return (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.buy) ? window.webkit.messageHandlers : null; }
 function applyPlan(plan){
   account.premium = true; account.premiumPlan = plan;
+  if (plan!=='family') store.familyPremium = false;   // switching off Family ends the whole-device unlock
   if (plan==='family'){
     store.familyPremium = true;
     if (!account.onlineToken || !ows || ows.readyState!==1) ensureOnlineIdentity();
@@ -5032,7 +5033,18 @@ function openPremium(){
             <button class="seg" style="flex:none" onclick="shareFamilyEmail()">${ico('paper',13)} Email the invite</button>
             <button class="seg" style="flex:none" onclick="shareFamily()">Share&hellip;</button>
             <button class="seg" style="flex:none" onclick="copyFamilyCode()">Copy code</button>
-          </div>` : ``}`
+          </div>` : ``}
+        <div class="mlabel">Change your plan</div>
+        ${['solo','unlimited','family'].filter(pl=>pl!==account.premiumPlan).map(pl=>{
+          const nm={solo:'Solo',unlimited:'Unlimited',family:'Family'}[pl];
+          const fallback={solo:'$79.99',unlimited:'$99.99',family:'$349.99'}[pl];
+          const pr=(livePrices&&livePrices[pl])?livePrices[pl]:fallback;
+          const sub={solo:'1 account',unlimited:'the Tutor tier — Writing Coach, debriefs, week plans',family:'up to 6 accounts, every perk included'}[pl];
+          return `<div class="tier-row"><span><b>${nm}</b> <span style="color:var(--gray);font-size:12.5px">${pr} / 3 mo</span><br><span style="font-weight:400;font-size:12px;color:var(--gray)">${sub}</span></span>
+            <button class="seg" style="flex:none" onclick="buyPremium('${pl}')">Switch</button></div>`;
+        }).join('')}
+        <p class="section-instr" style="font-size:12px">Switching goes through the App Store — Apple credits the unused part of your current season automatically.</p>
+        ${nativeStore() ? `<a class="btn secondary" style="display:block;text-align:center;text-decoration:none" href="https://apps.apple.com/account/subscriptions">Manage or cancel subscription</a>` : ``}`
       : `
         <p class="section-instr">Every plan unlocks everything — pick the size that fits your family.</p>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0 6px">
@@ -5136,6 +5148,7 @@ function buyPremium(plan){
   const native = nativeStore();
   if (native){ native.buy.postMessage(STORE_PRODUCTS[plan||'solo']); return; }   // Apple checkout; result arrives via quizardPurchase
   account.premium = true; account.premiumPlan = plan||'solo';
+  if ((plan||'solo')!=='family') store.familyPremium = false;
   if (plan==='family'){
     store.familyPremium = true;                          // every account on this device
     if (!account.onlineToken || !ows || ows.readyState!==1) ensureOnlineIdentity();

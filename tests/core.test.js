@@ -337,6 +337,12 @@ T('fallthrough tracks the shell for cleanup', oPullShellId===account.id);
 // a wrong password must clean up completely — no ghost account, no silent success
 failedOnlineSignIn('Wrong name or password');
 T('failed sign-in removes the shell and lands on login', account===null && store.accounts.length===0 && oPullNext===false && oPullShellId===null);
+// switching plans away from Family must drop the device-wide family unlock
+account={id:'sw',name:'Switcher'}; ensureFields(account); store.accounts=[account]; store.currentId='sw';
+store.familyPremium=true; applyPlan('unlimited');
+T('leaving Family clears familyPremium', store.familyPremium===false && account.premiumPlan==='unlimited');
+applyPlan('family');
+T('back to Family keeps plan', account.premiumPlan==='family');
 
 console.log(fails===0 ? 'CORE SUITE PASS' : fails+' FAILURES');
 process.exit(fails?1:0);
