@@ -343,6 +343,19 @@ store.familyPremium=true; applyPlan('unlimited');
 T('leaving Family clears familyPremium', store.familyPremium===false && account.premiumPlan==='unlimited');
 applyPlan('family');
 T('back to Family keeps plan', account.premiumPlan==='family');
+// Schedule 2: subscription terms + BOTH links must be visible in the OWNED premium view
+(function(){
+  account.premium=true; account.premiumPlan='unlimited';
+  const _o=document.getElementById; const _cap={};
+  document.getElementById=(id)=>{ if(!_cap[id]) _cap[id]={innerHTML:'',classList:{add(){},remove(){},contains(){return false}},style:{}}; return _cap[id]; };
+  try{ openPremium(); }catch(e){}
+  document.getElementById=_o;
+  const h=(_cap['premium']&&_cap['premium'].innerHTML)||'';
+  T('owned view carries EULA link', h.includes('stdeula'));
+  T('owned view carries privacy link', h.includes('privacy.html'));
+  T('owned view states length and renewal', h.includes('3 months') && h.includes('auto-renewable'));
+  account.premium=false; account.premiumPlan='';
+})();
 
 console.log(fails===0 ? 'CORE SUITE PASS' : fails+' FAILURES');
 process.exit(fails?1:0);

@@ -443,7 +443,7 @@
 </div>
 
 <script>
-const APP_VERSION = '0.35.0';
+const APP_VERSION = '0.35.1';
 /* ===== Local accounts: each person has their own on-device SSAT account ===== */
 let store = { accounts: [], currentId: null };
 function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
@@ -4779,6 +4779,7 @@ function renderDiagDone(s){
 
 /* ===== About: version, platform, what's new ===== */
 const CHANGELOG = [
+  ['0.35.1','Subscription terms and the Privacy Policy and Terms of Use links now show on the Premium page for subscribers too'],
   ['0.35.0','One login for everything: type your online account into any sign-in form and it just works — with clear messages when something goes wrong'],
   ['0.34.1','Subscription details spelled out on the Premium page — length, price, auto-renewal, and links to the Privacy Policy and Terms of Use'],
   ['0.34.0','Sign in with your online account on any device — your progress, plan, and rating come with you'],
@@ -5044,7 +5045,9 @@ function openPremium(){
             <button class="seg" style="flex:none" onclick="buyPremium('${pl}')">Switch</button></div>`;
         }).join('')}
         <p class="section-instr" style="font-size:12px">Switching goes through the App Store — Apple credits the unused part of your current season automatically.</p>
-        ${nativeStore() ? `<a class="btn secondary" style="display:block;text-align:center;text-decoration:none" href="https://apps.apple.com/account/subscriptions">Manage or cancel subscription</a>` : ``}`
+        ${nativeStore() ? `<a class="btn secondary" style="display:block;text-align:center;text-decoration:none" href="https://apps.apple.com/account/subscriptions">Manage or cancel subscription</a>` : ``}
+        <p class="section-instr" style="text-align:center;margin-top:6px">Each plan is an auto-renewable subscription: 3 months (one season), at the price shown. Billed through the App Store; renews automatically each season until canceled in Settings.</p>
+        <p class="section-instr" style="text-align:center;margin-top:2px"><a href="https://spaceballtwo.github.io/quizard/privacy.html" style="color:var(--amber)">Privacy Policy</a> &nbsp;&middot;&nbsp; <a href="https://www.apple.com/legal/internet-services/itunes/dev/stdeula/" style="color:var(--amber)">Terms of Use (EULA)</a></p>`
       : `
         <p class="section-instr">Every plan unlocks everything — pick the size that fits your family.</p>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0 6px">
