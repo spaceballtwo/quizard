@@ -357,5 +357,18 @@ T('back to Family keeps plan', account.premiumPlan==='family');
   account.premium=false; account.premiumPlan='';
 })();
 
+// expiry reconcile: bought plans re-lock when Apple says nothing is active;
+// server-granted plans (the demo account!) are never touched by it
+account={id:'ex',name:'Expiry'}; ensureFields(account); store.accounts=[account]; store.currentId='ex';
+applyPlan('solo');
+T('purchase marks its source', account.planSrc==='store' && isPremium());
+window.quizardEntitlements([]);
+T('expired store plan re-locks', !isPremium() && account.premiumPlan==='' && account.planSrc==='');
+account.premium=true; account.premiumPlan='unlimited'; account.planSrc='';   // server-granted, like QuizardDemo
+window.quizardEntitlements([]);
+T('server-granted plan survives empty entitlements', isPremium() && account.premiumPlan==='unlimited');
+window.quizardEntitlements(['solo']);
+T('active entitlement grants/repairs the plan', account.premiumPlan==='solo' && account.planSrc==='store');
+
 console.log(fails===0 ? 'CORE SUITE PASS' : fails+' FAILURES');
 process.exit(fails?1:0);

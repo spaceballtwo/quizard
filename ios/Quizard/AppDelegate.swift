@@ -69,6 +69,14 @@ class WebViewController: UIViewController, WKScriptMessageHandler, WKNavigationD
         }
     }
 
+    // page loaded: reconcile premium with what Apple says is actually still paid for.
+    // Without this, an expired subscription keeps premium unlocked forever.
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            self?.store?.entitlements()
+        }
+    }
+
     // external links (privacy policy etc.) open in Safari, everything else stays in-app
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
                  decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {

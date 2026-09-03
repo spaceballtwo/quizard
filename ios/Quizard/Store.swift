@@ -59,6 +59,20 @@ final class Store {
         }
     }
 
+    // silent launch-time reconcile: same data as restore(), different callback so the
+    // "No purchases found" toast doesn't fire on every launch. Empty list = nothing
+    // active on this Apple ID => store-purchased plans must re-lock.
+    func entitlements() {
+        Task {
+            var plans: [String] = []
+            for await entitlement in Transaction.currentEntitlements {
+                if case .verified(let txn) = entitlement, let p = PLAN_FOR_PRODUCT[txn.productID] { plans.append(p) }
+            }
+            let list = plans.map { "'\($0)'" }.joined(separator: ",")
+            js("window.quizardEntitlements && window.quizardEntitlements([\(list)])")
+        }
+    }
+
     func prices() {
         Task {
             do {

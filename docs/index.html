@@ -443,7 +443,7 @@
 </div>
 
 <script>
-const APP_VERSION = '0.35.1';
+const APP_VERSION = '0.36.0';
 /* ===== Local accounts: each person has their own on-device SSAT account ===== */
 let store = { accounts: [], currentId: null };
 function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
@@ -4779,6 +4779,7 @@ function renderDiagDone(s){
 
 /* ===== About: version, platform, what's new ===== */
 const CHANGELOG = [
+  ['0.36.0','Seasons now end honestly: when a subscription expires, Premium locks again and renewing takes one tap'],
   ['0.35.1','Subscription terms and the Privacy Policy and Terms of Use links now show on the Premium page for subscribers too'],
   ['0.35.0','One login for everything: type your online account into any sign-in form and it just works — with clear messages when something goes wrong'],
   ['0.34.1','Subscription details spelled out on the Premium page — length, price, auto-renewal, and links to the Privacy Policy and Terms of Use'],
@@ -4965,6 +4966,7 @@ let livePrices = null;
 function nativeStore(){ return (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.buy) ? window.webkit.messageHandlers : null; }
 function applyPlan(plan){
   account.premium = true; account.premiumPlan = plan;
+  account.planSrc = 'store';   // paid through Apple — expiry reconcile may revoke it (server-granted plans have no planSrc)
   if (plan!=='family') store.familyPremium = false;   // switching off Family ends the whole-device unlock
   if (plan==='family'){
     store.familyPremium = true;
@@ -4989,6 +4991,24 @@ window.quizardRestore = function(plans){
     applyPlan(plan);
     showToast('Purchases restored');
   } else showToast('No purchases found for this Apple ID');
+};
+/* Launch-time truth from StoreKit. Empty list = no active subscription on this
+   Apple ID: revoke plans that were bought through the store. Plans granted by the
+   server (demo/review accounts, family members via code) have no planSrc and are
+   untouched — their truth lives on the server, not in StoreKit. */
+window.quizardEntitlements = function(plans){
+  plans = plans||[];
+  if (plans.length){
+    const plan = plans.includes('family') ? 'family' : plans.includes('unlimited') ? 'unlimited' : 'solo';
+    if (account && account.premiumPlan !== plan) applyPlan(plan);   // renewal or plan change made outside the app
+    return;
+  }
+  if (account && account.premium && account.planSrc === 'store'){
+    account.premium = false; account.premiumPlan = ''; account.planSrc = '';
+    store.familyPremium = false;
+    saveStore(); renderHome();
+    showToast('Your season has ended — renew anytime on the Premium page');
+  }
 };
 window.quizardPrices = function(p){ livePrices = p; if (typeof openPremium==='function'){ const el=document.getElementById('premium'); if (el && !el.classList.contains('hidden')) openPremium(); } };
 
