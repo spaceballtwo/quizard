@@ -3766,10 +3766,10 @@ function closeReports(){
 
 /* ================= Feature vote (early users pick what gets built next) ================= */
 const VOTE_OPTIONS = [
-  {id:'battle',  title:'Math battle game',   desc:'A real game mode — right answers attack, streaks power you up.'},
-  {id:'tourney', title:'Online tournaments', desc:'Bracket competitions — win your way to the crown.'},
-  {id:'vocab',   title:'Vocabulary trainer', desc:'Daily SSAT word lists, reviewed right before you forget them.'},
-  {id:'friends', title:'Friends',            desc:'Add friends, compare progress, challenge them to a race.'}
+  {id:'school',  title:'School league',        desc:'Join your school, climb a leaderboard against classmates, weekly school vs school.'},
+  {id:'avatar',  title:'Wizard avatar',        desc:'Customize your wizard — hats, robes, wands you unlock by leveling up.'},
+  {id:'raids',   title:'Boss raids with friends', desc:'Team up online: everyone attacks the same giant boss with right answers.'},
+  {id:'vocab',   title:'Vocabulary trainer',   desc:'Daily SSAT word lists, reviewed right before you forget them.'}
 ];
 /* Live tallies come from the Quizard server: one vote per online player, tied to their account. */
 function fillVoteLocal(){
@@ -3797,7 +3797,7 @@ function openVote(){
     <div class="card">
       <div class="section-title">${ico('ballot',17)} What should we build next?</div>
       <p class="section-instr">You're an early user, so you get a say. Tap an option to vote — tap again to take it back.
-        <span style="display:block;margin-top:4px">Everything on the last ballot — verbal, Full Test, parent reports, miss review — got built and is live. New ballot:</span>
+        <span style="display:block;margin-top:4px">Last ballot's winner, Math Battle, is live in 1.1 — along with tournaments and friends. New ballot for 1.2:</span>
         <span id="voteNote" style="display:block;margin-top:4px">Loading live totals&hellip;</span></p>
       ${rows}
       ${mine?`<p class="section-instr" style="margin-top:10px">Your vote: <b>${(VOTE_OPTIONS.find(o=>o.id===mine)||{}).title||''}</b></p>`:''}
