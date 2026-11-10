@@ -260,11 +260,63 @@ oState='idle';
 T('all clear after', assessmentActive()===false);
 coachMsgs=[];
 
-// --- tour lifecycle ---
-account.tourDone=false; maybeTour();
+// --- tour lifecycle (old accounts: onboarded already) ---
+account.tourDone=false; account.onboarded=true; maybeTour();
 T('tour starts', tourOn===true);
 endTour(false);
 T('tour done sticks', account.tourDone===true && tourOn===false);
+
+// --- 1.1: first-run onboarding replaces the tour for new accounts ---
+account.tourDone=false; account.onboarded=false; tourOn=false; maybeTour();
+T('onboarding opens for new account', obOn===true && tourOn===false && ob.step===0);
+obPickLevel('middle');
+T('middle picked', account.level==='middle' && ob.qs.length===5 && ob.step===1);
+T('fresh look is the new default', account.theme==='fresh');
+const xp0=account.xp;
+for (let i=0;i<5;i++){ obAnswer(ob.qs[ob.i].answer); obNextQ(); }
+T('warm-up scores', ob.step===2 && ob.correct===5 && account.xp===xp0+80);
+obFinish(-1);
+T('onboarding sticks', account.onboarded===true && account.tourDone===true && obOn===false);
+
+// --- 1.1: Middle Level ---
+T('isMiddle', isMiddle()===true && levelLabel()==='Middle Level');
+const mset=genQuant(14);
+T('middle set is 14', mset.length===14);
+T('middle set draws from middle/easy/L1 only', mset.every(q=>MIDDLE_GENS.includes(q._gen)||EASY_GENS.includes(q._gen)||L1_GENS.includes(q._gen)));
+T('middle scale tops at 710', scaledCurve(25,25)===710 && scaledCurve(0,25)===440);
+T('middle percentile sane', pctileFor(710)===99 && pctileFor(440)===1);
+for (let i=0;i<200;i++){ const g=pickGen(); if(!(MIDDLE_GENS.includes(g)||EASY_GENS.includes(g)||L1_GENS.includes(g))){ T('pickGen middle-only', false); break; } }
+account.level='upper';
+T('upper scale restored', scaledCurve(25,25)===800);
+let bad=0;
+for (const g of MIDDLE_GENS.concat([genWorkRate, genMixtureAvg, genNinesDigitSum, genShadedFraction, genSpeedCatchUp, genArithmeticSeqNth])){
+  for (let i=0;i<300;i++){ const q=g(); if(!q||!q.q||!Array.isArray(q.choices)||q.choices.length<4||q.answer<0||q.answer>=q.choices.length||new Set(q.choices.map(String)).size!==q.choices.length||!q.why) { bad++; if(bad<4) console.log('BAD', g.name, JSON.stringify(q)); } }
+}
+T('new generators: 21 gens × 300 draws clean', bad===0);
+
+// --- 1.1: Math Battle ---
+openBattle();
+T('battle opens on wave 1', bt && bt.wave===1 && bt.lives===3 && bt.mon && bt.mon.hp>0);
+let safety=0;
+while (bt && bt.lives>0 && bt.wave<6 && safety++<200){ btAnswer(bt.cur.q.answer); if(bt.lives>0) btNext(); }
+T('five waves cleared by always-right player', bt.wave>=6 && bt.lives===3);
+T('boss wave flagged', (()=>{ const w=bt.wave; return (w%5===0)===bt.mon.boss; })());
+const l0=bt.lives; bt.combo=4; btAnswer((bt.cur.q.answer+1)%bt.cur.q.choices.length);
+T('wrong answer costs a heart and the combo', bt.lives===l0-1 && bt.combo===0);
+btNext(); bt.lives=1; btAnswer((bt.cur.q.answer+1)%bt.cur.q.choices.length);
+T('last heart lost → game over state', bt.lives===0);
+btEnd();
+T('best battle recorded', account.bestBattle>=5);
+closeBattle();
+T('battle closed', bt===null);
+T('battle badges exist', ACHIEVEMENTS.some(a=>a.id==='battle5') && ACHIEVEMENTS.some(a=>a.id==='battle10'));
+
+// --- 1.1: hubs ---
+T('six sidebar doors', (()=>{ renderSidebar(); return true; })());
+T('hub pages defined', ['learn','practice','play','me'].every(h=>HUBS[h] && HUBS[h].items.length>=5));
+T('every hub item is a real nav mode', Object.values(HUBS).flatMap(h=>h.items.map(i=>i[0])).every(m=>['learn','gaps','review','focus','writing','practice','fulltest','daily','study','verbal','battle','online','compete','clock','survival','versus','friendspage','achievements','report','vote','about'].includes(m)));
+T('version bumped', APP_VERSION==='1.1.0' && CHANGELOG[0][0]==='1.1.0');
+T('sync carries level/onboarded/bestBattle', (()=>{ const p=syncPayload(); return 'level' in p && 'onboarded' in p && 'bestBattle' in p; })());
 
 // tier labels name the plan, never a generic "Premium"
 account.premium=false; store.familyPremium=false; account.premiumPlan='';

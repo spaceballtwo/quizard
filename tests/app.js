@@ -1,12 +1,20 @@
-
-const APP_VERSION = '0.31.0';
+const APP_VERSION = '1.1.0';
 /* ===== Local accounts: each person has their own on-device SSAT account ===== */
 let store = { accounts: [], currentId: null };
 function isPremium(){ return !!(account && (account.premium || store.familyPremium)); }
+function planLabel(){
+  if(!isPremium()) return 'Free';
+  const p=account&&account.premiumPlan;
+  if(p==='unlimited') return 'Unlimited';
+  if(p==='solo') return 'Solo';
+  if(p==='family') return 'Family';
+  return 'Family';   // family-member / familyPremium device flag
+}
 function isUnlimited(){ return !!(account && account.premiumPlan==='unlimited'); }
 function hasPerks(){ return isUnlimited() || !!(account && (account.premiumPlan==='family' || account.premiumPlan==='family-member' || store.familyPremium)); }
 function hasMidnight(){ return hasPerks(); }
 function applyTheme(){
+  document.body.classList.toggle('fresh', !!(account && account.theme==='fresh'));
   document.body.classList.toggle('midnight', !!(account && account.theme==='midnight' && hasMidnight()));
   document.body.classList.toggle('daybreak', !!(account && account.theme==='daybreak' && isUnlimited()));
 }
@@ -17,6 +25,24 @@ function rnd(min,max){ return Math.floor(Math.random()*(max-min+1))+min; }
 function choice(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
 function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
 function pick(arr,n){ return shuffle(arr.slice()).slice(0,n); }
+const BAD_SUB = ['fuck','shit','bitch','cunt','nigg','negro','faggot','fagot','retard','rape','rapist','nazi','hitler','kike','chink','gook','wetback','beaner','wigger','towelhead','raghead','tranny','lesbo','whore','slut','pussy','porn','penis','vagina','boob','dick','cock','tits','jizz','blowjob','handjob','rimjob','orgasm','orgy','hentai','milf','dildo','nutsack','ballsack','scrotum','testicle','nipple','incel','pedo','molest','asshole','dumbass','jackass','badass','stripper','gaylord','stfu','damn','piss','thot','suicide'];
+const BAD_EXACT = ['ass','sex','cum','hoe','hell','coon','anal','anus','semen','isis','meth','weed','jap','paki','homo','queer','gay','dyke','kys','kms','wtf','fag','spic','hooker','heroin','terrorist'];
+const LEET_MAP = { '0':'o','1':'i','3':'e','4':'a','5':'s','6':'g','7':'t','8':'b','9':'g' };
+function nameAllowed(name){
+  const mapped = String(name).toLowerCase().split('').map(c => LEET_MAP[c] || c).join('').replace(/[^a-z]/g,'');
+  const collapsed = mapped.replace(/(.)\1+/g,'$1');
+  const vswap = collapsed.replace(/v/g,'u');
+  for (const f of [mapped, collapsed, vswap]){
+    for (const b of BAD_SUB) if (f.includes(b)) return false;
+    for (const b of BAD_EXACT) if (f === b) return false;
+  }
+  return true;
+}
+/* test bubbles work like paper: tap your filled bubble again to erase it (blank > wrong guess at -1/4) */
+function radioToggle(r){
+  if (r._wasOn){ r.checked=false; r._wasOn=false; }
+  else { document.getElementsByName(r.name).forEach(o=>o._wasOn=false); r._wasOn=true; }
+}
 
 /* ===== Icon set: hand-drawn line glyphs (stroke = currentColor, so they inherit text color) ===== */
 const ICONS = {
@@ -744,7 +770,17 @@ const L2_GENS = [
   genFigRightTri, genFigTriArea, genFigSpinner,
   genTipTotal, genScaleMap, genRectDiagonal, genPercentOfWhat, genProbNot, genDataRange
 ];
+
+/* 1.1 — meaner L3 gens */
+function genWorkRate(){ const a=choice([4,6,8,10,12]), b=choice([3,6,12,15,20].filter(x=>x!==a)); const t=(a*b)/(a+b); if(t%1) return genWorkRate(); return Q(`Pipe A fills a tank in ${a} hours and pipe B fills it in ${b} hours. Working together, how many hours do they take?`, t, [t+1, (a+b)/2, a+b, t-1||1], `Together they fill 1/${a} + 1/${b} of the tank each hour = ${a+b}/${a*b}. The whole tank takes ${a*b}/${a+b} = ${t} hours.`); }
+function genMixtureAvg(){ const n1=rnd(2,6)*5, n2=rnd(2,6)*5, a1=rnd(60,80), a2=rnd(82,98); const avg=(n1*a1+n2*a2)/(n1+n2); if(avg%1) return genMixtureAvg(); return Q(`${n1} students averaged ${a1} on a test and ${n2} other students averaged ${a2}. What is the average for all ${n1+n2} students?`, avg, [(a1+a2)/2, avg+1, avg-1, avg+2], `Total points: ${n1}×${a1} + ${n2}×${a2} = ${n1*a1+n2*a2}. Divide by ${n1+n2} students: ${avg}. (Not just the average of the two averages.)`); }
+function genDigitSumClean(n, ans){ return Q(`What is the sum of the digits of ${Math.pow(10,n)-1}?`, ans, [n, ans-9, ans+9, 10*n], `${Math.pow(10,n)-1} is ${n} nines in a row, so the digit sum is ${n} × 9 = ${ans}.`); }
+function genNinesDigitSum(){ const n=rnd(2,6); return genDigitSumClean(n, n*9); }
+function genShadedFraction(){ const s=choice([6,8,10,12]); const inner=s-rnd(2,s-2)*1; const sq=s*s, isq=inner*inner; const ans=mdFrac(sq-isq, sq); return pickQ(`A square of side ${s} has a smaller square of side ${inner} cut from its center. What fraction of the big square is left?`, ans, [mdFrac(isq,sq), mdFrac(sq-isq, isq), mdFrac(s-inner, s), mdFrac(1,2)].filter(x=>x!==ans), `Left over = ${sq} − ${isq} = ${sq-isq} out of ${sq}, which is ${ans}.`); }
+function genSpeedCatchUp(){ const v1=rnd(30,50), gap=rnd(1,4)*10, v2=v1+gap; const head=rnd(1,3); const t=head*v1/gap; if(t%1) return genSpeedCatchUp(); return Q(`A car leaves at ${v1} mph. ${head} hour${head>1?'s':''} later a second car leaves the same spot at ${v2} mph. How many hours after the second car leaves does it catch the first?`, t, [t+1, head, t-1||1, t*2], `The first car is ${head*v1} miles ahead. The gap closes at ${v2} − ${v1} = ${gap} mph, so ${head*v1} ÷ ${gap} = ${t} hours.`); }
+function genArithmeticSeqNth(){ const a=rnd(2,9), d=rnd(3,9), n=rnd(12,30); const ans=a+(n-1)*d; return Q(`The sequence ${a}, ${a+d}, ${a+2*d}, ${a+3*d}, … adds ${d} each time. What is the ${ordinal(n)} term?`, ans, [ans+d, ans-d, a+n*d, n*d], `Term n = first + (n − 1) × step = ${a} + ${n-1} × ${d} = ${ans}.`); }
 const L3_GENS = [
+  genWorkRate, genMixtureAvg, genNinesDigitSum, genShadedFraction, genSpeedCatchUp, genArithmeticSeqNth,
   genExponentEval, genPercentOfPercent, genCustomOp, genLcm, genAgeProblem,
   genInequalityInt, genPolygonAngles, genAvgSpeed, genExpRules,
   genSystemEq, genFactoredQuad, genFunctionEval, genTwoEvents, genThreeRatio,
@@ -850,6 +886,37 @@ function genEzSeq(){ const start=rnd(1,6),step=choice([2,3,5]); return Q(`What c
 const EASY_GENS = [genEzAdd,genEzSub,genEzMul,genEzDiv,genEzHalf,genEzMissing,genEzAvg2,genEzPercent,genEzPerimeter,genEzSeq];
 
 function isEasy(){ return account && account.diff==='easy'; }
+/* ===== SSAT Middle Level (grades 5-7; what SSATB used to call the Lower Level) ===== */
+function isMiddle(){ return !!(account && account.level==='middle'); }
+function levelLabel(){ return isMiddle() ? 'Middle Level' : 'Upper Level'; }
+function toggleLook(){ if(!account) return; account.theme = account.theme==='fresh' ? '' : 'fresh'; saveStore(); applyTheme(); renderDiff(); showToast(account.theme==='fresh'?'Fresh look on':'Classic look on'); }
+function setLevel(l){ if(account){ account.level = l==='middle'?'middle':'upper'; saveStore(); } renderDiff(); renderHome(); showToast(levelLabel()+' selected'); }
+function mdFrac(n,d){ const g=gcd(n,d)||1; n/=g; d/=g; return d===1 ? `${n}` : `${n}/${d}`; }
+function genMdFracCompare(){ const d1=choice([3,4,5,6,8]),d2=choice([3,4,5,6,8].filter(x=>x!==d1)); const n1=rnd(1,d1-1),n2=rnd(1,d2-1); if(n1*d2===n2*d1) return genMdFracCompare();
+  const big = n1*d2>n2*d1 ? `${n1}/${d1}` : `${n2}/${d2}`; const small = big===`${n1}/${d1}`?`${n2}/${d2}`:`${n1}/${d1}`;
+  return pickQ(`Which fraction is larger: ${n1}/${d1} or ${n2}/${d2}?`, big, [small, 'They are equal', `${n1+n2}/${d1+d2}`], `Use a common denominator of ${d1*d2}: ${n1}/${d1} = ${n1*d2}/${d1*d2} and ${n2}/${d2} = ${n2*d1}/${d1*d2}. The larger one is ${big}.`); }
+function genMdFracAdd(){ const d=choice([4,6,8,10,12]); const a=rnd(1,d-2), b=rnd(1,d-1-a); const ans=mdFrac(a+b,d);
+  const wrong=[mdFrac(a+b,2*d), mdFrac(a*b,d), mdFrac(a+b+1,d), mdFrac(Math.abs(a-b)||1,d), mdFrac(a+b,d+1), mdFrac(a+b+2,d)].filter(x=>x!==ans);
+  return pickQ(`What is ${a}/${d} + ${b}/${d}?`, ans, [...new Set(wrong)], `Same denominator, so add the tops: ${a} + ${b} = ${a+b}, giving ${a+b}/${d}${ans!==`${a+b}/${d}`?' = '+ans:''}.`); }
+function genMdDecimalMul(){ const a=rnd(2,9), b=rnd(11,49)/10; const ans=Math.round(a*b*10)/10; return Q(`What is ${a} × ${b}?`, ans, [Math.round((a*b+1)*10)/10, Math.round(a*b*100)/10, Math.round((a+b)*10)/10, Math.round((a*b-1)*10)/10], `${a} × ${b} = ${ans}. One decimal place in, one decimal place out.`); }
+function genMdPlaceValue(){ const n=rnd(1000,9999); const pos=rnd(0,3); const digit=Math.floor(n/Math.pow(10,pos))%10; const names=['ones','tens','hundreds','thousands']; const val=digit*Math.pow(10,pos);
+  return Q(`In the number ${n}, what is the value of the digit ${digit} in the ${names[pos]} place?`, val, [digit, val*10, val/10||1, n-val], `The ${names[pos]} place is worth ${Math.pow(10,pos)}, so the ${digit} is worth ${digit} × ${Math.pow(10,pos)} = ${val}.`); }
+function genMdElapsed(){ const h1=rnd(7,10), m1=choice([0,15,30,45]), mins=rnd(3,9)*15; const t=h1*60+m1+mins; const h2=Math.floor(t/60), m2=t%60; const f=(h,m)=>`${h}:${String(m).padStart(2,'0')}`;
+  return pickQ(`A movie starts at ${f(h1,m1)} and lasts ${Math.floor(mins/60)} hour${Math.floor(mins/60)===1?'':'s'}${mins%60?' and '+mins%60+' minutes':''}. When does it end?`, f(h2,m2), [f(h2+1,m2), f(h2,(m2+15)%60), f(h2-1,m2), f(h2,(m2+30)%60)], `${f(h1,m1)} plus ${mins} minutes is ${f(h2,m2)}.`); }
+function genMdChange(){ const price=rnd(2,18)+choice([0.25,0.5,0.75,0]); const paid=choice([10,20]); if(paid<=price) return genMdChange(); const ans=Math.round((paid-price)*100)/100;
+  return Q(`A notebook costs $${price.toFixed(2)}. You pay with a $${paid} bill. How much change do you get?`, ans, [Math.round((ans+1)*100)/100, Math.round((ans-1)*100)/100, Math.round((paid+price)*100)/100, Math.round((ans+0.25)*100)/100], `$${paid} − $${price.toFixed(2)} = $${ans.toFixed(2)}.`, v=>'$'+Number(v).toFixed(2)); }
+function genMdMean3(){ let a,b,c; do{ a=rnd(4,30); b=rnd(4,30); c=rnd(4,30);}while((a+b+c)%3); const ans=(a+b+c)/3; return Q(`What is the mean (average) of ${a}, ${b}, and ${c}?`, ans, [ans+1, ans-1, a+b+c, Math.max(a,b,c)], `Add them: ${a} + ${b} + ${c} = ${a+b+c}. Divide by 3: ${ans}.`); }
+function genMdOneStep(){ const x=rnd(3,15), k=rnd(2,9); const t=choice(['add','mul']); if(t==='add'){ return Q(`If n + ${k} = ${x+k}, what is n?`, x, [x+k, x+2*k, x-1, x+1], `Subtract ${k} from both sides: n = ${x+k} − ${k} = ${x}.`); }
+  return Q(`If ${k}n = ${k*x}, what is n?`, x, [k*x-k, x+1, x-1, k*x], `Divide both sides by ${k}: n = ${k*x} ÷ ${k} = ${x}.`); }
+function genMdFactors(){ const n=choice([12,16,18,20,24,28,30,36,40]); const fs=[]; for(let i=1;i<=n;i++) if(n%i===0) fs.push(i); const non=[]; for(let i=2;i<n;i++) if(n%i) non.push(i);
+  return Q(`Which of these is NOT a factor of ${n}?`, choice(non), fs.filter(f=>f>1&&f<n), `The factors of ${n} are ${fs.join(', ')}. The odd one out does not divide ${n} evenly.`); }
+function genMdRound(){ const n=rnd(1234,9876); const to=choice([10,100,1000]); const ans=Math.round(n/to)*to; return Q(`Round ${n} to the nearest ${to}.`, ans, [ans+to, ans-to, Math.floor(n/to)*to===ans?ans+2*to:Math.floor(n/to)*to, n], `Look at the digit to the right of the ${to}s place: 5 or more rounds up. ${n} → ${ans}.`); }
+function genMdPercentEasy(){ const p=choice([10,20,25,50,75]), n=choice([20,40,60,80,100,120,200]); const ans=p*n/100; return Q(`What is ${p}% of ${n}?`, ans, [ans+n/10, ans-n/10||1, p, n-ans], `${p}% = ${p}/100. So ${p}% of ${n} = ${n} × ${p/100} = ${ans}.`); }
+function genMdRatioEasy(){ const a=rnd(1,5), b=rnd(1,5), k=rnd(2,6); return Q(`The ratio of cats to dogs at a shelter is ${a}:${b}. If there are ${a*k} cats, how many dogs are there?`, b*k, [a*k, b*k+b, a*k+b*k, b], `Each ratio part is worth ${a*k} ÷ ${a} = ${k}. Dogs = ${b} × ${k} = ${b*k}.`); }
+function genMdAreaRect(){ const l=rnd(3,15), w=rnd(2,12); return Q(`A rectangle is ${l} units long and ${w} units wide. What is its area?`, l*w, [2*(l+w), l+w, l*w+l, l*w-w], `Area = length × width = ${l} × ${w} = ${l*w}.`); }
+function genMdNegEasy(){ const a=rnd(2,12), b=rnd(a+1,20); return Q(`What is ${a} − ${b}?`, a-b, [b-a, a+b, a-b-1, -(a+b)], `Taking away more than you have goes below zero: ${a} − ${b} = ${a-b}.`); }
+function genMdUnits(){ const f=rnd(2,9); return Q(`How many inches are in ${f} feet?`, f*12, [f*10, f*12+12, f*3, f*16], `1 foot = 12 inches, so ${f} feet = ${f} × 12 = ${f*12} inches.`); }
+const MIDDLE_GENS = [genMdFracCompare, genMdFracAdd, genMdDecimalMul, genMdPlaceValue, genMdElapsed, genMdChange, genMdMean3, genMdOneStep, genMdFactors, genMdRound, genMdPercentEasy, genMdRatioEasy, genMdAreaRect, genMdNegEasy, genMdUnits];
 /* Draw `count` questions from a generator list, cycling a shuffled bag so topics don't repeat early. */
 const RECENT_STEMS = [];
 function unseen(make){
@@ -873,6 +940,11 @@ function takeFrom(list, count){
 }
 /* Balanced set: standard ≈ 30% easier / 45% medium / 25% hard; easy mode mixes basics with L1. */
 function genQuant(n){
+  if (isMiddle()){
+    // Middle Level set: grade 5-7 skills, with the easier Upper gens as the stretch
+    const nM=Math.round(n*(isEasy()?0.45:0.5)), nE=Math.round(n*(isEasy()?0.4:0.2)), n1=n-nM-nE;
+    return shuffle(takeFrom(MIDDLE_GENS,nM).concat(takeFrom(EASY_GENS,nE), takeFrom(L1_GENS,n1)));
+  }
   if (isEasy()){
     const nE=Math.ceil(n*0.6), n1=n-nE;
     return shuffle(takeFrom(EASY_GENS,nE).concat(takeFrom(L1_GENS,n1)));
@@ -889,6 +961,7 @@ function drawBag(list, key){
 }
 let lastPickTier = 1;
 function pickGen(){
+  if (isMiddle()){ lastPickTier = 0; const r=Math.random(); return r<0.5 ? drawBag(MIDDLE_GENS,'mMD') : (r<(isEasy()?0.9:0.7) ? drawBag(EASY_GENS,'mEZ') : drawBag(L1_GENS,'mL1')); }
   if (isEasy()){ lastPickTier = 0; return Math.random()<0.4 ? drawBag(L1_GENS,'eL1') : drawBag(EASY_GENS,'eEZ'); }
   // skill 1..10 slides the mix: gentle start (55% easier) toward brutal (60% hard)
   const t = (((account && account.skill) || 2) - 1) / 9;
@@ -911,9 +984,15 @@ function updateSkill(ok, tier){
 }
 /* Stateless pickers — used where a seed must reproduce the same question (Daily, Online races). */
 function weightedChoice(){ const r=Math.random(); return r<0.30 ? choice(L1_GENS) : r<0.75 ? choice(L2_GENS) : choice(L3_GENS); }
-function statelessPick(){ if (isEasy()) return Math.random()<0.4 ? choice(L1_GENS) : choice(EASY_GENS); return weightedChoice(); }
+function statelessPick(){ if (isMiddle()){ const r=Math.random(); return r<0.5 ? choice(MIDDLE_GENS) : (r<0.7 ? choice(EASY_GENS) : choice(L1_GENS)); } if (isEasy()) return Math.random()<0.4 ? choice(L1_GENS) : choice(EASY_GENS); return weightedChoice(); }
 /* Races are competitive — mostly hard questions so speed alone can't win. */
-function raceChoice(){ const r=Math.random(); return r<0.10 ? choice(L1_GENS) : r<0.50 ? choice(L2_GENS) : choice(L3_GENS); }
+function raceChoice(d){
+  const r=Math.random();
+  if (typeof d!=='number') return r<0.10 ? choice(L1_GENS) : r<0.50 ? choice(L2_GENS) : choice(L3_GENS);   // legacy mix (pre-0.33 opponent)
+  // d: 0 = 1000-rated match … 1 = 1400+. Climbing the ladder makes the math harder for BOTH players equally.
+  const w1=0.40-0.36*d, w2=0.45-0.05*d;
+  return r<w1 ? choice(L1_GENS) : r<w1+w2 ? choice(L2_GENS) : choice(L3_GENS);
+}
 
 /* ================= Analogy engine: relationship banks -> thousands of distinct questions ================= */
 const ANALOGY_REL = [
@@ -1398,9 +1477,10 @@ function renderHome(){
         + chip('Reading',account.verbalSkill.reading) + chip('Synonyms',account.verbalSkill.synonyms);
     }
     applyTheme();
+    const hl=document.getElementById('heroLevel'); if(hl) hl.textContent = isMiddle() ? 'SSAT MATH + VERBAL · MIDDLE LEVEL · APPLYING TO GRADES 6–8' : 'SSAT MATH + VERBAL · UPPER LEVEL · APPLYING TO GRADES 9–12';
     const pl=document.getElementById('premiumLine');
     if(pl) pl.innerHTML = isPremium()
-      ? `<span class="badge" style="background:linear-gradient(160deg,#e0c169,#ca9827);color:#1a2136;border-color:#a87f1e">${ico('crown',12)} Premium</span>`
+      ? `<span class="badge" style="background:linear-gradient(160deg,#e0c169,#ca9827);color:#1a2136;border-color:#a87f1e">${ico('crown',12)} ${planLabel()}</span>`
       : `<button class="seg" style="flex:none" onclick="navTo('premium')">${ico('crown',13)} Go Premium</button>`;
     const sBtn=document.getElementById('soundBtn'); if(sBtn) sBtn.innerHTML = soundOn?ico('volume',15)+' Sound: On':ico('mute',15)+' Sound: Off';
     document.querySelectorAll('#homeMain [data-ico]:empty').forEach(el2 => { el2.innerHTML = ico(el2.dataset.ico, +(el2.dataset.sz||24)); });
@@ -1456,18 +1536,68 @@ function nextUpGo(m){
 function renderLogin(){
   document.getElementById('accountBar').innerHTML = `<div class="acct-box">
       <div class="acct-title">Log in to Quizard</div>
-      <input id="loginName" placeholder="Name" maxlength="20" autocomplete="off" />
+      <input id="loginName" placeholder="Name" maxlength="20" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" />
       <input id="loginPass" type="password" placeholder="Password" maxlength="32" />
       <div class="acct-btns"><button class="btn" onclick="doLogin()">Log in</button>
         <button class="btn secondary" onclick="showNewAccount()">Create account</button></div>
+      <button class="btn secondary" style="margin-top:6px" onclick="showOnlineSignIn()">Sign in with an online account</button>
     </div>`;
+}
+/* Signing into an existing SERVER account — the only way onto a fresh device
+   (and the door App Review needs; the form above is device-local only). */
+function showOnlineSignIn(){
+  document.getElementById('accountBar').innerHTML = `<div class="acct-box">
+      <div class="acct-title">Sign in with an online account</div>
+      <p class="section-instr" style="margin:2px 0 8px">Use the player name and password from your Quizard online account. Your progress comes with you.</p>
+      <input id="oiName" placeholder="Player name" maxlength="20" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" />
+      <input id="oiPass" type="password" placeholder="Password" maxlength="64" />
+      <div class="acct-btns"><button class="btn" onclick="doOnlineSignIn()">Sign in</button>
+        <button class="btn secondary" onclick="renderLogin()">Back</button></div>
+    </div>`;
+}
+function doOnlineSignIn(){
+  const name=(document.getElementById('oiName').value||'').trim();
+  const pass=(document.getElementById('oiPass').value||'').trim();
+  if(!name||!pass){ showToast('Enter your player name and password'); return; }
+  onlineSignInWith(name, pass);
+}
+/* Sign into an existing SERVER account with typed credentials — used by the
+   explicit online form AND as the fallthrough when the login form gets a name
+   that doesn't exist on this device (that's what App Review will type). */
+function onlineSignInWith(name, pass){
+  showToast('Signing in\u2026');
+  let a=store.accounts.find(x=>x.name.toLowerCase()===name.toLowerCase());
+  if(!a){ a={ id:uid(), name, pinH:'', xp:0 }; ensureFields(a); store.accounts.push(a); oPullShellId=a.id; }
+  else oPullShellId=null;
+  a.onlineName=name; a.onlineSecret=pass; a.onlineToken='';
+  store.currentId=a.id; account=a; saveStore();   // note: saveStore stamps updatedAt=now,
+  oPullNext=true;   // so the PULL is forced by this flag, not by timestamp comparison
+  oAuthStage=1; oconnect(onlineAuthAttempt);
+  renderHome();
+  // the server going quiet must never look like success
+  setTimeout(()=>{ if(oPullNext && (!ows || ows.readyState!==1)) failedOnlineSignIn('Could not reach the server — check your internet connection and try again'); }, 9000);
+}
+function failedOnlineSignIn(msg){
+  oPullNext=false;
+  if (oPullShellId){   // remove the empty shell so a typo doesn't leave a ghost account
+    store.accounts=store.accounts.filter(x=>x.id!==oPullShellId);
+    if(store.currentId===oPullShellId){ store.currentId=null; account=null; }
+    oPullShellId=null; saveStore();
+  }
+  showToast(msg||'Could not sign in');
+  renderHome();
 }
 function doLogin(){
   const name=(document.getElementById('loginName').value||'').trim();
   const pass=(document.getElementById('loginPass').value||'').trim();
   if(!name){ showToast('Enter your name'); return; }
   const a=store.accounts.find(x=>x.name.toLowerCase()===name.toLowerCase());
-  if(!a){ showToast('No account with that name'); return; }
+  if(!a){
+    // not on this device — try it as an online account (this is the path App Review takes)
+    if(!pass){ showToast('No account with that name on this device — enter your online password to sign in'); return; }
+    onlineSignInWith(name, pass);
+    return;
+  }
   if(a.pinH && a.pinH!==pinHash(pass)){ showToast('Incorrect password'); return; }
   setCurrent(a.id);
 }
@@ -1485,6 +1615,7 @@ function createAccount(){
   const name=(document.getElementById('newName').value||'').trim();
   const pin=(document.getElementById('newPin').value||'').trim();
   if(!name){ showToast('Please enter a name'); return; }
+  if(!nameAllowed(name)){ showToast("That name isn't allowed — pick something kinder"); return; }
   if(store.accounts.some(x=>x.name.toLowerCase()===name.toLowerCase())){ showToast('That name is taken — pick another'); return; }
   const a={ id:uid(), name, pinH: pin?pinHash(pin):'', xp:0 }; ensureFields(a);
   store.accounts.push(a); store.currentId=a.id; saveStore();
@@ -1584,6 +1715,8 @@ function ensureFields(a){
   if(typeof a.tourDone!=='boolean') a.tourDone=false;
   if(typeof a.premium!=='boolean') a.premium=false;
   if(typeof a.premiumPlan!=='string') a.premiumPlan='';
+  // a synced/restored account can arrive with a plan but no flag — the plan is the truth
+  if(a.premiumPlan && !a.premium) a.premium=true;
   if(typeof a.freeTestUsed!=='boolean') a.freeTestUsed=false;
   if(typeof a.stats.bestComposite!=='number') a.stats.bestComposite=0;
   if(!a.revDay || typeof a.revDay!=='object') a.revDay={d:'',n:0};
@@ -1591,6 +1724,10 @@ function ensureFields(a){
   if(!a.weekPlan || typeof a.weekPlan!=='object') a.weekPlan=null;
   if(!a.courseDone || typeof a.courseDone!=='object') a.courseDone={};
   if(typeof a.obsidianSeen!=='boolean') a.obsidianSeen=false;
+  if(a.level!=='middle' && a.level!=='upper') a.level='upper';   // SSAT level: Middle (grades 5-7) or Upper (8-11)
+  if(typeof a.onboarded!=='boolean') a.onboarded=!!a.tourDone;      // first-run flow finished (old accounts skip it)
+  if(typeof a.bestBattle!=='number') a.bestBattle=0;
+  if(typeof a.theme!=='string') a.theme='';
 }
 function dateStr(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function markActivity(){
@@ -1622,7 +1759,9 @@ const ACHIEVEMENTS = [
   { id:'streak3', icon:'flame',     title:'On a Roll',     desc:'Practice 3 days in a row.',              test:a=>a.bestStreak>=3 },
   { id:'streak7', icon:'calendar',  title:'Week Warrior',  desc:'Practice 7 days in a row.',              test:a=>a.bestStreak>=7 },
   { id:'clock10', icon:'hourglass', title:'Speed Demon',   desc:'Score 10+ in Beat the Clock.',           test:a=>a.stats.bestClock>=10 },
-  { id:'clock15', icon:'trophy',    title:'Lightning',     desc:'Score 15+ in Beat the Clock.',           test:a=>a.stats.bestClock>=15 }
+  { id:'clock15', icon:'trophy',    title:'Lightning',     desc:'Score 15+ in Beat the Clock.',           test:a=>a.stats.bestClock>=15 },
+  { id:'battle5',  icon:'swords',   title:'Monster Slayer', desc:'Clear 5 waves in Math Battle.',         test:a=>(a.bestBattle||0)>=5 },
+  { id:'battle10', icon:'crown',    title:'Boss Hunter',    desc:'Clear 10 waves in Math Battle.',        test:a=>(a.bestBattle||0)>=10 }
 ];
 function checkAchievements(){
   if(!account) return;
@@ -1663,6 +1802,7 @@ function closeAchievements(){
 /* ---- Beat the Clock (60-second blitz) ---- */
 let clockTimeLeft=0, clockScore=0, clockTimer=null, clockCurrent=null, clockAnswered=false;
 function openClock(){
+  act('clock');
   document.getElementById('intro').classList.add('hidden');
   document.getElementById('clock').classList.remove('hidden');
   const best = account ? account.stats.bestClock : 0;
@@ -1904,9 +2044,12 @@ function renderRankChip(){
 }
 function renderDiff(){
   const el=document.getElementById('diffSel'); if(!el||!account) return;
-  const d=account.diff||'standard';
+  const d=account.diff||'standard', L=account.level||'upper';
   el.innerHTML=`<button class="seg ${d==='easy'?'seg-on':''}" onclick="setDiff('easy')">Easy</button>
     <button class="seg ${d==='standard'?'seg-on':''}" onclick="setDiff('standard')">Standard</button>`;
+  const lk=document.getElementById('lookBtn'); if(lk) lk.innerHTML = ico('star',14)+' Look: '+(account.theme==='fresh'?'Fresh':'Classic');
+  const lv=document.getElementById('levelSel'); if(lv) lv.innerHTML=`<button class="seg ${L==='middle'?'seg-on':''}" onclick="setLevel('middle')">Middle (gr 5–7)</button>
+    <button class="seg ${L==='upper'?'seg-on':''}" onclick="setLevel('upper')">Upper (gr 8–11)</button>`;
 }
 function setDiff(d){ if(account){ account.diff=d; saveStore(); } renderDiff(); }
 
@@ -1957,6 +2100,7 @@ function closeCompete(){ const el=document.getElementById('compete'); el.classLi
 /* ================= Survival runs (3 lives) ================= */
 let survLives=3, survScore=0, survCurrent=null, survAnswered=false;
 function openSurvival(){
+  act('survival');
   document.getElementById('intro').classList.add('hidden');
   survLives=3; survScore=0;
   document.getElementById('survival').classList.remove('hidden');
@@ -2006,12 +2150,120 @@ function survEnd(){
 }
 function closeSurvival(){ const el=document.getElementById('survival'); el.classList.add('hidden'); el.innerHTML=''; renderHome(); document.getElementById('intro').classList.remove('hidden'); window.scrollTo({top:0,behavior:'smooth'}); }
 
+/* ================= Math Battle: right answers hit, wrong answers hurt, bosses every 5 waves ================= */
+const MONSTERS = [
+  { name:'Sum Slime',        kind:'slime',  color:'#5bc46a' }, { name:'Fraction Phantom', kind:'ghost', color:'#b9a7ff' },
+  { name:'Percent Goblin',   kind:'goblin', color:'#8fd14f' }, { name:'Ratio Wraith',     kind:'ghost', color:'#7fd3e8' },
+  { name:'Decimal Imp',      kind:'goblin', color:'#ff9a62' }, { name:'Angle Beetle',     kind:'slime', color:'#e8c84a' },
+  { name:'Exponent Ogre',    kind:'ogre',   color:'#c9a0ff' }, { name:'Probability Puck', kind:'slime', color:'#ff7ab8' }
+];
+const BOSSES = [ { name:'The Equation Dragon', kind:'dragon', color:'#ff5a5a' }, { name:'The Geometry Golem', kind:'ogre', color:'#9aa7c7' }, { name:'The Word-Problem Wyrm', kind:'dragon', color:'#f2a541' } ];
+function monsterSVG(m, size){
+  const c=m.color, s=size||84;
+  const face = {
+    slime:  `<path d="M12 72 C 6 40, 30 14, 50 14 C 70 14, 94 40, 88 72 Z" fill="${c}"/><ellipse cx="38" cy="46" rx="6" ry="8" fill="#fff"/><ellipse cx="62" cy="46" rx="6" ry="8" fill="#fff"/><circle cx="39" cy="48" r="3" fill="#222"/><circle cx="63" cy="48" r="3" fill="#222"/><path d="M40 62 Q50 70 60 62" stroke="#222" stroke-width="3" fill="none" stroke-linecap="round"/>`,
+    ghost:  `<path d="M22 80 V40 A28 28 0 0 1 78 40 V80 L68 70 58 80 50 70 42 80 32 70 Z" fill="${c}"/><circle cx="40" cy="42" r="6" fill="#222"/><circle cx="60" cy="42" r="6" fill="#222"/><circle cx="42" cy="40" r="2" fill="#fff"/><circle cx="62" cy="40" r="2" fill="#fff"/><ellipse cx="50" cy="58" rx="6" ry="4" fill="#222"/>`,
+    goblin: `<path d="M20 30 L8 10 30 24 Z M80 30 L92 10 70 24 Z" fill="${c}"/><rect x="20" y="22" width="60" height="56" rx="20" fill="${c}"/><circle cx="38" cy="46" r="7" fill="#fff"/><circle cx="62" cy="46" r="7" fill="#fff"/><circle cx="40" cy="47" r="3.5" fill="#222"/><circle cx="64" cy="47" r="3.5" fill="#222"/><path d="M36 64 L44 60 50 66 56 60 64 64" stroke="#222" stroke-width="3" fill="none" stroke-linejoin="round"/>`,
+    ogre:   `<rect x="14" y="18" width="72" height="64" rx="16" fill="${c}"/><rect x="26" y="6" width="48" height="18" rx="6" fill="#444"/><circle cx="36" cy="46" r="8" fill="#fff"/><circle cx="64" cy="46" r="8" fill="#fff"/><circle cx="36" cy="46" r="4" fill="#222"/><circle cx="64" cy="46" r="4" fill="#222"/><path d="M30 38 L42 34 M70 38 L58 34" stroke="#222" stroke-width="3" stroke-linecap="round"/><path d="M34 66 H66" stroke="#222" stroke-width="4" stroke-linecap="round"/><rect x="40" y="66" width="6" height="8" fill="#fff"/><rect x="54" y="66" width="6" height="8" fill="#fff"/>`,
+    dragon: `<path d="M50 8 L36 26 H64 Z M20 24 L8 6 30 18 Z M80 24 L92 6 70 18 Z" fill="${c}"/><rect x="18" y="20" width="64" height="62" rx="22" fill="${c}"/><path d="M30 44 L44 40 M70 44 L56 40" stroke="#222" stroke-width="3" stroke-linecap="round"/><circle cx="38" cy="50" r="6" fill="#ffd58a"/><circle cx="62" cy="50" r="6" fill="#ffd58a"/><rect x="36" y="48" width="4" height="6" fill="#222"/><rect x="60" y="48" width="4" height="6" fill="#222"/><path d="M32 68 Q50 80 68 68" stroke="#222" stroke-width="4" fill="none" stroke-linecap="round"/><path d="M40 68 L44 76 M60 68 L56 76" stroke="#fff" stroke-width="3" stroke-linecap="round"/>`
+  }[m.kind] || '';
+  return `<svg class="bt-mon" viewBox="0 0 100 90" width="${s}" height="${s}" aria-hidden="true">${face}</svg>`;
+}
+let bt = null;   // live battle state
+function btNewMonster(){
+  const wave=bt.wave, boss = wave%5===0;
+  const base = boss ? BOSSES[(wave/5-1)%BOSSES.length] : MONSTERS[(wave-1)%MONSTERS.length];
+  const hp = boss ? 7 + Math.floor(wave/5)*2 : 3 + Math.floor((wave-1)/3);
+  bt.mon = { ...base, boss, hp, max:hp };
+}
+function openBattle(){
+  act('battle');
+  document.getElementById('intro').classList.add('hidden');
+  bt = { wave:1, lives:3, combo:0, kills:0, correct:0, answered:0, mon:null, cur:null, locked:false };
+  btNewMonster();
+  document.getElementById('battle').classList.remove('hidden');
+  btNext();
+}
+function btDamage(){ return bt.combo>=6 ? 3 : bt.combo>=3 ? 2 : 1; }
+function btNext(){
+  bt.locked=false; bt.cur=getStudyQuestion(true);
+  const q=bt.cur.q, m=bt.mon;
+  const choices=q.choices.map((c,i)=>`<label class="choice" id="bt-${i}" onclick="btAnswer(${i})"><span>${String.fromCharCode(65+i)}. ${c}</span></label>`).join('');
+  document.getElementById('battle').innerHTML=`
+    <div class="bt-arena ${m.boss?'boss':''}" id="btArena">
+      ${monsterSVG(m)}
+      <div class="bt-info">
+        <div class="bt-wave">${m.boss?'BOSS · ':''}Wave ${bt.wave}</div>
+        <div class="bt-name">${m.name}</div>
+        <div class="bt-hp"><div class="bt-hpfill" id="btHp" style="width:${m.hp/m.max*100}%"></div></div>
+        <div style="font-size:12px;opacity:.8;margin-top:3px">${m.hp} / ${m.max} HP</div>
+      </div>
+    </div>
+    <div class="bt-row"><span class="hearts">${heartsHTML(bt.lives)}</span>
+      <span class="bt-combo ${bt.combo>=3?'':'off'}">${bt.combo>=3?`${bt.combo}× combo · ${btDamage()} dmg`:'streak '+bt.combo}</span></div>
+    <div class="card">${bt.cur.passage?`<div class="passage">${bt.cur.passage}</div>`:''}<div class="q-stem">${q.q}</div>${figHTML(q)}${choices}<div id="btNav"></div>${reportLineHTML('battle')}</div>
+    <button class="btn secondary" onclick="closeBattle()">← Back to menu</button>`;
+  drawFigs();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function btAnswer(i){
+  if(bt.locked) return; bt.locked=true;
+  const right=bt.cur.q.answer, ok=(i===right);
+  const lab=document.getElementById('bt-'+i); if(lab) lab.classList.add(ok?'correct':'wrong');
+  if(!ok){ const r=document.getElementById('bt-'+right); if(r) r.classList.add('correct'); }
+  recordAnswer(ok); rpForAnswer(ok); updateSkill(ok, bt.cur.tier); noteTopicResult(bt.cur.q, ok);
+  if (bt.cur.vkind) updateVerbalSkill(bt.cur.vkind, ok);
+  if(!ok) recordMiss(bt.cur.q, bt.cur.passage);
+  answerFX(ok, lab);
+  bt.answered++;
+  const arena=document.getElementById('btArena');
+  let msg='';
+  if(ok){
+    bt.correct++; bt.combo++; playCorrect(); addXP(10);
+    const dmg=btDamage(); bt.mon.hp=Math.max(0, bt.mon.hp-dmg);
+    if(arena){ arena.classList.add('hit'); const d=document.createElement('div'); d.className='bt-dmg'; d.textContent='−'+dmg; arena.appendChild(d); setTimeout(()=>d.remove(),800); }
+    const hp=document.getElementById('btHp'); if(hp) hp.style.width=(bt.mon.hp/bt.mon.max*100)+'%';
+    if(bt.mon.hp<=0){
+      bt.kills++; const bonus = bt.mon.boss ? 75 : 25; addXP(bonus);
+      if(bt.mon.boss && bt.lives<3){ bt.lives++; msg=`Boss down! +${bonus} XP · you healed a heart`; }
+      else msg=`${bt.mon.name} defeated! +${bonus} XP`;
+      if(bt.mon.boss) celebrate(); else playFanfare();
+      bt.wave++; btNewMonster();
+    }
+  } else {
+    bt.combo=0; bt.lives--; playWrong();
+    if(arena) arena.classList.add('hurt');
+    msg = bt.lives>0 ? `${bt.mon.name} strikes back! ${bt.lives} ${bt.lives===1?'heart':'hearts'} left` : `${bt.mon.name} wins this one…`;
+  }
+  markActivity(); checkAchievements();
+  const hb=document.querySelector('#battle .hearts'); if(hb) hb.innerHTML=heartsHTML(bt.lives);
+  if(bt.lives<=0){ setTimeout(btEnd, 850); return; }
+  document.getElementById('btNav').innerHTML=`${msg?`<div class="explain ${ok?'ok':''}" style="margin-top:12px"><b>${msg}</b></div>`:''}<button class="btn" style="margin-top:10px" onclick="btNext()">${ok?'Attack again →':'Next →'}</button>`;
+}
+function btEnd(){
+  let best=false;
+  if(account && bt.wave-1>account.bestBattle){ account.bestBattle=bt.wave-1; best=true; }
+  saveStore(); checkAchievements();
+  if(best && bt.wave>1) celebrate();
+  const acc = bt.answered ? Math.round(bt.correct/bt.answered*100) : 0;
+  document.getElementById('battle').innerHTML=`
+    <div class="card" style="text-align:center">
+      <div style="color:var(--gray)">${ico('swords',40)}</div>
+      <div class="score-big">${bt.kills}</div><div class="score-sub">monsters slain · reached wave ${bt.wave} · ${acc}% accuracy</div>
+      ${best&&bt.wave>1?`<div class="verdict v-strong" style="margin-top:12px">★ New best: ${bt.wave-1} waves cleared!</div>`:`<div style="color:var(--gray);margin-top:10px">Best: ${account?account.bestBattle:bt.wave-1} waves</div>`}
+      <button class="btn" style="margin-top:14px" onclick="openBattle()">Fight again</button>
+      <button class="btn secondary" onclick="closeBattle()">← Back to menu</button>
+    </div>`;
+}
+function closeBattle(){ bt=null; const el=document.getElementById('battle'); el.classList.add('hidden'); el.innerHTML=''; renderHome(); document.getElementById('intro').classList.remove('hidden'); window.scrollTo({top:0,behavior:'smooth'}); }
+
 /* ================= Daily challenge (seeded by date) ================= */
 function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
 function dateSeed(){ const d=dateStr(new Date()); let h=0; for(let i=0;i<d.length;i++) h=(h*31+d.charCodeAt(i))|0; return h>>>0; }
 function withSeed(seed, fn){ const orig=Math.random; Math.random=mulberry32(seed); try{ return fn(); } finally{ Math.random=orig; } }
 let dailyQs=[], dailyIdx=0, dailyCorrect=0, dailyAnswered=false;
 function openDaily(){
+  act('daily');
   document.getElementById('intro').classList.add('hidden');
   document.getElementById('daily').classList.remove('hidden');
   if(account && account.lastDaily===dateStr(new Date())){
@@ -2080,6 +2332,7 @@ const FT_N=25, FT_SECS=30*60;
 
 function openFullTest(){
   if (!isPremium() && account && account.freeTestUsed){ premiumGate('Unlimited Full Tests'); return; }
+  act('test');
   document.getElementById('intro').classList.add('hidden');
   /* the Real SSAT entry rides on this screen — see startRealTest() */
   const best = account ? account.stats.bestScaled : 0;
@@ -2145,7 +2398,36 @@ function startFullTest(){
   },1000);
 }
 function fmtTime(s){ return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); }
-function estScaled(raw){ return Math.round(500 + Math.max(0, raw)/FT_N*300); }
+/* Normed estimate: the real SSAT curves scores against a strong pool (private-school
+   applicants), so the top of the scale is far harder to reach than a straight line —
+   and our items run a touch easier than real Upper Level. Anchors approximate real
+   raw→scaled tables; a perfect paper still earns the full 800. */
+function scaledCurve(raw, n){
+  const pct=Math.max(0, raw)/n;
+  const A=[[0,500],[0.25,555],[0.5,620],[0.7,670],[0.85,710],[0.95,755],[1,800]];
+  let up=800;
+  for(let i=1;i<A.length;i++){
+    if(pct<=A[i][0]){ const [x0,y0]=A[i-1],[x1,y1]=A[i];
+      up=Math.round(y0+(pct-x0)/(x1-x0)*(y1-y0)); break; }
+  }
+  return isMiddle() ? toMiddleScale(up) : up;
+}
+/* Middle Level sections run 440-710; map the Upper 500-800 curve onto it */
+function toMiddleScale(up){ return Math.round(440 + (up-500)/300*270); }
+function scaleRange(){ return isMiddle() ? '440–710' : '500–800'; }
+/* scaled → SSAT percentile, anchored to published Upper Level norm tables */
+function pctileFor(scaled){
+  const A=[[500,1],[550,10],[600,30],[650,55],[700,78],[750,92],[800,99]];
+  if (isMiddle()) scaled = 500 + (scaled-440)/270*300;   // Middle norms sit on the same curve, rescaled
+  const s=Math.max(500,Math.min(800,scaled));
+  for(let i=1;i<A.length;i++){
+    if(s<=A[i][0]){ const [x0,y0]=A[i-1],[x1,y1]=A[i];
+      return Math.max(1,Math.min(99,Math.round(y0+(s-x0)/(x1-x0)*(y1-y0)))); }
+  }
+  return 99;
+}
+function ordinal(n){ const v=n%100; if(v>=11&&v<=13) return n+'th'; return n+(['th','st','nd','rd'][n%10]||'th'); }
+function estScaled(raw){ return scaledCurve(raw, FT_N); }
 
 function renderTestResults(correct, wrongChosen, blanks, perSection){
   clearInterval(testTimerId);
@@ -2164,7 +2446,7 @@ function renderTestResults(correct, wrongChosen, blanks, perSection){
   const res=document.getElementById('results');
   res.innerHTML=`
     <div class="card">
-      <div class="score-ring"><div class="score-big">&asymp; ${est}</div><div class="score-sub">estimated SSAT score (500–800 scale)</div></div>
+      <div class="score-ring"><div class="score-big">&asymp; ${est}</div><div class="score-sub">estimated SSAT score (${scaleRange()}) &middot; ~${ordinal(pctileFor(est))} percentile</div></div>
       ${best?`<div class="verdict v-strong">★ New personal best!</div>`:''}
       <div class="stats">
         <div class="stat"><b>${correct}</b><span>correct</span></div>
@@ -2177,7 +2459,7 @@ function renderTestResults(correct, wrongChosen, blanks, perSection){
           <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
           <div style="width:38px;text-align:right">${s.got}/${s.total}</div></div>`; }).join('')}
       <p style="text-align:center;color:var(--gray);font-size:13.5px;margin-top:10px">Raw score: ${correct} − ¼&times;${wrongChosen} = <b>${raw.toFixed(2).replace(/\.?0+$/,'')}</b> of ${FT_N} &middot; time used ${fmtTime(used)}</p>
-      <p style="color:var(--gray);font-size:12.5px;text-align:center">Rough estimate — the real test scales scores against everyone who took it. Treat &plusmn;30 as the honest range.</p>
+      <p style="color:var(--gray);font-size:12.5px;text-align:center">Rough estimate, curved like the real test — SSAT takers are a strong pool, so the top of the scale is earned slowly. Percentile is your standing among real test takers. Treat &plusmn;30 as the honest range.</p>
       <p style="color:var(--gray);font-size:13.5px;margin-top:10px">Scroll up to review — explanations show under every question you missed, with a lesson link.</p>
       ${tutorTier()?`<button class="btn" onclick="sageDebrief('quick')">Sage's debrief &rarr;</button>`:''}
       <button class="btn" onclick="closeFullTestToIntro()">Take another test &rarr;</button>
@@ -2194,6 +2476,7 @@ function closeFullTestToIntro(){
 /* ===== Course Exam: the summit — 10 questions, pass 8, earn the crest ===== */
 let ceState=null;
 function startCourseExam(ci){
+  act('course_exam');
   const c=COURSES[ci];
   const gens=[]; c.topics.forEach(id=>{ const t=TOPICS[topicIdxById(id)]; gens.push(...t.gens); });
   const qs=[]; for(let i=0;i<10;i++){ const g=drawBag(gens,'ce_'+ci); qs.push(unseen(g)); }
@@ -2439,7 +2722,7 @@ function rtBegin(){
   s.questions.forEach((q,i)=>{
     if (q.passage && q.passage!==lastPassage){ inner+=`<div class="passage">${q.passage}</div>`; lastPassage=q.passage; }
     inner+=`<div class="q"><div class="q-stem"><span class="q-num">${i+1}.</span> ${q.q}</div>${figHTML(q)}`
-      + q.choices.map((c,ci)=>`<label class="choice"><input type="radio" name="rt${i}" value="${ci}"><span>${String.fromCharCode(65+ci)}. ${c}</span></label>`).join('')
+      + q.choices.map((c,ci)=>`<label class="choice"><input type="radio" name="rt${i}" value="${ci}" onclick="radioToggle(this)"><span>${String.fromCharCode(65+ci)}. ${c}</span></label>`).join('')
       + `</div>`;
   });
   inner+=`<button class="btn" onclick="rtGrade(false)">Finish section &rarr;</button>`;
@@ -2483,7 +2766,7 @@ function rtGrade(auto){
     window.scrollTo({top:0,behavior:'smooth'});
   }
 }
-function rtScaled(raw, n){ return Math.round(500 + Math.max(0, raw)/n*300); }
+function rtScaled(raw, n){ return scaledCurve(raw, n); }
 function rtFinish(){
   rtActive=false; applyAssessmentUI();
   osend({t:'assess_end'});
@@ -2506,9 +2789,9 @@ function rtFinish(){
     <div class="card">
       <div class="score-ring"><div class="score-big">&asymp; ${composite}</div><div class="score-sub">estimated SSAT composite (1500–2400)</div></div>
       ${best?`<div class="verdict v-strong">★ New best composite!</div>`:''}
-      ${row('Quantitative', '&asymp; '+sq+' &middot; '+areas.quant.correct+'/'+areas.quant.n+' right, '+areas.quant.blank+' blank')}
-      ${row('Reading', '&asymp; '+sr+' &middot; '+areas.reading.correct+'/'+areas.reading.n+' right, '+areas.reading.blank+' blank')}
-      ${row('Verbal', '&asymp; '+sv+' &middot; '+areas.verbal.correct+'/'+areas.verbal.n+' right, '+areas.verbal.blank+' blank')}
+      ${row('Quantitative', '&asymp; '+sq+' &middot; ~'+ordinal(pctileFor(sq))+' %ile &middot; '+areas.quant.correct+'/'+areas.quant.n+' right, '+areas.quant.blank+' blank')}
+      ${row('Reading', '&asymp; '+sr+' &middot; ~'+ordinal(pctileFor(sr))+' %ile &middot; '+areas.reading.correct+'/'+areas.reading.n+' right, '+areas.reading.blank+' blank')}
+      ${row('Verbal', '&asymp; '+sv+' &middot; ~'+ordinal(pctileFor(sv))+' %ile &middot; '+areas.verbal.correct+'/'+areas.verbal.n+' right, '+areas.verbal.blank+' blank')}
       <p style="color:var(--gray);font-size:12.5px;text-align:center;margin-top:10px">Rough estimates — the real test scales against everyone who took it. Misses went to Review; gaps went to your Knowledge Map.</p>
       ${tutorTier()?`<button class="btn" onclick="sageDebrief('real')">Sage's debrief &rarr;</button>`:''}
       <button class="btn" onclick="goHome()">Back to menu</button>
@@ -2562,12 +2845,13 @@ function buildSet(n){
 }
 
 /* ================= Render ================= */
-function start(){ document.getElementById('intro').classList.add('hidden'); newSet(); }
+function start(){ act('practice'); document.getElementById('intro').classList.add('hidden'); newSet(); }
 
 /* ---------- Study Mode: one question at a time, instant feedback ---------- */
 let studySection='mixed', studyTotal=0, studyCorrect=0, studyCurrent=null, studyAnswered=false, studyMode='math';
 
 function openStudy(){
+  act('study');
   studyMode='math';
   document.getElementById('intro').classList.add('hidden');
   studySection='mixed'; studyTotal=0; studyCorrect=0;
@@ -2576,6 +2860,7 @@ function openStudy(){
 }
 let verbalKind='mixed';
 function openVerbal(){
+  act('verbal');
   document.getElementById('intro').classList.add('hidden');
   document.getElementById('study').innerHTML = `
     <div class="card">
@@ -2750,7 +3035,7 @@ function newSet(n){
       qDiv.className = 'q'; qDiv.id = `q-${gnum}`;
       let html = `<div class="q-stem"><span class="q-num">${gnum}.</span> ${qq.q}</div>` + figHTML(qq);
       qq.choices.forEach((c, ci) => {
-        html += `<label class="choice"><input type="radio" name="q${gnum}" value="${ci}"><span>${String.fromCharCode(65+ci)}. ${c}</span></label>`;
+        html += `<label class="choice"><input type="radio" name="q${gnum}" value="${ci}" onclick="radioToggle(this)"><span>${String.fromCharCode(65+ci)}. ${c}</span></label>`;
       });
       html += reportLineHTML('practice', gnum);
       qDiv.innerHTML = html;
@@ -3066,15 +3351,15 @@ function ensureOnlineIdentity(){
 function onlineAuthAttempt(){
   if (!account) return;
   if (oAuthStage===0){
-    if (account.onlineToken && account.onlineName) return osend({t:'token_login', name:account.onlineName, token:account.onlineToken});
+    if (account.onlineToken && account.onlineName) return osend({t:'token_login', name:account.onlineName, token:account.onlineToken, v:APP_VERSION});
     oAuthStage = 1;
   }
   if (oAuthStage===1){
-    if (account.onlineSecret && account.onlineName) return osend({t:'login', name:account.onlineName, pass:account.onlineSecret});
+    if (account.onlineSecret && account.onlineName) return osend({t:'login', name:account.onlineName, pass:account.onlineSecret, v:APP_VERSION});
     oAuthStage = 2;
   }
   if (!account.onlineSecret){ account.onlineSecret = randSecret(); saveStore(); }
-  osend({t:'register', name:sanitizeOnlineName(account.name), pass:account.onlineSecret, auto:true});
+  osend({t:'register', name:sanitizeOnlineName(account.name), pass:account.onlineSecret, auto:true, v:APP_VERSION});
 }
 function closeOnline(){
   if (ows){ try{ ows.close(); }catch(e){} ows=null; }
@@ -3089,7 +3374,7 @@ function voteScreenVisible(){ const el=document.getElementById('vote'); return e
 function renderOnlineHome(msg){
   const o=document.getElementById('online'); if(!o) return;
   if(!onlineScreenVisible()) return;
-  if (oMe) setTimeout(()=>osend({t:'friends'}), 50);
+  if (oMe) setTimeout(()=>{ osend({t:'friends'}); osend({t:'tourney_state'}); }, 50);
   o.innerHTML=`
   <div class="card">
     <div class="section-title">${ico('globe',17)} Online — live races</div>
@@ -3104,7 +3389,8 @@ function renderOnlineHome(msg){
       <button class="btn" onclick="findMatch(21)">Full match — first to 21 &rarr;</button>
       <div class="mlabel">Tournaments</div>
       <div id="tourneyBox">
-        <div class="tier-row" style="cursor:pointer" onclick="osend({t:'tourney_join'}); showToast('Looking for 4 players…')"><span><b>${ico('trophy',14)} Bracket</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">4 players, seeded by rating — semifinals, then the final</span></span><span class="tier-rp">Join &rarr;</span></div>
+        <div id="bracketCard" class="tier-row"><span><b>${ico('trophy',14)} Bracket Tournament</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">loading schedule&hellip;</span></span></div>
+        <div id="bracketPic"></div>
         <div class="tier-row" style="cursor:pointer" onclick="arenaActive=true; osend({t:'arena_join'}); showToast('Arena joined — races start when an opponent arrives')"><span><b>${ico('flame',14)} Arena</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">10 minutes, quick races to 5 — wins score points, most points takes it</span></span><span class="tier-rp">Join &rarr;</span></div>
         <div id="tourneyStatus"></div>
       </div>
@@ -3137,6 +3423,8 @@ function oconnect(cb){
   ows.onmessage = (ev)=>{ let m; try{ m=JSON.parse(ev.data); }catch(e){ return; } onlineMsg(m); };
 }
 function osend(obj){ if (ows && ows.readyState===1) ows.send(JSON.stringify(obj)); }
+/* activity ping: one counter per mode opened, nothing personal — see /admin activity */
+function act(k,n){ if (oMe) osend({t:'act', k, n:n||1}); }
 let lastFriends = { list: [], reqs: [] };
 function friendsHTML(){
   const reqRows = (lastFriends.reqs||[]).map(r=>`
@@ -3153,15 +3441,48 @@ function friendsHTML(){
     + `<div class="mlabel">Friends</div>`
     + (rows || '<p class="section-instr">No friends yet — send a request by player name. Friendship starts when they accept.</p>');
 }
-let acctBoard='global', lastBoard=[], lastYou=null;
+let acctBoard='global', lastBoard=[], lastYou=null, lastWall=[];
 function openFriendsPage(){
   if (!account){ showToast('Log into an account first'); return; }
   if (!account.onlineToken || !ows || ows.readyState!==1) ensureOnlineIdentity();
-  setTimeout(()=>{ osend({t:'friends'}); osend({t:'leaderboard'}); }, 400);
+  setTimeout(()=>{ osend({t:'friends'}); osend({t:'leaderboard'}); osend({t:'wall'}); }, 400);
   document.getElementById('intro').classList.add('hidden');
   renderFriendsPage();
 }
 function obsidianQualified(){ return !!(oMe && oMe.rating>=1200) || !!(account && account.onlineRating>=1200); }
+/* The bracket picture: one column per round, winners in gold. During registration
+   it projects Round 1 from the current seeds so players can see who they'd draw. */
+function bracketHTML(m){
+  if (!m || m.none) return '';
+  const cols=[];
+  const box=(a,b,w)=>{
+    const line=(nm,isW)=>nm==null
+      ? `<div style="padding:3px 8px;color:var(--gray);font-size:11.5px;font-style:italic">bye — advances</div>`
+      : `<div style="padding:3px 8px;font-size:12.5px;${isW?'font-weight:800;color:var(--gold-deep,#a87f1e)':''}">${isW?'✓ ':''}${esc(nm)}</div>`;
+    return `<div style="border:1.5px solid ${w?'var(--gold)':'var(--line)'};border-radius:9px;overflow:hidden">${line(a,w&&w===a)}<div style="border-top:1px solid var(--line)"></div>${b!=null||a==null?line(b,w&&w===b):''}${!w?`<div style="padding:2px 8px;font-size:10.5px;color:var(--gray)">playing&hellip;</div>`:''}</div>`;
+  };
+  if ((m.rounds||[]).length){
+    m.rounds.forEach((r,i)=>{
+      const isFinal = r.length===1 && r[0].b!=null;
+      cols.push({ label: isFinal?'FINAL':'Round '+(i+1), boxes: r.map(e=>box(e.a,e.b,e.w)) });
+    });
+  } else if (m.state==='reg' && (m.seeds||[]).length>=2){
+    const pool=m.seeds.slice(), boxes=[];
+    if (pool.length%2===1) boxes.push(box(pool.shift(),null,null).replace('playing&hellip;','top seed'));
+    while (pool.length>=2) boxes.push(box(pool.shift(),pool.pop(),null).replace('playing&hellip;','projected'));
+    cols.push({ label:'Round 1 (projected — seeds shift as players join)', boxes });
+  }
+  if (!cols.length) return '';
+  return `<div style="display:flex;gap:12px;overflow-x:auto;padding:10px 4px 6px;align-items:stretch">${cols.map(c=>`
+    <div style="display:flex;flex-direction:column;min-width:132px;flex-shrink:0">
+      <div style="font-size:10.5px;font-weight:800;letter-spacing:1px;color:var(--gray);text-transform:uppercase;margin-bottom:6px">${c.label}</div>
+      <div style="flex:1;display:flex;flex-direction:column;justify-content:space-around;gap:8px">${c.boxes.join('')}</div>
+    </div>`).join('')}</div>`;
+}
+function wallHTML(){
+  if (!lastWall || !lastWall.length) return '<p class="section-instr" style="text-align:center">The wall awaits its first name&hellip;</p>';
+  return lastWall.map(e=>`<div class="tier-row" style="border-left:4px solid var(--gold)"><span><b>⭐ ${esc(e.name)}</b>${oMe&&e.name===oMe.name?' <span style="font-size:11px;color:var(--gray)">(you)</span>':''}</span><span class="tier-rp">${esc(e.label)}</span></div>`).join('');
+}
 function boardHTML(){
   let rows;
   if (acctBoard==='obsidian'){
@@ -3199,11 +3520,11 @@ function renderFriendsPage(){
     <div class="card">
       <div style="display:flex;align-items:center;gap:14px">
         <span class="coach-ava" style="width:54px;height:54px;font-size:24px;font-weight:800;font-family:var(--serif)">${esc((a.name||'?')[0].toUpperCase())}</span>
-        <span><b style="font-size:18px;color:var(--navy)">${esc(a.name)}</b><br>
+        <span><b style="font-size:18px;color:var(--navy)">${esc(a.name)}</b>${isPremium()?` <span class="badge" style="background:linear-gradient(160deg,#e0c169,#ca9827);color:#1a2136;border-color:#a87f1e;font-size:10px;vertical-align:2px">${ico('crown',10)} ${planLabel()}</span>`:''}<br>
           <span style="font-size:12.5px;color:var(--gray)">★ Level ${level} &middot; ${tierIcon(tierIndex(a.rp),13)} ${t.name} &middot; ${a.rp} RP${oMe&&oMe.rating?` &middot; ${ico('globe',12)} ${oMe.rating} (${oMe.wins}W–${oMe.losses}L)`:''}</span></span>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">
-        ${chip('Math '+(a.skill||2).toFixed(1))}${chip('Analogies '+(a.verbalSkill.analogies||2).toFixed(1))}${chip('Reading '+(a.verbalSkill.reading||2).toFixed(1))}${chip('Synonyms '+(a.verbalSkill.synonyms||2).toFixed(1))}${a.streak?chip(a.streak+'-day streak'):''}${a.stats.bestComposite?chip('Best composite '+a.stats.bestComposite):''}${COURSES.map((c,ci)=>a.courseDone[ci]?`<span class="badge" style="background:linear-gradient(160deg,#e0c169,#ca9827);color:#1a2136;border-color:#a87f1e">✦ ${c.title}</span>`:'').join('')}
+        ${chip('Math '+(a.skill||2).toFixed(1))}${chip('Analogies '+(a.verbalSkill.analogies||2).toFixed(1))}${chip('Reading '+(a.verbalSkill.reading||2).toFixed(1))}${chip('Synonyms '+(a.verbalSkill.synonyms||2).toFixed(1))}${a.streak?chip(a.streak+'-day streak'):''}${a.stats.bestComposite?chip('Best composite '+a.stats.bestComposite):''}${COURSES.map((c,ci)=>a.courseDone[ci]?`<span class="badge" style="background:linear-gradient(160deg,#e0c169,#ca9827);color:#1a2136;border-color:#a87f1e">✦ ${c.title}</span>`:'').join('')}${(lastWall||[]).filter(e=>oMe&&e.name===oMe.name).map(e=>`<span class="badge" style="background:linear-gradient(160deg,#e0c169,#ca9827);color:#1a2136;border-color:#a87f1e">⭐ ${esc(e.label)} Champion</span>`).join('')}
       </div>
     </div>
     <div class="card">
@@ -3214,6 +3535,11 @@ function renderFriendsPage(){
         <input id="friendNamePg" maxlength="16" placeholder="Friend's player name" style="flex:1;padding:9px 12px;border:1.5px solid var(--line);border-radius:8px" />
         <button class="btn" style="width:auto;padding:9px 14px;margin:0" onclick="addFriendPg()">Request</button>
       </div>
+    </div>
+    <div class="card">
+      <div class="section-title">⭐ Wall of Champions</div>
+      <p class="section-instr">One name a month, forever. Win the Monthly Championship — last Saturday, every month — and yours joins them.</p>
+      <div id="wallBox">${wallHTML()}</div>
     </div>
     <div class="card">
       <div class="section-title">${ico('trophy',17)} Leaderboards</div>
@@ -3255,13 +3581,13 @@ function showLeaderboard(){ oconnect(()=>osend({t:'leaderboard'})); }
 let syncTimer=null;
 function syncPayload(){ const a=account; return { xp:a.xp, rp:a.rp, streak:a.streak, bestStreak:a.bestStreak,
   lastPlayed:a.lastPlayed, achievements:a.achievements, stats:a.stats, bestRun:a.bestRun,
-  lastDaily:a.lastDaily, weekPoints:a.weekPoints, weekId:a.weekId, diff:a.diff, vote:a.vote, skill:a.skill, topics:a.topics, misses:a.misses, verbalSkill:a.verbalSkill, lessonsDone:a.lessonsDone, tstats:a.tstats, diagAt:a.diagAt, hist:a.hist, tourDone:a.tourDone, premium:a.premium, premiumPlan:a.premiumPlan, familyCode:a.familyCode||'', theme:a.theme||'', freeTestUsed:a.freeTestUsed, testHist:a.testHist, revDay:a.revDay, weekPlan:a.weekPlan, courseDone:a.courseDone }; }
+  lastDaily:a.lastDaily, weekPoints:a.weekPoints, weekId:a.weekId, diff:a.diff, vote:a.vote, skill:a.skill, topics:a.topics, misses:a.misses, verbalSkill:a.verbalSkill, lessonsDone:a.lessonsDone, tstats:a.tstats, diagAt:a.diagAt, hist:a.hist, tourDone:a.tourDone, level:a.level, onboarded:a.onboarded, bestBattle:a.bestBattle, premium:a.premium, premiumPlan:a.premiumPlan, familyCode:a.familyCode||'', theme:a.theme||'', freeTestUsed:a.freeTestUsed, testHist:a.testHist, revDay:a.revDay, weekPlan:a.weekPlan, courseDone:a.courseDone }; }
 function syncUp(){ if(!oMe || !account) return; osend({t:'sync_up', data:syncPayload(), updatedAt:account.updatedAt||Date.now()}); }
 function scheduleSync(){ if(!oMe || !account || !ows || ows.readyState!==1) return; clearTimeout(syncTimer); syncTimer=setTimeout(syncUp, 3000); }
 function applySync(data){ if(!account || !data) return; Object.assign(account, data); ensureFields(account); syncXPFromAccount(); saveStore(); }
 
 /* Both players generate the identical question from the server's seed. */
-function genRaceQuestion(seed){ return withSeed(seed, ()=>{ if (Math.random()<0.3) return vShortQ().q; return raceChoice()(); }); }
+function genRaceQuestion(seed, d){ return withSeed(seed, ()=>{ if (Math.random()<0.3) return vShortQ().q; return raceChoice(d)(); }); }
 
 function renderRace(){
   const q=oRaceQ;
@@ -3299,24 +3625,29 @@ function raceAnswer(i){
 function onlineMsg(m){
   if (m.t==='auth'){
     if (!m.ok){
+      if (oPullNext) return failedOnlineSignIn(m.msg||'Could not sign in');   // stop — never fall through to registering a new account
       if (oAuthStage < 2){ oAuthStage++; onlineAuthAttempt(); return; }
       fillVoteLocal();
       return renderOnlineHome(m.msg||'Could not connect');
     }
+    const wasPull = oPullNext;
     oAuthStage = 0;
     oMe={name:m.name, rating:m.rating, wins:m.wins, losses:m.losses, showRating:m.showRating!==false};
     if (account){
       account.onlineName=m.name;
       account.onlineRating=m.rating;
       if (m.token) account.onlineToken=m.token;
-      if (m.data && (m.dataUpdatedAt||0) > (account.updatedAt||0)) applySync(m.data);
-      else syncUp();
+      if (m.data && (oPullNext || (m.dataUpdatedAt||0) > (account.updatedAt||0))) applySync(m.data);
+      else if (!oPullNext) syncUp();
+      oPullNext = false; oPullShellId = null;
+      if (wasPull){ showToast('Signed in as '+m.name); renderHome(); }
       saveStore();
       osend({t:'set_vote', vote:account.vote||''});   // keep the server tally in step; reply carries live counts
     }
     renderOnlineHome();
   }
   else if (m.t==='match_start'){
+    raceDiff = (typeof m.d==='number') ? m.d : null;
     oState='racing'; applyAssessmentUI(); oOpp=m.opp; oScore={you:0,opp:0};
     document.getElementById('online').innerHTML=`
       <div class="card" style="text-align:center">
@@ -3326,7 +3657,7 @@ function onlineMsg(m){
   }
   else if (m.t==='round'){
     oRound=m.n; oAnswered=false; if(m.score) oScore=m.score;
-    oRaceQ=genRaceQuestion(m.seed);
+    oRaceQ=genRaceQuestion(m.seed, raceDiff);
     renderRace();
   }
   else if (m.t==='round_result'){
@@ -3356,6 +3687,11 @@ function onlineMsg(m){
         <button class="btn secondary" onclick="renderOnlineHome()">Online home</button>
       </div>`;
   }
+  else if (m.t==='wall'){
+    lastWall = m.list||[];
+    const wb=document.getElementById('wallBox');
+    if (wb) wb.innerHTML = wallHTML();
+  }
   else if (m.t==='leaderboard'){
     lastBoard = m.top||[];
     lastYou = m.you||null;
@@ -3369,25 +3705,42 @@ function onlineMsg(m){
         <button class="btn secondary" onclick="renderOnlineHome()">Back</button>
       </div>`;
   }
-  else if (m.t==='tourney_wait'){
-    const s=document.getElementById('tourneyStatus');
-    if (s) s.innerHTML = m.n>0 ? `<p class="section-instr">Bracket lobby: ${m.n}/${m.need} players — waiting for challengers&hellip;</p>` : '';
+  else if (m.t==='stourney_state'){
+    const card=document.getElementById('bracketCard');
+    if (card){
+      if (m.none){
+        card.innerHTML=`<span><b>${ico('trophy',14)} Bracket Tournament</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">no event scheduled — be the first to sign up</span></span>
+          <button class="seg" style="flex:none" onclick="osend({t:'tourney_join'})">Schedule one</button>`;
+      } else {
+        const when=new Date(m.startsAt);
+        const hh=when.getHours()%12||12, mm=String(when.getMinutes()).padStart(2,'0'), ap=when.getHours()>=12?'PM':'AM';
+        const day=when.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});
+        const title = m.monthly ? `\u2b50 ${m.mlabel} Championship` : `${ico('trophy',14)} Bracket Tournament`;
+        const sub = m.state!=='reg' ? `LIVE — round ${m.round}, ${m.alive} players remain`
+          : m.monthly ? `${day} at ${hh}:${mm} ${ap} &middot; ${m.n} registered &middot; the winner's name goes on the Wall of Champions`
+          : `starts at ${hh}:${mm} ${ap} &middot; ${m.n} registered &middot; full matches to 21, rounds roll as soon as everyone finishes`;
+        if (m.monthly) card.style.borderLeft='4px solid var(--gold)'; else card.style.borderLeft='';
+        card.innerHTML=`<span><b${m.monthly?' style="color:var(--gold-deep,#a87f1e)"':''}>${title}</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">${sub}</span></span>
+        ${m.state==='reg' ? (m.registered
+          ? `<button class="seg" style="flex:none" onclick="osend({t:'tourney_leave'})">Leave</button>`
+          : `<button class="seg" style="flex:none" onclick="osend({t:'tourney_join'})">Register</button>`) : ''}`;
+      }
+    }
+    const bp=document.getElementById('bracketPic');
+    if (bp) bp.innerHTML = bracketHTML(m);
   }
-  else if (m.t==='tourney_start'){
+  else if (m.t==='stourney_round'){
     playFanfare();
+    showToast(m.msg||'Tournament round update');
     const s=document.getElementById('tourneyStatus');
-    const br=(m.bracket||[]).map(b=>`#${b.seed} ${esc(b.name)}${b.rating!=null?' ('+b.rating+')':''}`).join(' &middot; ');
-    if (s) s.innerHTML=`<div class="explain ok">Tournament on! You are seed #${m.seed}. ${br}</div>`;
-    showToast('Tournament starting — you are seed #'+m.seed);
+    if (s) s.innerHTML=`<div class="explain">${esc(m.msg||'')}</div>`;
   }
-  else if (m.t==='tourney_round'){
-    showToast(m.msg||'The final is forming…');
-  }
-  else if (m.t==='tourney_result'){
-    if (m.yours){ celebrate(); showToast('🏆 CHAMPION! You won the tournament!'); }
-    else showToast('Tournament over — champion: '+esc(m.champion||''));
+  else if (m.t==='stourney_result'){
+    if (m.yours){ celebrate(); showToast(m.monthly ? '⭐ MONTHLY CHAMPION! Your name goes on the Wall!' : '🏆 CHAMPION! You won the tournament!'); }
+    else if (m.champion) showToast('Tournament over — champion: '+esc(m.champion));
+    else showToast(m.msg||'Tournament cancelled');
     const s=document.getElementById('tourneyStatus');
-    if (s) s.innerHTML=`<div class="explain ${m.yours?'ok':''}">Champion: <b>${esc(m.champion||'')}</b>${m.yours?' — that\'s YOU ✦':''}</div>`;
+    if (s) s.innerHTML = m.champion ? `<div class="explain ${m.yours?'ok':''}">Champion: <b>${esc(m.champion)}</b>${m.yours?' — that\'s YOU ✦':''}</div>` : '';
   }
   else if (m.t==='arena_state'){
     const s=document.getElementById('tourneyStatus');
@@ -3542,6 +3895,7 @@ function lessonSteps(t){
   return steps;
 }
 function openLesson(i){
+  act('lesson');
   lsTopic=i; lsSteps=lessonSteps(TOPICS[i]); lsStep=0; lsAnswered=false;
   renderLessonStep();
   document.getElementById('learn').classList.remove('hidden');
@@ -3622,6 +3976,7 @@ function practiceTopic(i){
   document.getElementById('study').classList.remove('hidden');
 }
 function openReview(){
+  act('review');
   reviewEarly=false;
   if (account && account.misses.length && !dueMisses().length){
     const next=account.misses.map(m=>m.due).sort()[0];
@@ -3688,6 +4043,9 @@ function closeLearn(){
 /* ================= Sidebar navigation ================= */
 const MODE_DIVS = ['quiz','results','study','clock','versus','survival','daily','compete','achievements','reports','online','learn','vote','fulltest','coachpage','parentreport','gaps','premium','about','focus','friendspage','realtest','writing'];
 function resetToHome(){
+  const row=document.getElementById('allModes'), home=document.getElementById('homeMain');
+  if(row && home && row.parentNode && row.parentNode.id==='hubSettings'){ home.appendChild(row); row.classList.add('hidden'); }
+  const hub=document.getElementById('hub'); if(hub){ hub.classList.add('hidden'); hub.innerHTML=''; }
   const wasAssessing = fullTest || diagActive;
   clearInterval(clockTimer); clearTimeout(clockTimer);
   clearInterval(testTimerId); fullTest=false;
@@ -3713,11 +4071,48 @@ function navTo(mode){
   document.body.classList.remove('snav-open');
   resetToHome();
   const map = { learn:openLearn, daily:openDaily, practice:start, fulltest:openFullTest, study:openStudy, verbal:openVerbal, review:openReview, coach:openCoachPage, report:openReport, gaps:openGaps, premium:openPremium, about:openAbout, focus:openFocus, friendspage:openFriendsPage, writing:openWriting,
-                clock:openClock, survival:openSurvival, versus:openVersus, online:openOnline,
+                clock:openClock, survival:openSurvival, battle:openBattle, versus:openVersus, online:openOnline,
                 compete:openCompete, achievements:openAchievements, vote:openVote };
-  if (mode !== 'home' && map[mode]) map[mode]();
+  if (mode.indexOf('hub:')===0) openHub(mode.slice(4));
+  else if (mode !== 'home' && map[mode]) map[mode]();
   highlightNav(mode);
   window.scrollTo({top:0, behavior:'smooth'});
+}
+
+/* ================= Hubs: five doors instead of twenty-five buttons (chess.com rule) ================= */
+const HUBS = {
+  learn:    { title:'Learn', icon:'bulb', sub:'Teach first, then drill the exact topic.', items:[
+    ['learn','bulb','Courses','lessons that build mastery topic by topic'], ['gaps','flag','Knowledge Map','diagnostic + every topic at a glance'],
+    ['review','refresh','Review Misses','spaced repetition on what you got wrong'], ['focus','flame','Focus Sprint','25 minutes aimed at your weakest spot'],
+    ['writing','quill','Writing','essay practice with the Writing Coach'] ] },
+  practice: { title:'Practice', icon:'paper', sub:'Real test shapes, real pacing.', items:[
+    ['practice','paper','Practice Test','14 balanced questions, scored and explained'], ['fulltest','hourglass','Full Test','timed, curved, percentile-ranked'],
+    ['daily','calendar','Daily Challenge','today\'s 5 · bonus XP'], ['study','book','Study','one question at a time, instant feedback'],
+    ['verbal','alpha','Verbal','analogies · synonyms · reading'] ] },
+  play:     { title:'Play', icon:'swords', sub:'Same questions, more adrenaline.', items:[
+    ['battle','swords','Math Battle','hit monsters with right answers · bosses every 5 waves'], ['online','globe','Online Races','live head-to-head · tournaments'],
+    ['compete','trophy','Rank & League','ladder, tiers, weekly league'], ['clock','hourglass','Beat the Clock','60 seconds, how many?'],
+    ['survival','sword','Survival','3 lives, endless'], ['versus','swords','Versus','pass-the-device, 2 players'] ] },
+  me:       { title:'Me', icon:'person', sub:'Your account, your trophies, your settings.', items:[
+    ['friendspage','person','My Account','friends, rating, privacy'], ['achievements','medal','Badges','everything you have unlocked'],
+    ['report','paper','Parent Report','progress summary for a grown-up'], ['vote','ballot','Vote','pick the next feature'], ['about','shield','About','version, what\'s new'] ], settings:true }
+};
+function openHub(name){
+  const h=HUBS[name]; if(!h) return;
+  document.getElementById('intro').classList.add('hidden');
+  const el=document.getElementById('hub'); el.classList.remove('hidden');
+  el.innerHTML=`<div class="card">
+      <div class="section-title">${ico(h.icon,18)} ${h.title}</div><p class="section-instr">${h.sub}</p>
+      <div class="hub-list">${h.items.map(([m,i,t,d])=>`<button class="hub-item" onclick="navTo('${m}')">${ico(i,20)}<span style="flex:1"><b>${t}</b><span class="d">${d}</span></span><span style="color:var(--gold);font-weight:700">&rarr;</span></button>`).join('')}</div>
+      ${h.settings?`<div class="mlabel" style="margin-top:16px">Settings</div><div id="hubSettings"></div>`:''}
+      <button class="btn secondary" style="margin-top:14px" onclick="navTo('home')">&larr; Home</button>
+    </div>`;
+  if(h.settings){
+    const row=document.getElementById('allModes'); const hs=document.getElementById('hubSettings');
+    if(row && hs){ hs.appendChild(row); row.classList.remove('hidden'); }
+    renderDiff();
+    const sBtn=document.getElementById('soundBtn'); if(sBtn) sBtn.innerHTML = soundOn?ico('volume',15)+' Sound: On':ico('mute',15)+' Sound: Off';
+  }
 }
 function highlightNav(mode){
   document.querySelectorAll('.snav').forEach(b=>b.classList.toggle('on', b.dataset.mode===mode));
@@ -3729,36 +4124,21 @@ function renderSidebar(){
     <div class="sbrand">Quizard</div>
     ${item('home','home','Home')}
     <div class="sdiv"></div>
-    ${item('learn','bulb','Learn')}
-    ${item('daily','calendar','Daily')}
-    ${item('practice','paper','Practice Test')}
-    ${item('fulltest','hourglass','Full Test')}
-    ${item('study','book','Study')}
-    ${item('focus','flame','Focus Sprint')}
-    ${item('verbal','alpha','Verbal')}
-    ${item('writing','quill','Writing')}
-    ${item('review','refresh','Review Misses')}
-    ${item('gaps','flag','Knowledge Map')}
+    ${item('hub:learn','bulb','Learn')}
+    ${item('hub:practice','paper','Practice')}
+    ${item('hub:play','swords','Play')}
     ${item('coach','chat','Coach')}
+    ${item('hub:me','person','Me')}
     <div class="sdiv"></div>
-    ${item('clock','hourglass','Beat the Clock')}
-    ${item('survival','sword','Survival')}
-    ${item('versus','swords','Versus')}
-    ${item('online','globe','Online')}
-    ${item('friendspage','person','My Account')}
-    <div class="sdiv"></div>
-    ${item('compete','trophy','Rank & League')}
-    ${item('achievements','medal','Achievements')}
-    ${item('report','paper','Parent Report')}
-    ${item('vote','ballot','Vote')}
-    <div class="sdiv"></div>
-    ${item('premium','crown','Premium')}
-    ${item('about','shield','About')}`;
+    ${item('premium','crown','Premium')}`;
   highlightNav('home');
 }
 
 /* ================= Coach: open-ended AI tutor, anchored to the missed question ================= */
 let coachCtx=null, coachMsgs=[], coachBusy=false, coachTarget='panel', coachLiveAns=null;
+let raceDiff=null;   // shared match difficulty from the server (both players get the same value)
+let oPullNext=false;  // set by an explicit sign-in: take the server's copy, don't overwrite it
+let oPullShellId=null; // local shell created for that sign-in — removed again if the sign-in fails
 function coachHost(){
   if (coachTarget==='page'){ const d=document.getElementById('coachDock'); if (d) return d; coachTarget='panel'; }
   return document.getElementById('coachPanel');
@@ -4066,6 +4446,7 @@ function buildDiagItems(){
 }
 function startDiag(resume){
   if (!account){ showToast('Log into an account first'); return; }
+  act('diag');
   diagActive=true; applyAssessmentUI();
   osend({t:'assess_start', mins:35});
   const st=store.diagState;
@@ -4157,6 +4538,21 @@ function renderDiagDone(s){
 
 /* ===== About: version, platform, what's new ===== */
 const CHANGELOG = [
+  ['1.1.0','Math Battle: right answers hit the monster, combos hit harder, bosses every five waves. SSAT Middle Level (grades 5–7) with its own questions and 440–710 scoring. A fresh new look. New players get a 2-minute warm-up instead of a tour. Family members now lose Premium when the family plan ends. Six meaner hard-tier questions'],
+  ['0.36.0','Seasons now end honestly: when a subscription expires, Premium locks again and renewing takes one tap'],
+  ['0.35.1','Subscription terms and the Privacy Policy and Terms of Use links now show on the Premium page for subscribers too'],
+  ['0.35.0','One login for everything: type your online account into any sign-in form and it just works — with clear messages when something goes wrong'],
+  ['0.34.1','Subscription details spelled out on the Premium page — length, price, auto-renewal, and links to the Privacy Policy and Terms of Use'],
+  ['0.34.0','Sign in with your online account on any device — your progress, plan, and rating come with you'],
+  ['0.33.1','Races are a level playing field: the same SSAT-weight question pool at every rating — like chess, the game never changes, only the opponents get better'],
+  ['0.32.2','Tournament rounds now roll as soon as everyone finishes — a 2-minute breather between rounds, a whole bracket in about an hour'],
+  ['0.32.1','See the bracket: live tournament picture with every round, winners in gold — and projected Round 1 pairings while registration is open'],
+  ['0.32.0','The Monthly Championship: last Saturday of every month — win it and your name goes on the Wall of Champions, forever. Plus a serious username filter'],
+  ['0.31.5','Your leaderboard rank now always matches the ladder rows. Scores reach 800 again and every estimate shows your percentile'],
+  ['0.31.4','Score estimates now curve like the real SSAT — the top of the scale is earned against a strong pool, estimates cap at 775'],
+  ['0.31.3','Test bubbles erase like paper — tap your answer again to leave it blank. Family plan now shows it includes every tutor perk'],
+  ['0.31.2','Your plan shows by name everywhere — Solo, Unlimited, or Family — instead of a generic Premium badge'],
+  ['0.31.1','Brackets become real events: register, play at the set start time, full first-to-21 matches, 30 minutes between rounds'],
   ['0.31.0','Two new courses (Word Mastery + Summit Problems), the hidden Obsidian League, and online tournaments: Arena and seeded Brackets'],
   ['0.30.0','Courses are now a summit: master every topic to unlock the Course Exam — pass it for the crest, +150 XP, and a gold ring on home'],
   ['0.29.0','Unlimited becomes the Tutor tier: week plans pinned to your home screen and personal test debriefs — built from YOUR data, which no chatbot has'],
@@ -4215,7 +4611,7 @@ function openAbout(){
       <div class="tier-row"><span>Version</span><span class="tier-rp">v${APP_VERSION}</span></div>
       <div class="tier-row"><span>Running as</span><span class="tier-rp">${appPlatform()}</span></div>
       <div class="tier-row"><span>Online server</span><span class="tier-rp">${online}</span></div>
-      ${account?`<div class="tier-row"><span>Plan</span><span class="tier-rp">${isPremium()?(account.premiumPlan||'family member'):'free'}</span></div>`:''}
+      ${account?`<div class="tier-row"><span>Plan</span><span class="tier-rp">${planLabel()}</span></div>`:''}
       <div class="mlabel">What's new</div>
       ${CHANGELOG.map(([v,d])=>`<div class="tier-row"><span style="flex-shrink:0"><b>v${v}</b></span><span style="font-weight:400;font-size:12.5px;color:var(--gray);text-align:right">${d}</span></div>`).join('')}
       <div class="mlabel">SamTech</div>
@@ -4330,6 +4726,8 @@ let livePrices = null;
 function nativeStore(){ return (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.buy) ? window.webkit.messageHandlers : null; }
 function applyPlan(plan){
   account.premium = true; account.premiumPlan = plan;
+  account.planSrc = 'store';   // paid through Apple — expiry reconcile may revoke it (server-granted plans have no planSrc)
+  if (plan!=='family') store.familyPremium = false;   // switching off Family ends the whole-device unlock
   if (plan==='family'){
     store.familyPremium = true;
     if (!account.onlineToken || !ows || ows.readyState!==1) ensureOnlineIdentity();
@@ -4353,6 +4751,24 @@ window.quizardRestore = function(plans){
     applyPlan(plan);
     showToast('Purchases restored');
   } else showToast('No purchases found for this Apple ID');
+};
+/* Launch-time truth from StoreKit. Empty list = no active subscription on this
+   Apple ID: revoke plans that were bought through the store. Plans granted by the
+   server (demo/review accounts, family members via code) have no planSrc and are
+   untouched — their truth lives on the server, not in StoreKit. */
+window.quizardEntitlements = function(plans){
+  plans = plans||[];
+  if (plans.length){
+    const plan = plans.includes('family') ? 'family' : plans.includes('unlimited') ? 'unlimited' : 'solo';
+    if (account && account.premiumPlan !== plan) applyPlan(plan);   // renewal or plan change made outside the app
+    return;
+  }
+  if (account && account.premium && account.planSrc === 'store'){
+    account.premium = false; account.premiumPlan = ''; account.planSrc = '';
+    store.familyPremium = false;
+    saveStore(); renderHome();
+    showToast('Your season has ended — renew anytime on the Premium page');
+  }
 };
 window.quizardPrices = function(p){ livePrices = p; if (typeof openPremium==='function'){ const el=document.getElementById('premium'); if (el && !el.classList.contains('hidden')) openPremium(); } };
 
@@ -4378,7 +4794,7 @@ function openPremium(){
     <div class="card">
       <div class="section-title">${ico('crown',17)} Quizard Premium</div>
       ${isP ? `
-        <div class="explain ok" style="margin-top:4px"><b>You're Premium.</b> Everything is unlocked — thanks for backing a small team.</div>
+        <div class="explain ok" style="margin-top:4px"><b>Your plan: ${planLabel()}.</b> Everything it unlocks is live — thanks for backing a small team.</div>
         ${hasPerks() ? `
           <div class="mlabel">${isUnlimited()?'Unlimited perks':'Family perks'}</div>
           <div class="tier-row"><span><b>Midnight theme</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">the academy after dark</span></span>
@@ -4398,9 +4814,22 @@ function openPremium(){
             <button class="seg" style="flex:none" onclick="shareFamilyEmail()">${ico('paper',13)} Email the invite</button>
             <button class="seg" style="flex:none" onclick="shareFamily()">Share&hellip;</button>
             <button class="seg" style="flex:none" onclick="copyFamilyCode()">Copy code</button>
-          </div>` : ``}`
+          </div>` : ``}
+        <div class="mlabel">Change your plan</div>
+        ${['solo','unlimited','family'].filter(pl=>pl!==account.premiumPlan).map(pl=>{
+          const nm={solo:'Solo',unlimited:'Unlimited',family:'Family'}[pl];
+          const fallback={solo:'$79.99',unlimited:'$99.99',family:'$349.99'}[pl];
+          const pr=(livePrices&&livePrices[pl])?livePrices[pl]:fallback;
+          const sub={solo:'1 account',unlimited:'the Tutor tier — Writing Coach, debriefs, week plans',family:'up to 6 accounts, every perk included'}[pl];
+          return `<div class="tier-row"><span><b>${nm}</b> <span style="color:var(--gray);font-size:12.5px">${pr} / 3 mo</span><br><span style="font-weight:400;font-size:12px;color:var(--gray)">${sub}</span></span>
+            <button class="seg" style="flex:none" onclick="buyPremium('${pl}')">Switch</button></div>`;
+        }).join('')}
+        <p class="section-instr" style="font-size:12px">Switching goes through the App Store — Apple credits the unused part of your current season automatically.</p>
+        ${nativeStore() ? `<a class="btn secondary" style="display:block;text-align:center;text-decoration:none" href="https://apps.apple.com/account/subscriptions">Manage or cancel subscription</a>` : ``}
+        <p class="section-instr" style="text-align:center;margin-top:6px">Each plan is an auto-renewable subscription: 3 months (one season), at the price shown. Billed through the App Store; renews automatically each season until canceled in Settings.</p>
+        <p class="section-instr" style="text-align:center;margin-top:2px"><a href="https://spaceballtwo.github.io/quizard/privacy.html" style="color:var(--amber)">Privacy Policy</a> &nbsp;&middot;&nbsp; <a href="https://www.apple.com/legal/internet-services/itunes/dev/stdeula/" style="color:var(--amber)">Terms of Use (EULA)</a></p>`
       : `
-        <p class="section-instr">Everything included on both plans — pick the size that fits.</p>
+        <p class="section-instr">Every plan unlocks everything — pick the size that fits your family.</p>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0 6px">
           <div style="border:1.5px solid var(--line);border-radius:12px;padding:14px 10px;text-align:center">
             <div style="font-weight:700;color:var(--navy)">Solo</div>
@@ -4409,7 +4838,7 @@ function openPremium(){
             <button class="btn" style="margin:0" onclick="buyPremium('solo')">Get Solo</button>
           </div>
           <div style="border:1.5px solid var(--gold);border-radius:12px;padding:14px 10px;text-align:center;position:relative">
-            <div style="position:absolute;top:-9px;left:50%;transform:translateX(-50%);background:var(--navy);color:var(--gold-soft);font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;white-space:nowrap">THE TUTOR TIER</div>
+            <div style="position:absolute;top:-9px;left:50%;transform:translateX(-50%);background:var(--navy);color:var(--gold-soft);font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;white-space:nowrap">TUTOR INCLUDED</div>
             <div style="font-weight:700;color:var(--navy)">Unlimited</div>
             <div style="margin:6px 0"><span style="font-size:26px;font-weight:800;color:var(--navy)">${livePrices&&livePrices.unlimited?livePrices.unlimited:'$99.99'}</span><span style="color:var(--gray);font-size:12px"> / 3 mo</span></div>
             <div style="color:var(--gray);font-size:12px;margin-bottom:10px"><b>Sage becomes a real tutor</b> —<br>Writing Coach, test debriefs,<br>week plans on your home screen</div>
@@ -4419,12 +4848,13 @@ function openPremium(){
             <div style="position:absolute;top:-9px;left:50%;transform:translateX(-50%);background:var(--gold);color:#1a2136;font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;white-space:nowrap">BEST VALUE</div>
             <div style="font-weight:700;color:var(--navy)">Family</div>
             <div style="margin:6px 0"><span style="font-size:26px;font-weight:800;color:var(--navy)">${livePrices&&livePrices.family?livePrices.family:'$349.99'}</span><span style="color:var(--gray);font-size:12px"> / 3 mo</span></div>
-            <div style="color:var(--gray);font-size:12px;margin-bottom:10px">up to 6 accounts, each kid their own<br>all perks: crown, Midnight, weekly plans</div>
+            <div style="color:var(--gray);font-size:12px;margin-bottom:10px">up to 6 accounts, each kid their own<br>every Unlimited perk included — tutor,<br>Writing Coach, debriefs, week plans</div>
             <button class="btn" style="margin:0" onclick="buyPremium('family')">Get Family</button>
           </div>
         </div>
-        ${nativeStore() ? `<p class="section-instr" style="text-align:center;margin-top:6px">Billed through the App Store. Auto-renews each season; cancel anytime in Settings. <a href="https://spaceballtwo.github.io/quizard/privacy.html" style="color:var(--amber)">Privacy</a></p>`
-          : `<p class="section-instr" style="text-align:center;margin-top:6px">Beta preview: no card needed yet — tapping unlocks instantly while we're in beta.</p>`}
+        ${nativeStore() ? `<p class="section-instr" style="text-align:center;margin-top:6px">Each plan is an auto-renewable subscription: 3 months (one season), at the price shown. Billed through the App Store; renews automatically each season until canceled in Settings.</p>
+        <p class="section-instr" style="text-align:center;margin-top:2px"><a href="https://spaceballtwo.github.io/quizard/privacy.html" style="color:var(--amber)">Privacy Policy</a> &nbsp;&middot;&nbsp; <a href="https://www.apple.com/legal/internet-services/itunes/dev/stdeula/" style="color:var(--amber)">Terms of Use (EULA)</a></p>`
+          : `<p class="section-instr" style="text-align:center;margin-top:6px">Beta preview: no card needed yet — tapping unlocks instantly while we're in beta. <a href="https://spaceballtwo.github.io/quizard/privacy.html" style="color:var(--amber)">Privacy Policy</a> &middot; <a href="https://www.apple.com/legal/internet-services/itunes/dev/stdeula/" style="color:var(--amber)">Terms of Use</a></p>`}
         <button class="btn secondary" onclick="restorePurchases()">Restore Purchases</button>
         <div class="mlabel">Have a family code?</div>
         <div style="display:flex;gap:6px">
@@ -4501,6 +4931,7 @@ function buyPremium(plan){
   const native = nativeStore();
   if (native){ native.buy.postMessage(STORE_PRODUCTS[plan||'solo']); return; }   // Apple checkout; result arrives via quizardPurchase
   account.premium = true; account.premiumPlan = plan||'solo';
+  if ((plan||'solo')!=='family') store.familyPremium = false;
   if (plan==='family'){
     store.familyPremium = true;                          // every account on this device
     if (!account.onlineToken || !ows || ows.readyState!==1) ensureOnlineIdentity();
@@ -4523,13 +4954,14 @@ function tourSteps(){
     {sel:'#nextUp', t:'Next up', x:'Quizard always picks your smartest next move and puts it right here. When in doubt, tap this.'},
     {sel:'.koji-card', t:'Meet Sage', x:'Your coach. Ask for a hint, a lesson, or "what should I work on?" — a parent approves it once, then Sage lives bottom-left on every screen.'},
     {sel:'#homeCourses', t:'Courses', x:'Lessons that build mastery topic by topic. The rings fill up as you go.'},
-    {sel:'#allModesBtn', t:'Everything else', x:'Full tests, practice, games, online races, the Knowledge Map, and settings all live under this button.'},
+    {sel:'.hubs', t:'Five doors', x:'Learn, Practice, Play, Coach, Me — everything lives behind one of these.'},
     {sel:'.scratch-fab', t:'Scratch paper', x:'Bottom-right on every screen — work it out before you answer.'},
     {sel: wide?'#sidebar':'.menu-fab', t:'Jump anywhere', x: wide?'The sidebar takes you straight to any mode.':'This menu button opens the sidebar from any screen.'},
     {t:'One smart first move', x:'Take the diagnostic — every math topic plus analogies, synonyms, and reading — so Quizard can map exactly what you know.', cta:true}
   ];
 }
 function maybeTour(){
+  if (account && !account.onboarded && !obOn){ openOnboard(); return; }
   if (!account || account.tourDone || tourOn) return;
   const main=document.getElementById('homeMain');
   if (!main || main.classList.contains('hidden')) return;
@@ -4561,6 +4993,81 @@ function endTour(goDiag){
   const c=document.getElementById('tourCard'); if(c) c.remove();
   if(account && !account.tourDone){ account.tourDone=true; saveStore(); }
   if(goDiag){ navTo('gaps'); if (isPremium() && !account.diagAt) startDiag(); }
+}
+
+/* ================= First run: pick a level, win 5 questions, get a course ================= */
+let obOn=false, ob=null;
+function openOnboard(){
+  if(!account) return;
+  obOn=true; ob={ step:0, i:0, correct:0, qs:[], missed:[] };
+  document.getElementById('intro').classList.add('hidden');
+  document.getElementById('onboard').classList.remove('hidden');
+  obRender();
+}
+function obBar(){ return `<div class="ob-steps">${[0,1,2].map(i=>`<span class="${i<=ob.step?'on':''}"></span>`).join('')}</div>`; }
+function obRender(){
+  const el=document.getElementById('onboard');
+  if(ob.step===0){
+    el.innerHTML=`<div class="card">${obBar()}
+      <div class="section-title">Welcome, ${esc(account.name)}!</div>
+      <p class="section-instr">Which SSAT are you getting ready for? You can change this any time in settings.</p>
+      <div class="ob-big">
+        <button onclick="obPickLevel('middle')"><b>Middle Level</b>Grades 5–7 · fractions, decimals, ratios, early algebra</button>
+        <button onclick="obPickLevel('upper')"><b>Upper Level</b>Grades 8–11 · algebra, geometry, word problems, harder verbal</button>
+      </div>
+      <p style="font-size:12.5px;color:var(--gray);margin:0">Not sure? Pick by the grade you are applying <i>to</i> — Middle for grades 6–8, Upper for grades 9–12.</p>
+    </div>`;
+  } else if(ob.step===1){
+    const q=ob.qs[ob.i];
+    const choices=q.choices.map((c,i)=>`<label class="choice" id="ob-${i}" onclick="obAnswer(${i})"><span>${String.fromCharCode(65+i)}. ${c}</span></label>`).join('');
+    el.innerHTML=`<div class="card">${obBar()}
+      <div class="study-head"><span>Warm-up · ${ob.i+1} of ${ob.qs.length}</span><span class="study-score">${levelLabel()}</span></div>
+      <div class="q-stem">${q.q}</div>${figHTML(q)}${choices}<div id="obNav"></div>
+    </div>`;
+    drawFigs();
+  } else {
+    const ci=obCourse();
+    el.innerHTML=`<div class="card" style="text-align:center">${obBar()}
+      <div style="color:var(--gold)">${ico('medal',44)}</div>
+      <div class="score-big">${ob.correct}/${ob.qs.length}</div>
+      <div class="score-sub">warm-up done · +${ob.correct*10+30} XP · badge unlocked</div>
+      <div class="verdict v-strong" style="margin-top:14px">${ob.correct>=4?'Strong start — you are ready for the real stuff.':ob.correct>=2?'Good — now we know exactly where to begin.':'No stress. That is what the courses are for.'}</div>
+      <p style="text-align:left;font-size:14px">Your first course: <b>${COURSES[ci].title}</b> — ${COURSES[ci].desc}. Lessons teach first, then drill the exact topic. Finish it and you get the course crest.</p>
+      <button class="btn" onclick="obFinish(${ci})">Start ${COURSES[ci].title} →</button>
+      <button class="btn secondary" onclick="obFinish(-1)">Explore on my own</button>
+    </div>`;
+  }
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function obPickLevel(l){
+  account.level = l; if(!account.theme) account.theme='fresh'; saveStore(); applyTheme();
+  const gens = l==='middle' ? shuffle(MIDDLE_GENS.slice()).slice(0,3).concat(shuffle(L1_GENS.slice()).slice(0,2))
+                            : shuffle(L1_GENS.slice()).slice(0,3).concat(shuffle(L2_GENS.slice()).slice(0,2));
+  ob.qs = gens.map(g=>{ const q=unseen(g); q._gen=g; return q; });
+  ob.step=1; ob.i=0; obRender();
+}
+function obAnswer(i){
+  const q=ob.qs[ob.i]; if(q._done) return; q._done=true;
+  const ok = i===q.answer;
+  const lab=document.getElementById('ob-'+i); if(lab) lab.classList.add(ok?'correct':'wrong');
+  if(!ok){ const r=document.getElementById('ob-'+q.answer); if(r) r.classList.add('correct'); ob.missed.push(q); }
+  recordAnswer(ok); noteTopicResult(q, ok); answerFX(ok, lab);
+  if(ok){ ob.correct++; playCorrect(); addXP(10); } else playWrong();
+  document.getElementById('obNav').innerHTML=`${!ok?`<div class="explain"><b>Why:</b> ${q.why||''}</div>`:''}
+    <button class="btn" style="margin-top:12px" onclick="obNextQ()">${ob.i+1<ob.qs.length?'Next →':'See my result →'}</button>`;
+}
+function obNextQ(){ ob.i++; if(ob.i<ob.qs.length) obRender(); else { ob.step=2; addXP(30); markActivity(); celebrate(); obRender(); } }
+function obCourse(){
+  // the course that owns the first missed topic, else Foundations
+  for(const q of ob.missed){ const ti=GEN_TOPIC.get(q._gen); if(ti==null) continue; const id=TOPICS[ti].id; const ci=COURSES.findIndex(c=>c.topics.includes(id)); if(ci>=0) return ci; }
+  return 0;
+}
+function obFinish(ci){
+  account.onboarded=true; account.tourDone=true; saveStore(); act('onboard');
+  obOn=false; const el=document.getElementById('onboard'); el.classList.add('hidden'); el.innerHTML='';
+  document.getElementById('intro').classList.remove('hidden'); renderHome();
+  checkAchievements();
+  if(ci>=0) openCourse(ci);
 }
 
 /* ===== Windows install gate: web visitors on a PC get the download-the-app page ===== */

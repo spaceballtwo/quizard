@@ -1,4 +1,4 @@
-const CACHE = 'quizard-v1';
+const CACHE = 'quizard-v1.1.0';
 const SHELL = ['.', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {

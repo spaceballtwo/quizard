@@ -43,6 +43,8 @@ function nameOK(name){
   }
   return true;
 }
+// activity kinds a client may report (anything else is dropped)
+const ACT_KINDS = new Set(['practice','test','study','daily','clock','survival','battle','lesson','review','verbal','course_exam','diag','report','onboard']);
 function vAtLeast(v, min){
   const p = String(v || '').split('.').map(n => parseInt(n, 10));
   if (p.some(isNaN) || p.length < 3) return false;
@@ -102,6 +104,25 @@ export class QuizardLobby {
       if (body.action === 'list'){
         return json({ names: [...users.values()].map(u => ({ name: u.name, rating: u.rating, wins: u.wins, losses: u.losses })) });
       }
+      if (body.action === 'activity'){
+        // {key, action:'activity', days?:7} → who's active, what they do, per day + per account
+        return json(this.activitySummary([...users.values()], Math.min(30, Math.max(1, parseInt(body.days) || 7))));
+      }
+      if (body.action === 'grant'){
+        // founder comp: free premium for a named account, lapses on its own.
+        // {key, action:'grant', name, plan:'solo'|'unlimited'|'family', days}
+        const key = String(body.name || '').trim().toLowerCase();
+        const u = await this.getUser(key);
+        if (!u) return json({ error: 'no such account' }, 404);
+        const plan = ['solo','unlimited','family'].includes(body.plan) ? body.plan : 'solo';
+        const days = Math.min(370, Math.max(1, parseInt(body.days) || 90));
+        u.data = u.data || {};
+        u.data.premium = true; u.data.premiumPlan = plan; u.data.planSrc = '';   // server-granted: StoreKit reconcile leaves it alone
+        u.data.compUntil = Date.now() + days * 86400e3;
+        u.dataUpdatedAt = Date.now();
+        await this.putUser(key, u);
+        return json({ granted: u.name, plan, days, until: new Date(u.data.compUntil).toISOString().slice(0, 10) });
+      }
       if (body.action === 'purge'){
         const keep = new Set((body.keep || []).map(s => String(s).toLowerCase()));
         const gone = [], kept = [];
@@ -133,6 +154,74 @@ export class QuizardLobby {
   }
 
   send(conn, obj){ try { conn.ws.send(JSON.stringify(obj)); } catch (e) {} }
+
+  // founder comps lapse lazily: cleared on the next login after compUntil passes
+  async expireComp(key, u){
+    if (u && u.data && u.data.compUntil && Date.now() > u.data.compUntil){
+      delete u.data.compUntil; u.data.premium = false; u.data.premiumPlan = ''; u.data.planSrc = '';
+      u.dataUpdatedAt = Date.now();
+      await this.putUser(key, u);
+    }
+  }
+
+  // family MEMBERS ride the buyer's plan: when the buyer's synced data no longer
+  // says 'family' (lapsed, switched, refunded) the fam record is marked and the
+  // member's premium is stripped on their next sign-in.
+  async expireFamilyMember(key, u){
+    if (!u || !u.famOf || !u.data || u.data.premiumPlan !== 'family-member') return;
+    const fam = await this.storage.get('fam:' + u.famOf);
+    if (!fam || fam.lapsed){
+      u.data.premium = false; u.data.premiumPlan = ''; u.data.planSrc = '';
+      u.dataUpdatedAt = Date.now();
+      await this.putUser(key, u);
+    }
+  }
+
+  // activity log: per-account per-day counters, kept 30 days, plus lastSeen.
+  // Answers "what are people doing" without storing anything personal.
+  bumpAct(u, k, n){
+    const day = new Date().toISOString().slice(0, 10);
+    u.act = u.act || {};
+    u.act[day] = u.act[day] || {};
+    u.act[day][k] = (u.act[day][k] || 0) + (Math.max(1, Math.min(500, Number(n) || 1)));
+    const days = Object.keys(u.act).sort();
+    while (days.length > 30) delete u.act[days.shift()];
+    u.lastSeen = Date.now();
+  }
+  async logAct(key, k, n){
+    const u = await this.getUser(key);
+    if (!u) return;
+    this.bumpAct(u, k, n);
+    await this.putUser(key, u);
+  }
+  activitySummary(users, daysBack){
+    const now = Date.now(), dayMs = 86400e3;
+    const since = new Date(now - daysBack * dayMs).toISOString().slice(0, 10);
+    const byDay = {}, byKind = {}, perUser = [];
+    let active1 = 0, active7 = 0, active30 = 0, paid = 0;
+    for (const u of users){
+      const seen = u.lastSeen || 0;
+      if (now - seen < dayMs) active1++;
+      if (now - seen < 7 * dayMs) active7++;
+      if (now - seen < 30 * dayMs) active30++;
+      const plan = (u.data && u.data.premiumPlan) || '';
+      if (plan) paid++;
+      const totals = {};
+      for (const [day, kinds] of Object.entries(u.act || {})){
+        if (day < since) continue;
+        byDay[day] = byDay[day] || {};
+        for (const [k, n] of Object.entries(kinds)){
+          byDay[day][k] = (byDay[day][k] || 0) + n;
+          byKind[k] = (byKind[k] || 0) + n;
+          totals[k] = (totals[k] || 0) + n;
+        }
+      }
+      perUser.push({ name: u.name, plan, lastSeen: seen ? new Date(seen).toISOString().slice(0, 16) : null,
+        answered: (u.data && u.data.stats && u.data.stats.answered) || 0, rating: u.rating, wins: u.wins, totals });
+    }
+    perUser.sort((a, b) => (b.lastSeen || '') < (a.lastSeen || '') ? -1 : 1);
+    return { accounts: users.length, paid, active1, active7, active30, byKind, byDay, users: perUser };
+  }
 
   onClose(conn){
     this.queue = this.queue.filter(c => c !== conn);
@@ -179,6 +268,8 @@ export class QuizardLobby {
       const u = { name: finalName, salt, hash: await hashPass(pass, salt), wins: 0, losses: 0, rating: 1000 };
       conn.user = key;
       this.userConns.set(key, conn);
+      u.createdAt = Date.now();
+      this.bumpAct(u, 'signup');
       const token = await this.issueToken(key, u);
       this.send(conn, { t: 'auth', ok: true, name: finalName, token, data: null, dataUpdatedAt: 0, ...this.publicStats(u) });
     }
@@ -190,6 +281,9 @@ export class QuizardLobby {
       if (!u || u.hash !== await hashPass(String(m.pass || ''), u.salt)){ conn.authFails++; return this.send(conn, { t: 'auth', ok: false, msg: 'Wrong name or password' }); }
       conn.user = key;
       this.userConns.set(key, conn);
+      await this.expireComp(key, u);   // lapsed founder comps clear before data goes out
+      await this.expireFamilyMember(key, u);
+      this.bumpAct(u, 'login');
       const token = await this.issueToken(key, u);
       this.send(conn, { t: 'auth', ok: true, name: u.name, token, data: u.data || null, dataUpdatedAt: u.dataUpdatedAt || 0, ...this.publicStats(u) });
     }
@@ -200,7 +294,18 @@ export class QuizardLobby {
       if (!u || !u.tokenHash || u.tokenHash !== await sha256(String(m.token || ''))) return this.send(conn, { t: 'auth', ok: false, msg: 'Session expired — log in again' });
       conn.user = key;
       this.userConns.set(key, conn);
+      await this.expireComp(key, u);
+      await this.expireFamilyMember(key, u);
+      this.bumpAct(u, 'login');
+      await this.putUser(key, u);
       this.send(conn, { t: 'auth', ok: true, name: u.name, token: String(m.token), data: u.data || null, dataUpdatedAt: u.dataUpdatedAt || 0, ...this.publicStats(u) });
+    }
+    else if (m.t === 'act'){
+      // client activity ping: {t:'act', k:'practice', n:1}; kinds are whitelisted, counts capped
+      if (!conn.user) return;
+      const k = String(m.k || '');
+      if (!ACT_KINDS.has(k)) return;
+      await this.logAct(conn.user, k, m.n);
     }
     else if (m.t === 'logout'){
       if (conn.user){ const u = await this.getUser(conn.user); if (u){ delete u.tokenHash; await this.putUser(conn.user, u); } conn.user = null; }
@@ -225,7 +330,16 @@ export class QuizardLobby {
       const u = await this.getUser(conn.user);
       u.data = m.data;
       u.dataUpdatedAt = Number(m.updatedAt) || Date.now();
+      u.lastSeen = Date.now();
       await this.putUser(conn.user, u);
+      // family buyer: the fam record mirrors whether the plan is still live
+      if (u.familyCode){
+        const fam = await this.storage.get('fam:' + u.familyCode);
+        if (fam){
+          const live = m.data.premiumPlan === 'family';
+          if (!!fam.lapsed === live){ fam.lapsed = !live; await this.storage.put('fam:' + u.familyCode, fam); }
+        }
+      }
       this.send(conn, { t: 'synced', updatedAt: u.dataUpdatedAt });
     }
     else if (m.t === 'queue'){
@@ -566,6 +680,7 @@ ${ctx.live ? `- THE STUDENT HAS NOT ANSWERED YET, so these rules override everyt
     if (data.stop_reason === 'refusal') return json({ reply: "Let's stick to the math — want me to walk through this problem step by step?" });
     const reply = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
     u.tutorCount++;
+    this.bumpAct(u, 'sage');
     u.tutorSeason = (u.tutorSeason || 0) + 1;
     if (fam && fcode){ fam.total = (fam.total || 0) + 1; await this.storage.put('fam:' + fcode, fam); }
     await this.putUser(key, u);
@@ -783,6 +898,7 @@ Under 250 words, plain text, warm, specific to THEIR essay — never generic. Ne
     uw.rating += delta;
     ul.rating = Math.max(100, ul.rating - delta);
     uw.wins++; ul.losses++;
+    this.bumpAct(uw, 'race'); this.bumpAct(ul, 'race');
     await this.putUser(w.user, uw);
     await this.putUser(l.user, ul);
     this.send(w, { t: 'match_end', won: true,  delta: +delta, rating: uw.rating, score: this.scoreFor(match, w) });
