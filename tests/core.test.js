@@ -313,8 +313,11 @@ T('battle badges exist', ACHIEVEMENTS.some(a=>a.id==='battle5') && ACHIEVEMENTS.
 
 // --- 1.1: hubs ---
 T('six sidebar doors', (()=>{ renderSidebar(); return true; })());
-T('hub pages defined', ['learn','practice','play','me'].every(h=>HUBS[h] && HUBS[h].items.length>=5));
-T('every hub item is a real nav mode', Object.values(HUBS).flatMap(h=>h.items.map(i=>i[0])).every(m=>['learn','gaps','review','focus','writing','practice','fulltest','daily','study','verbal','battle','online','compete','clock','survival','versus','friendspage','achievements','report','vote','about'].includes(m)));
+T('hub pages defined', ['learn','practice','play','me'].every(h=>HUBS[h] && HUBS[h].items.length>=2));
+T('cut modes are gone from hubs', !Object.values(HUBS).flatMap(h=>h.items.map(i=>i[0])).some(m=>['clock','survival','versus','compete'].includes(m)));
+T('math serves math only', (()=>{ for(let i=0;i<60;i++){ const r=getStudyQuestion(true,true); if(r.vkind) return false; } return true; })());
+T('clock badges retired', !ACHIEVEMENTS.some(a=>a.id==='clock10'||a.id==='clock15'));
+T('every hub item is a real nav mode', Object.values(HUBS).flatMap(h=>h.items.map(i=>i[0])).every(m=>['learn','gaps','review','focus','writing','test','daily','study','verbal','battle','online','friendspage','achievements','report','vote','about'].includes(m)));
 T('version bumped', APP_VERSION==='1.1.0' && CHANGELOG[0][0]==='1.1.0');
 T('sync carries level/onboarded/bestBattle', (()=>{ const p=syncPayload(); return 'level' in p && 'onboarded' in p && 'bestBattle' in p; })());
 

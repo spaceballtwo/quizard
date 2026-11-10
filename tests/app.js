@@ -1758,8 +1758,6 @@ const ACHIEVEMENTS = [
   { id:'lvl10',   icon:'crown',     title:'Genius',        desc:'Reach Level 10.',                        test:a=>levelForXP(a.xp)>=10 },
   { id:'streak3', icon:'flame',     title:'On a Roll',     desc:'Practice 3 days in a row.',              test:a=>a.bestStreak>=3 },
   { id:'streak7', icon:'calendar',  title:'Week Warrior',  desc:'Practice 7 days in a row.',              test:a=>a.bestStreak>=7 },
-  { id:'clock10', icon:'hourglass', title:'Speed Demon',   desc:'Score 10+ in Beat the Clock.',           test:a=>a.stats.bestClock>=10 },
-  { id:'clock15', icon:'trophy',    title:'Lightning',     desc:'Score 15+ in Beat the Clock.',           test:a=>a.stats.bestClock>=15 },
   { id:'battle5',  icon:'swords',   title:'Monster Slayer', desc:'Clear 5 waves in Math Battle.',         test:a=>(a.bestBattle||0)>=5 },
   { id:'battle10', icon:'crown',    title:'Boss Hunter',    desc:'Clear 10 waves in Math Battle.',        test:a=>(a.bestBattle||0)>=10 }
 ];
@@ -2186,7 +2184,7 @@ function openBattle(){
 }
 function btDamage(){ return bt.combo>=6 ? 3 : bt.combo>=3 ? 2 : 1; }
 function btNext(){
-  bt.locked=false; bt.cur=getStudyQuestion(true);
+  bt.locked=false; bt.cur=getStudyQuestion(true, true);
   const q=bt.cur.q, m=bt.mon;
   const choices=q.choices.map((c,i)=>`<label class="choice" id="bt-${i}" onclick="btAnswer(${i})"><span>${String.fromCharCode(65+i)}. ${c}</span></label>`).join('');
   document.getElementById('battle').innerHTML=`
@@ -2847,7 +2845,7 @@ function buildSet(n){
 /* ================= Render ================= */
 function start(){ act('practice'); document.getElementById('intro').classList.add('hidden'); newSet(); }
 
-/* ---------- Study Mode: one question at a time, instant feedback ---------- */
+/* ---------- Math (was Study Mode): one math question at a time, instant feedback ---------- */
 let studySection='mixed', studyTotal=0, studyCorrect=0, studyCurrent=null, studyAnswered=false, studyMode='math';
 
 function openStudy(){
@@ -2888,7 +2886,7 @@ function vShortQ(){
   }
   return { q: choice(POOL.synonyms), vkind:'synonyms', label:'Synonyms' };
 }
-function getStudyQuestion(shortOnly){
+function getStudyQuestion(shortOnly, mathOnly){
   // merged serving: gap-fixing first, then ~40% verbal, probes, then leveled math
   const gaps=gapTopics(), unk=unknownTopics();
   if (gaps.length && Math.random()<0.2){
@@ -2896,7 +2894,7 @@ function getStudyQuestion(shortOnly){
     const g=drawBag(TOPICS[ti].gens,'gapfix_'+TOPICS[ti].id); const q=unseen(g); q._gen=g;
     return { q, label:'Math · closing a gap: '+TOPICS[ti].title, tier:1 };
   }
-  if (Math.random()<0.45){
+  if (!mathOnly && Math.random()<0.45){
     if (!shortOnly && Math.random()<0.35){
       const q=unseen(()=>{ const p=choice(POOL.reading); const qq=choice(p.questions); qq._passage=p.passage; return qq; });
       return { q, passage:q._passage, vkind:'reading', label:'Reading' };
@@ -2943,7 +2941,7 @@ function loadStudy(){
     return;
   }
   studyAnswered=false;
-  studyCurrent = studyMode==='verbal' ? getVerbalQuestion() : studyMode==='topic' ? getTopicQuestion() : studyMode==='review' ? getReviewQuestion() : getStudyQuestion();
+  studyCurrent = studyMode==='verbal' ? getVerbalQuestion() : studyMode==='topic' ? getTopicQuestion() : studyMode==='review' ? getReviewQuestion() : getStudyQuestion(false, true);
   renderStudy();
 }
 function renderStudy(){
@@ -3391,10 +3389,10 @@ function renderOnlineHome(msg){
       <div id="tourneyBox">
         <div id="bracketCard" class="tier-row"><span><b>${ico('trophy',14)} Bracket Tournament</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">loading schedule&hellip;</span></span></div>
         <div id="bracketPic"></div>
-        <div class="tier-row" style="cursor:pointer" onclick="arenaActive=true; osend({t:'arena_join'}); showToast('Arena joined — races start when an opponent arrives')"><span><b>${ico('flame',14)} Arena</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">10 minutes, quick races to 5 — wins score points, most points takes it</span></span><span class="tier-rp">Join &rarr;</span></div>
         <div id="tourneyStatus"></div>
       </div>
       <button class="btn secondary" onclick="showLeaderboard()">Leaderboard</button>
+      <button class="btn secondary" onclick="navTo('compete')">Rank &amp; League</button>
       <button class="btn secondary" onclick="navTo('friendspage')">Friends &amp; requests</button>
       <div class="mlabel">Friends</div>
       <div id="friendBox"><p class="section-instr">Loading friends&hellip;</p></div>
@@ -3506,7 +3504,6 @@ function boardHTML(){
     <div class="seg-bar" style="margin:0 0 8px">
       <button class="seg ${acctBoard==='global'?'seg-on':''}" onclick="acctBoard='global'; osend({t:'leaderboard'}); renderFriendsPage()">Global top 10</button>
       <button class="seg ${acctBoard==='friends'?'seg-on':''}" onclick="acctBoard='friends'; renderFriendsPage()">Friends</button>
-      ${obsidianQualified()?`<button class="seg ${acctBoard==='obsidian'?'seg-on':''}" style="color:#5a4d8a" onclick="acctBoard='obsidian'; osend({t:'leaderboard', min:1200}); renderFriendsPage()">⬢ Obsidian</button>`:''}
     </div>${rows}`;
 }
 function renderFriendsPage(){
@@ -3536,11 +3533,11 @@ function renderFriendsPage(){
         <button class="btn" style="width:auto;padding:9px 14px;margin:0" onclick="addFriendPg()">Request</button>
       </div>
     </div>
-    <div class="card">
+    ${lastWall && lastWall.length ? `<div class="card">
       <div class="section-title">⭐ Wall of Champions</div>
       <p class="section-instr">One name a month, forever. Win the Monthly Championship — last Saturday, every month — and yours joins them.</p>
       <div id="wallBox">${wallHTML()}</div>
-    </div>
+    </div>` : ``}
     <div class="card">
       <div class="section-title">${ico('trophy',17)} Leaderboards</div>
       <div id="acctLeader">${boardHTML()}</div>
@@ -3673,7 +3670,6 @@ function onlineMsg(m){
   }
   else if (m.t==='match_end'){
     oState='idle'; applyAssessmentUI();
-    if (account && m.rating>=1200 && !account.obsidianSeen){ account.obsidianSeen=true; saveStore(); celebrate(); showToast('⬢ You have been noticed. The Obsidian League is open to you — see My Account.'); }
     if(m.score) oScore=m.score;
     if(oMe){ oMe.rating=m.rating; if(m.won) oMe.wins++; else oMe.losses++; }
     if(account){ account.onlineRating=m.rating; saveStore(); renderRankChip(); }
@@ -4073,7 +4069,8 @@ function navTo(mode){
   const map = { learn:openLearn, daily:openDaily, practice:start, fulltest:openFullTest, study:openStudy, verbal:openVerbal, review:openReview, coach:openCoachPage, report:openReport, gaps:openGaps, premium:openPremium, about:openAbout, focus:openFocus, friendspage:openFriendsPage, writing:openWriting,
                 clock:openClock, survival:openSurvival, battle:openBattle, versus:openVersus, online:openOnline,
                 compete:openCompete, achievements:openAchievements, vote:openVote };
-  if (mode.indexOf('hub:')===0) openHub(mode.slice(4));
+  if (mode==='test') openTestChooser();
+  else if (mode.indexOf('hub:')===0) openHub(mode.slice(4));
   else if (mode !== 'home' && map[mode]) map[mode]();
   highlightNav(mode);
   window.scrollTo({top:0, behavior:'smooth'});
@@ -4086,17 +4083,29 @@ const HUBS = {
     ['review','refresh','Review Misses','spaced repetition on what you got wrong'], ['focus','flame','Focus Sprint','25 minutes aimed at your weakest spot'],
     ['writing','quill','Writing','essay practice with the Writing Coach'] ] },
   practice: { title:'Practice', icon:'paper', sub:'Real test shapes, real pacing.', items:[
-    ['practice','paper','Practice Test','14 balanced questions, scored and explained'], ['fulltest','hourglass','Full Test','timed, curved, percentile-ranked'],
-    ['daily','calendar','Daily Challenge','today\'s 5 · bonus XP'], ['study','book','Study','one question at a time, instant feedback'],
+    ['test','hourglass','Test','14-question practice or the full timed test, curved and ranked'],
+    ['daily','calendar','Daily Challenge','today\'s 5 · bonus XP'], ['study','book','Math','one math question at a time, instant feedback'],
     ['verbal','alpha','Verbal','analogies · synonyms · reading'] ] },
   play:     { title:'Play', icon:'swords', sub:'Same questions, more adrenaline.', items:[
-    ['battle','swords','Math Battle','hit monsters with right answers · bosses every 5 waves'], ['online','globe','Online Races','live head-to-head · tournaments'],
-    ['compete','trophy','Rank & League','ladder, tiers, weekly league'], ['clock','hourglass','Beat the Clock','60 seconds, how many?'],
-    ['survival','sword','Survival','3 lives, endless'], ['versus','swords','Versus','pass-the-device, 2 players'] ] },
+    ['battle','swords','Math Battle','hit monsters with right answers · bosses every 5 waves'],
+    ['online','globe','Online','live races · tournaments · ladder & league'] ] },
   me:       { title:'Me', icon:'person', sub:'Your account, your trophies, your settings.', items:[
     ['friendspage','person','My Account','friends, rating, privacy'], ['achievements','medal','Badges','everything you have unlocked'],
     ['report','paper','Parent Report','progress summary for a grown-up'], ['vote','ballot','Vote','pick the next feature'], ['about','shield','About','version, what\'s new'] ], settings:true }
 };
+function openTestChooser(){
+  document.getElementById('intro').classList.add('hidden');
+  const el=document.getElementById('hub'); el.classList.remove('hidden');
+  const used = !isPremium() && account && account.freeTestUsed;
+  el.innerHTML=`<div class="card">
+      <div class="section-title">${ico('hourglass',18)} Test</div><p class="section-instr">Real test shapes. Blank beats wrong: the real SSAT takes a quarter point for a miss.</p>
+      <div class="hub-list">
+        <button class="hub-item" onclick="navTo('practice')">${ico('paper',20)}<span style="flex:1"><b>Practice Test</b><span class="d">14 balanced questions · scored and explained · about 15 minutes</span></span><span style="color:var(--gold);font-weight:700">&rarr;</span></button>
+        <button class="hub-item" onclick="navTo('fulltest')">${ico('hourglass',20)}<span style="flex:1"><b>Full Test${used?' · Premium':''}</b><span class="d">25 questions · 30-minute timer · curved ${scaleRange()} score and percentile · Real SSAT sections inside</span></span><span style="color:var(--gold);font-weight:700">&rarr;</span></button>
+      </div>
+      <button class="btn secondary" style="margin-top:14px" onclick="navTo('hub:practice')">&larr; Practice</button>
+    </div>`;
+}
 function openHub(name){
   const h=HUBS[name]; if(!h) return;
   document.getElementById('intro').classList.add('hidden');
@@ -4538,7 +4547,7 @@ function renderDiagDone(s){
 
 /* ===== About: version, platform, what's new ===== */
 const CHANGELOG = [
-  ['1.1.0','Math Battle: right answers hit the monster, combos hit harder, bosses every five waves. SSAT Middle Level (grades 5–7) with its own questions and 440–710 scoring. A fresh new look. New players get a 2-minute warm-up instead of a tour. Family members now lose Premium when the family plan ends. Six meaner hard-tier questions'],
+  ['1.1.0','Math Battle: right answers hit the monster, combos hit harder, bosses every five waves. SSAT Middle Level (grades 5–7) with its own questions and 440–710 scoring. A fresh new look. New players get a 2-minute warm-up instead of a tour. Family members now lose Premium when the family plan ends. Six meaner hard-tier questions. Leaner: Study is now Math (math only), Practice and Full Test share one Test door, Rank lives inside Online, and Versus, Survival, Beat the Clock, Arena, and the hidden Obsidian league are retired'],
   ['0.36.0','Seasons now end honestly: when a subscription expires, Premium locks again and renewing takes one tap'],
   ['0.35.1','Subscription terms and the Privacy Policy and Terms of Use links now show on the Premium page for subscribers too'],
   ['0.35.0','One login for everything: type your online account into any sign-in form and it just works — with clear messages when something goes wrong'],
@@ -4797,15 +4806,12 @@ function openPremium(){
         <div class="explain ok" style="margin-top:4px"><b>Your plan: ${planLabel()}.</b> Everything it unlocks is live — thanks for backing a small team.</div>
         ${hasPerks() ? `
           <div class="mlabel">${isUnlimited()?'Unlimited perks':'Family perks'}</div>
-          <div class="tier-row"><span><b>Midnight theme</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">the academy after dark</span></span>
-            <button class="seg" style="flex:none" onclick="toggleMidnight()">${account.theme==='midnight'?'Turn off':'Turn on'}</button></div>
           <div class="tier-row"><span><b>Gold crown online</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">shows by your name in races and on the leaderboard</span></span><span class="tier-rp">${ico('crown',14)}</span></div>
           <div class="tier-row"><span><b>Weekly plans from Sage</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">"Plan my week" — a day-by-day plan built from your numbers</span></span>
             <button class="seg" style="flex:none" onclick="navTo('coach')">Open Sage</button></div>
           ${isUnlimited() ? `
           <div class="tier-row"><span><b>Deep Explanations</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">Sage thinks harder and answers longer — the why, not just the how</span></span><span class="tier-rp">${ico('bulb',14)}</span></div>
-          <div class="tier-row"><span><b>Daybreak theme</b><br><span style="font-weight:400;font-size:12px;color:var(--gray)">cool morning light — Unlimited only</span></span>
-            <button class="seg" style="flex:none" onclick="toggleDaybreak()">${account.theme==='daybreak'?'Turn off':'Turn on'}</button></div>` : ``}` : ``}
+` : ``}` : ``}
         ${account.premiumPlan==='family' ? `
           <div class="mlabel">Share with your family</div>
           <p class="section-instr">Your plan covers up to 6 accounts on any device. Family members open Premium on their device and enter this code:</p>
