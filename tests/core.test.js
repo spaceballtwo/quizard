@@ -282,10 +282,10 @@ T('onboarding sticks', account.onboarded===true && account.tourDone===true && ob
 T('isMiddle', isMiddle()===true && levelLabel()==='Middle Level');
 const mset=genQuant(14);
 T('middle set is 14', mset.length===14);
-T('middle set draws from middle/easy/L1 only', mset.every(q=>MIDDLE_GENS.includes(q._gen)||EASY_GENS.includes(q._gen)||L1_GENS.includes(q._gen)));
+T('middle set is mostly middle/L1 with some harder stretch, no flashcards', mset.every(q=>MIDDLE_GENS.includes(q._gen)||L1_GENS.includes(q._gen)||L2_GENS.includes(q._gen)||L3_GENS.includes(q._gen)) && mset.filter(q=>MIDDLE_GENS.includes(q._gen)||L1_GENS.includes(q._gen)).length>=mset.length*0.6);
 T('middle scale tops at 710', scaledCurve(25,25)===710 && scaledCurve(0,25)===440);
 T('middle percentile sane', pctileFor(710)===99 && pctileFor(440)===1);
-for (let i=0;i<200;i++){ const g=pickGen(); if(!(MIDDLE_GENS.includes(g)||EASY_GENS.includes(g)||L1_GENS.includes(g))){ T('pickGen middle-only', false); break; } }
+for (let i=0;i<200;i++){ const g=pickGen(); if(!(MIDDLE_GENS.includes(g)||L1_GENS.includes(g)||L2_GENS.includes(g)||L3_GENS.includes(g))){ T('pickGen middle never serves flashcards or stretch', false); break; } }
 account.level='upper';
 T('upper scale restored', scaledCurve(25,25)===800);
 let bad=0;
@@ -317,7 +317,8 @@ T('hub pages defined', ['learn','practice','play','me'].every(h=>HUBS[h] && HUBS
 T('cut modes are gone from hubs', !Object.values(HUBS).flatMap(h=>h.items.map(i=>i[0])).some(m=>['clock','survival','versus','compete'].includes(m)));
 T('math serves math only', (()=>{ for(let i=0;i<60;i++){ const r=getStudyQuestion(true,true); if(r.vkind) return false; } return true; })());
 T('clock badges retired', !ACHIEVEMENTS.some(a=>a.id==='clock10'||a.id==='clock15'));
-T('every hub item is a real nav mode', Object.values(HUBS).flatMap(h=>h.items.map(i=>i[0])).every(m=>['learn','gaps','review','focus','writing','test','daily','study','verbal','battle','online','friendspage','achievements','report','vote','about'].includes(m)));
+T('every hub item is a real nav mode', Object.values(HUBS).flatMap(h=>h.items.map(i=>i[0])).every(m=>['learn','gaps','review','focus','writing','test','daily','study','verbal','battle','online','friendspage','achievements','report','vote','about','premium','fn:manage','fn:switch'].includes(m)));
+T('account actions reachable from Me hub', HUBS.me.items.some(i=>i[0]==='fn:manage') && HUBS.me.items.some(i=>i[0]==='fn:switch') && HUBS.me.items.some(i=>i[0]==='premium'));
 T('version bumped', APP_VERSION==='1.1.0' && CHANGELOG[0][0]==='1.1.0');
 T('sync carries level/onboarded/bestBattle', (()=>{ const p=syncPayload(); return 'level' in p && 'onboarded' in p && 'bestBattle' in p; })());
 
@@ -364,7 +365,13 @@ store.accounts=[]; store.currentId=null; account=null;
 const _byId0=document.getElementById; const _bar={ innerHTML:'' };
 document.getElementById=(id)=> id==='accountBar' ? _bar : _byId0(id);
 renderLogin();
+T('fresh device: first screen is name + Start', _bar.innerHTML.includes('createAccount()') && _bar.innerHTML.includes('newName') && !_bar.innerHTML.includes('type="password"'));
+T('fresh device: start screen has the existing-account door', _bar.innerHTML.includes('renderLoginForm()'));
+renderLoginForm();
 T('login screen offers online sign-in', _bar.innerHTML.includes('showOnlineSignIn'));
+store.accounts.push({id:'zz',name:'Old'}); renderLogin();
+T('device with accounts: first screen is the login form', _bar.innerHTML.includes('doLogin()'));
+store.accounts=[];
 showOnlineSignIn();
 T('online sign-in form renders', /oiName[\s\S]*oiPass/.test(_bar.innerHTML));
 document.getElementById=_byId0;
@@ -409,6 +416,7 @@ T('back to Family keeps plan', account.premiumPlan==='family');
   T('owned view carries EULA link', h.includes('stdeula'));
   T('owned view carries privacy link', h.includes('privacy.html'));
   T('owned view states length and renewal', h.includes('3 months') && h.includes('auto-renewable'));
+  T('owned view states 16-day billing grace period', h.includes('16-day billing grace period'));
   account.premium=false; account.premiumPlan='';
 })();
 
